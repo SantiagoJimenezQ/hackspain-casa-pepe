@@ -2,15 +2,17 @@
 
 import { Panel } from "@/components/dashboard/panel";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
+import { useI18n } from "@/components/i18n/locale-provider";
 
 export function LiveCameraCard() {
   const { snapshot } = useDashboard();
+  const { t } = useI18n();
 
   return (
     <Panel className="overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2">
-        <h2 className="text-[13px] font-medium text-white">
-          {snapshot.camera.title}
+        <h2 className="text-[13px] font-medium text-foreground">
+          {t("camera.title")}
         </h2>
         <span className="rounded bg-black/35 px-1.5 py-0.5 font-mono text-[10px] text-white/80">
           {snapshot.camera.timestamp}

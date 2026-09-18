@@ -13,6 +13,7 @@ import type {
   HealthStatus,
   SiteId,
 } from "@/lib/dashboard-types";
+import { appendFollowUp, withAdvancedAgent } from "@/lib/advance-agent";
 import { createInitialSnapshot } from "@/lib/mock-snapshot";
 
 type DashboardContextValue = {
@@ -23,6 +24,7 @@ type DashboardContextValue = {
   cycleSiteStatus: (id: SiteId) => void;
   cycleLinkStatus: (id: string) => void;
   advanceAgent: () => void;
+  sendFollowUp: (text: string) => void;
 };
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -104,44 +106,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const advanceAgent = useCallback(() => {
-    setSnapshot((current) => {
-      const steps = current.agent.steps.map((step) => ({ ...step }));
-      const runningIndex = steps.findIndex((step) => step.status === "running");
-      const pendingIndex = steps.findIndex((step) => step.status === "pending");
+    setSnapshot((current) => withAdvancedAgent(current));
+  }, []);
 
-      if (runningIndex >= 0) {
-        steps[runningIndex] = {
-          ...steps[runningIndex],
-          status: "done",
-          time:
-            steps[runningIndex].time ??
-            new Date().toLocaleTimeString("es-ES", {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false,
-            }),
-        };
-        if (pendingIndex >= 0) {
-          steps[pendingIndex] = { ...steps[pendingIndex], status: "running" };
-        }
-      } else if (pendingIndex >= 0) {
-        steps[pendingIndex] = { ...steps[pendingIndex], status: "running" };
-      }
-
-      const completed = steps.filter((step) => step.status === "done").length;
-      return {
-        ...current,
-        agent: {
-          ...current.agent,
-          steps,
-          completed: Math.min(completed, current.agent.total),
-          progressLabel:
-            completed >= current.agent.total
-              ? "Plan completado"
-              : current.agent.progressLabel,
-        },
-      };
-    });
+  const sendFollowUp = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setSnapshot((current) => ({
+      ...current,
+      agent: appendFollowUp(current.agent, trimmed),
+    }));
   }, []);
 
   const value = useMemo(
@@ -153,6 +127,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       cycleSiteStatus,
       cycleLinkStatus,
       advanceAgent,
+      sendFollowUp,
     }),
     [
       snapshot,
@@ -162,6 +137,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       cycleSiteStatus,
       cycleLinkStatus,
       advanceAgent,
+      sendFollowUp,
     ],
   );
 

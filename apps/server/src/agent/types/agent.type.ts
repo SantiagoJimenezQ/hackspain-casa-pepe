@@ -18,6 +18,7 @@ import {
 } from "@plans/types/plan.type"
 import {
 	ScenarioEngineerBriefing,
+	ScenarioLanguage,
 	ScenarioSupportContact,
 } from "@scenarios/types/scenario.type"
 import { TaskRecord } from "@tasks/types/task.type"
@@ -49,7 +50,15 @@ export interface ServiceConstraint {
 	readonly reason: string
 }
 
+export interface CapacityAssumption {
+	readonly assumedCapacity: number
+	readonly reportedCapacity: number
+	readonly observations: number
+}
+
 export interface PlanBuildInput {
+	readonly language: ScenarioLanguage
+	readonly capacityAssumption: CapacityAssumption | null
 	readonly incident: IncidentSnapshot
 	readonly previousPlan: PlanRecord | null
 	readonly rejectedServices: ReadonlyArray<ServiceConstraint>
@@ -67,6 +76,7 @@ export interface PlanDraft {
 	readonly steps: ReadonlyArray<PlanStep>
 	readonly reason: string
 	readonly summary: string
+	readonly assumptions: ReadonlyArray<string>
 }
 
 export type CycleOutcome =

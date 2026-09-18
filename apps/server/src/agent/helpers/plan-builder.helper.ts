@@ -5,15 +5,20 @@ import {
 	STEP_IDENTIFIER_PREFIX,
 	SUPPORT_COMMUNICATION_STEP_IDENTIFIER,
 } from "@agent/constants/agent.constant"
+import { AGENT_MESSAGES } from "@agent/constants/agent-messages.constant"
 import {
 	PlanBuildInput,
 	PlanDraft,
 	ServiceConstraint,
 } from "@agent/types/agent.type"
+import { AgentMessages } from "@agent/types/agent-messages.type"
 import { sumBy, uniqueValues } from "@common/helpers/collection.helper"
 import { Actor } from "@common/types/identity.type"
-import { remainingCapacity } from "@incidents/helpers/incident-state.helper"
-import { IncidentSnapshot, ServiceState } from "@incidents/types/incident.type"
+import {
+	IncidentSnapshot,
+	ResourceState,
+	ServiceState,
+} from "@incidents/types/incident.type"
 import {
 	PlanStep,
 	PlanStepStatus,
@@ -48,8 +53,25 @@ export function stepIdentifierFor(
 	return `${STEP_IDENTIFIER_PREFIX}_${serviceIdentifier}_${kind}`
 }
 
+export function effectiveCapacity(
+	resource: ResourceState,
+	input: PlanBuildInput,
+): number {
+	if (resource.confirmed) {
+		return resource.totalCapacity
+	}
+	if (!input.capacityAssumption) {
+		return resource.totalCapacity
+	}
+	return Math.min(
+		resource.totalCapacity,
+		input.capacityAssumption.assumedCapacity,
+	)
+}
+
 export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 	const { incident, previousPlan } = input
+	const messages = AGENT_MESSAGES[input.language]
 	const timestamp = incident.updatedAt
 	const servicesByIdentifier = new Map(
 		incident.services.map((service) => [service.identifier, service]),
@@ -73,6 +95,18 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 		),
 	])
 	const resource = incident.resources[0]
+	const assumedCapacity = effectiveCapacity(resource, input)
+	const assumptions: string[] = []
+	if (assumedCapacity < resource.totalCapacity && input.capacityAssumption) {
+		assumptions.push(
+			messages.historicalCapacityAssumption(
+				resource.totalCapacity,
+				assumedCapacity,
+				resource.unit,
+				input.capacityAssumption.observations,
+			),
+		)
+	}
 	const previousSteps = new Map(
 		(previousPlan ? previousPlan.steps : []).map((step) => [
 			step.identifier,
@@ -93,7 +127,7 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 		}
 	}
 
-	let remaining = remainingCapacity(resource)
+	let remaining = assumedCapacity - resource.allocatedCapacity
 	const selected = new Set<string>(alreadyAllocated)
 	const decisions = new Map<string, DecisionOutcome>()
 	let postponedUnits = 0
@@ -126,7 +160,7 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 			decisions.set(service.identifier, {
 				blockedBy: unhealthyDependencies,
 				decision: "waiting-for-dependency",
-				reason: `Degraded only because ${unhealthyDependencies.join(", ")} ${unhealthyDependencies.length === 1 ? "is" : "are"} down. It recovers on its own once they are back`,
+				reason: messages.waitingForDependency(unhealthyDependencies),
 			})
 			continue
 		}
@@ -134,7 +168,7 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 			decisions.set(service.identifier, {
 				blockedBy: [],
 				decision: "recover-now",
-				reason: "Recovery already in progress with capacity reserved",
+				reason: messages.recoveryInProgress,
 			})
 			continue
 		}
@@ -148,21 +182,28 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 			decisions.set(service.identifier, {
 				blockedBy: blockedChain,
 				decision: "postpone",
-				reason: `Depends on ${blockedChain.join(", ")}, which cannot be recovered right now`,
+				reason: messages.dependsOnBlocked(blockedChain),
 			})
 			postponedUnits += service.recoveryCapacityUnits
 			continue
 		}
-		const chainUnits = sumBy(chain, (dependencyIdentifier) => {
-			const dependency = servicesByIdentifier.get(dependencyIdentifier)
-			return dependency ? dependency.recoveryCapacityUnits : 0
-		})
+		const chainUnits = sumBy(chain, (dependencyIdentifier) =>
+			capacityUnitsOf(servicesByIdentifier, dependencyIdentifier),
+		)
 		const neededUnits = service.recoveryCapacityUnits + chainUnits
 		if (neededUnits > remaining) {
 			decisions.set(service.identifier, {
 				blockedBy: chain,
 				decision: "postpone",
-				reason: `Needs ${neededUnits} ${resource.unit} (${service.recoveryCapacityUnits} own${chain.length ? ` plus ${chainUnits} for ${chain.join(", ")}` : ""}) but only ${remaining} remain in ${resource.region}`,
+				reason: messages.insufficientCapacity({
+					chain,
+					chainUnits,
+					neededUnits,
+					ownUnits: service.recoveryCapacityUnits,
+					region: resource.region,
+					remainingUnits: remaining,
+					unit: resource.unit,
+				}),
 			})
 			postponedUnits += service.recoveryCapacityUnits
 			continue
@@ -177,7 +218,12 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 			decisions.set(dependencyIdentifier, {
 				blockedBy: [],
 				decision: "recover-now",
-				reason: `${dependency.businessImpact} impact and required by ${service.name}. Uses ${dependency.recoveryCapacityUnits} ${resource.unit}`,
+				reason: messages.requiredByDependent(
+					dependency.businessImpact,
+					service.name,
+					dependency.recoveryCapacityUnits,
+					resource.unit,
+				),
 			})
 		}
 		selected.add(service.identifier)
@@ -185,11 +231,16 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 		decisions.set(service.identifier, {
 			blockedBy: [],
 			decision: "recover-now",
-			reason: `${service.businessImpact} impact: ${service.impactDescription}. Uses ${service.recoveryCapacityUnits} ${resource.unit}`,
+			reason: messages.recoverNow(
+				service.businessImpact,
+				service.impactDescription,
+				service.recoveryCapacityUnits,
+				resource.unit,
+			),
 		})
 	}
 
-	const priorities = buildPriorities(scored, incident, decisions)
+	const priorities = buildPriorities(scored, incident, decisions, messages)
 	const rankByService = new Map(
 		priorities.map((priority) => [
 			priority.serviceIdentifier,
@@ -214,13 +265,18 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 	const previousContact = previousSteps.get(CONTACT_ENGINEER_STEP_IDENTIFIER)
 	if (previousContact) {
 		steps.push(
-			carryOrReset(previousContact, input.maximumStepAttempts, timestamp),
+			carryOrReset(
+				previousContact,
+				input.maximumStepAttempts,
+				timestamp,
+				messages,
+			),
 		)
 	} else if (factsPending) {
 		steps.push(
 			createStep(
 				CONTACT_ENGINEER_STEP_IDENTIFIER,
-				"Call the on-call engineer to confirm the backup region facts",
+				messages.contactEngineerTitle,
 				input.briefing.purpose,
 				{
 					input: {
@@ -241,6 +297,7 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 				false,
 				[],
 				timestamp,
+				messages,
 			),
 		)
 	}
@@ -283,19 +340,30 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 				previousSteps.get(taskIdentifier),
 				input.maximumStepAttempts,
 				timestamp,
+				messages,
 				() =>
 					createStep(
 						taskIdentifier,
-						`Prepare ${service.name} for recovery in ${incident.backupRegion}`,
-						`${service.name} is prioritized: ${reasonFor(decisions, serviceIdentifier)}`,
+						messages.prepareTaskTitle(
+							service.name,
+							incident.backupRegion,
+						),
+						messages.prepareTaskReason(
+							service.name,
+							reasonFor(decisions, serviceIdentifier, messages),
+						),
 						{
 							input: {
 								assigneeName: input.engineer.name,
 								assigneeRole: input.engineer.role,
-								description: `${service.recoveryActionDescription}. Confirm prerequisites and report blockers before the action is executed.`,
+								description: messages.prepareTaskDescription(
+									service.recoveryActionDescription,
+								),
 								priority: service.businessImpact,
 								serviceIdentifier,
-								title: `Prepare ${service.name} recovery`,
+								title: messages.prepareTaskShortTitle(
+									service.name,
+								),
 							},
 							name: "assign_task",
 						},
@@ -305,6 +373,7 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 						false,
 						[],
 						timestamp,
+						messages,
 					),
 			),
 		)
@@ -313,11 +382,12 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 				previousSteps.get(executeIdentifier),
 				input.maximumStepAttempts,
 				timestamp,
+				messages,
 				() =>
 					createStep(
 						executeIdentifier,
 						service.recoveryActionDescription,
-						reasonFor(decisions, serviceIdentifier),
+						reasonFor(decisions, serviceIdentifier, messages),
 						{
 							input: {
 								actionDescription:
@@ -338,6 +408,7 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 						service.recoveryRequiresApproval,
 						executeDependencies,
 						timestamp,
+						messages,
 					),
 			),
 		)
@@ -346,11 +417,15 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 				previousSteps.get(verifyIdentifier),
 				input.maximumStepAttempts,
 				timestamp,
+				messages,
 				() =>
 					createStep(
 						verifyIdentifier,
-						`Verify ${service.name} answers from ${incident.backupRegion}`,
-						"A recovery is only complete after an independent check confirms it",
+						messages.verifyTitle(
+							service.name,
+							incident.backupRegion,
+						),
+						messages.verifyReason,
 						{
 							input: {
 								recoveryActionIdentifier: "",
@@ -364,6 +439,7 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 						false,
 						[executeIdentifier],
 						timestamp,
+						messages,
 					),
 			),
 		)
@@ -405,6 +481,7 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 				service.recoveryRequiresApproval,
 				[],
 				timestamp,
+				messages,
 			),
 			status: "postponed",
 			statusReason: priority.reason,
@@ -423,20 +500,24 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 				previousSupport,
 				input.maximumStepAttempts,
 				timestamp,
+				messages,
 				() =>
 					createStep(
 						SUPPORT_COMMUNICATION_STEP_IDENTIFIER,
-						"Brief customer support about the services that stay down",
-						"People waiting on postponed services need to know what to tell customers",
+						messages.supportTitle,
+						messages.supportReason,
 						{
 							input: {
 								assigneeName: input.supportContact.name,
 								assigneeRole: input.supportContact.role,
-								description: `${postponedNames} will stay unavailable until more capacity is available. Share the delay with customers and escalate urgent cases.`,
+								description:
+									messages.supportDescription(postponedNames),
 								priority: "high",
 								serviceIdentifier:
 									postponed[0].serviceIdentifier,
-								title: `Communicate delay of ${postponedNames}`,
+								title: messages.supportTaskTitle(
+									postponedNames,
+								),
 							},
 							name: "assign_task",
 						},
@@ -446,6 +527,7 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 						false,
 						[],
 						timestamp,
+						messages,
 					),
 			),
 		)
@@ -465,17 +547,33 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 	const recoverNowNames = recoverNow.map((serviceIdentifier) =>
 		nameOf(servicesByIdentifier, serviceIdentifier),
 	)
-	const postponedSummary = postponed.length
-		? ` Postponed: ${postponed.map((priority) => `${priority.serviceName} (${priority.reason})`).join("; ")}.`
-		: ""
+	const postponedSummary = messages.postponedSummary(
+		postponed.map((priority) => ({
+			name: priority.serviceName,
+			reason: priority.reason,
+		})),
+	)
 	const summary = recoverNow.length
-		? `Recover ${recoverNowNames.join(", then ")} using ${plannedUnits + resource.allocatedCapacity} of ${resource.totalCapacity} ${resource.unit} in ${resource.region}.${postponedSummary}`
+		? messages.summaryRecover(
+				recoverNowNames,
+				plannedUnits + resource.allocatedCapacity,
+				assumedCapacity,
+				resource.unit,
+				resource.region,
+				postponedSummary,
+			)
 		: unhealthy.length
-			? `No service can be recovered with the ${resource.totalCapacity} ${resource.unit} available.${postponedSummary}`
-			: "Every service is healthy. Nothing left to recover."
+			? messages.summaryNothingFits(
+					assumedCapacity,
+					resource.unit,
+					postponedSummary,
+				)
+			: messages.summaryAllHealthy
 
 	return {
+		assumptions,
 		capacity: {
+			assumedCapacity,
 			confirmed: resource.confirmed,
 			plannedUnits: plannedUnits + resource.allocatedCapacity,
 			postponedUnits,
@@ -493,10 +591,15 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 function decisionFor(
 	decisions: ReadonlyMap<string, DecisionOutcome>,
 	serviceIdentifier: string,
+	messages: AgentMessages,
 ): DecisionOutcome {
 	const decision = decisions.get(serviceIdentifier)
 	if (!decision) {
-		return { blockedBy: [], decision: "postpone", reason: "Not evaluated" }
+		return {
+			blockedBy: [],
+			decision: "postpone",
+			reason: messages.notEvaluated,
+		}
 	}
 	return decision
 }
@@ -504,8 +607,9 @@ function decisionFor(
 function reasonFor(
 	decisions: ReadonlyMap<string, DecisionOutcome>,
 	serviceIdentifier: string,
+	messages: AgentMessages,
 ): string {
-	return decisionFor(decisions, serviceIdentifier).reason
+	return decisionFor(decisions, serviceIdentifier, messages).reason
 }
 
 function capacityUnitsOf(
@@ -590,9 +694,10 @@ function buildPriorities(
 	scored: ReadonlyArray<ScoredService>,
 	incident: IncidentSnapshot,
 	decisions: ReadonlyMap<string, DecisionOutcome>,
+	messages: AgentMessages,
 ): ReadonlyArray<ServicePriority> {
 	const ranked = scored.map(({ service, score }, index): ServicePriority => {
-		const outcome = decisionFor(decisions, service.identifier)
+		const outcome = decisionFor(decisions, service.identifier, messages)
 		return {
 			blockedBy: outcome.blockedBy,
 			businessImpact: service.businessImpact,
@@ -614,7 +719,7 @@ function buildPriorities(
 				capacityUnits: 0,
 				decision: "already-healthy",
 				rank: ranked.length + index + 1,
-				reason: "Healthy, no action needed",
+				reason: messages.healthyNoAction,
 				score: 0,
 				serviceIdentifier: service.identifier,
 				serviceName: service.name,
@@ -671,6 +776,7 @@ function createStep(
 	requiresApproval: boolean,
 	dependsOn: ReadonlyArray<string>,
 	timestamp: string,
+	messages: AgentMessages,
 ): PlanStep {
 	return {
 		approvalIdentifier: "",
@@ -686,7 +792,7 @@ function createStep(
 		resultSummary: "",
 		serviceIdentifier,
 		status: "proposed",
-		statusReason: "Proposed by the agent",
+		statusReason: messages.proposedByAgent,
 		title,
 		toolCallIdentifier: "",
 		updatedAt: timestamp,
@@ -697,18 +803,20 @@ function carryOrCreate(
 	previous: PlanStep | undefined,
 	maximumStepAttempts: number,
 	timestamp: string,
+	messages: AgentMessages,
 	create: () => PlanStep,
 ): PlanStep {
 	if (!previous) {
 		return create()
 	}
-	return carryOrReset(previous, maximumStepAttempts, timestamp)
+	return carryOrReset(previous, maximumStepAttempts, timestamp, messages)
 }
 
 function carryOrReset(
 	previous: PlanStep,
 	maximumStepAttempts: number,
 	timestamp: string,
+	messages: AgentMessages,
 ): PlanStep {
 	switch (previous.status) {
 		case "running":
@@ -719,7 +827,9 @@ function carryOrReset(
 				return {
 					...previous,
 					status: "proposed",
-					statusReason: `Retrying after failure: ${previous.statusReason}`,
+					statusReason: messages.retryingAfterFailure(
+						previous.statusReason,
+					),
 					updatedAt: timestamp,
 				}
 			}
@@ -730,8 +840,7 @@ function carryOrReset(
 				...previous,
 				approvalIdentifier: "",
 				status: "proposed",
-				statusReason:
-					"Approval will be requested again for the revised plan",
+				statusReason: messages.approvalRequestedAgain,
 				updatedAt: timestamp,
 			}
 		case "proposed":
@@ -742,7 +851,7 @@ function carryOrReset(
 				...previous,
 				approvalIdentifier: "",
 				status: "proposed",
-				statusReason: "Proposed by the agent",
+				statusReason: messages.proposedByAgent,
 				updatedAt: timestamp,
 			}
 	}

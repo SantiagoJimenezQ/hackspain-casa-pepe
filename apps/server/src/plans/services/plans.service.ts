@@ -71,6 +71,7 @@ export class PlansService {
 			await this.repository.save(previousEntity)
 		}
 		const entity = this.repository.create({
+			assumptions: [...input.assumptions],
 			capacity: input.capacity,
 			changesFromPrevious: [...input.changesFromPrevious],
 			createdAt: timestamp,
@@ -187,6 +188,7 @@ export class PlansService {
 
 export function toPlanRecord(entity: PlanEntity): PlanRecord {
 	return {
+		assumptions: entity.assumptions,
 		capacity: entity.capacity,
 		changesFromPrevious: entity.changesFromPrevious,
 		createdAt: entity.createdAt,

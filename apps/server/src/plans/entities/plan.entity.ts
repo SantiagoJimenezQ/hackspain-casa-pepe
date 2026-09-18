@@ -50,6 +50,9 @@ export class PlanEntity {
 	@Column({ type: "jsonb" })
 	changesFromPrevious: PlanChange[]
 
+	@Column({ default: () => "'[]'", type: "jsonb" })
+	assumptions: string[]
+
 	@Column({ type: "text" })
 	previousPlanIdentifier: string
 

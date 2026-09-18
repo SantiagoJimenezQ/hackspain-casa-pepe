@@ -18,6 +18,8 @@ export const LOG_MESSAGES = {
 	APPLICATION: {
 		STARTED: "Casa Pepe service started",
 		UNHANDLED_EXCEPTION: "Unhandled exception while processing the request",
+		UNHANDLED_REJECTION:
+			"Unhandled promise rejection outside a request, the process keeps running",
 	},
 	APPROVALS: {
 		DECIDED: "Operator decided on an approval",

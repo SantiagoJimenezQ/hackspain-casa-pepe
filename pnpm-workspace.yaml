@@ -1,5 +1,9 @@
 packages:
   - "apps/*"
   - "packages/*"
+strictDepBuilds: true
+engineStrict: true
+verifyDepsBeforeRun: warn
 allowBuilds:
-  unrs-resolver: set this to true or false
+  unrs-resolver: true
+  sharp: true

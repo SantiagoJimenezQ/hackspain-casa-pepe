@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { DashboardProvider } from "@/components/dashboard/dashboard-provider";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { LocaleProvider } from "@/components/i18n/locale-provider";
+import { ThemeProvider } from "@/components/theme/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
@@ -16,10 +18,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Casa Pepe — Centro de operaciones",
+  title: "Casa Pepe — Operations center",
   description:
-    "Dashboard de operaciones para el coordinador de incidentes de Casa Pepe.",
+    "Operations dashboard for the Casa Pepe incident coordinator.",
 };
+
+const themeBootScript = `(() => { try { const theme = localStorage.getItem("casa-pepe-theme"); const dark = theme ? theme === "dark" : true; document.documentElement.classList.toggle("dark", dark); } catch {} })();`;
 
 export default function RootLayout({
   children,
@@ -28,12 +32,20 @@ export default function RootLayout({
     <html
       lang="es"
       className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+      </head>
       <body className="min-h-full overflow-x-auto bg-background text-foreground">
         <TooltipProvider>
-          <DashboardProvider>
-            <DashboardShell>{children}</DashboardShell>
-          </DashboardProvider>
+          <ThemeProvider>
+            <LocaleProvider>
+              <DashboardProvider>
+                <DashboardShell>{children}</DashboardShell>
+              </DashboardProvider>
+            </LocaleProvider>
+          </ThemeProvider>
         </TooltipProvider>
       </body>
     </html>

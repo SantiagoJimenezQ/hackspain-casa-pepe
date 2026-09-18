@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { geoMercator, geoPath, type GeoPermissibleObjects } from "d3-geo";
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import spain from "@/data/spain.json";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
-import { STATUS_HEX, infraStatusLabel, mapStatusLabel } from "@/lib/status";
+import { useI18n } from "@/components/i18n/locale-provider";
+import { STATUS_HEX } from "@/lib/status";
+import { siteKey } from "@/lib/i18n";
 import type { HealthStatus, Site } from "@/lib/dashboard-types";
 
 const WIDTH = 860;
@@ -92,7 +94,21 @@ function SiteMarker({
   point: [number, number];
   showLabel: boolean;
 }) {
+  const { t } = useI18n();
   const color = STATUS_HEX[site.status];
+  const name = t(siteKey(site.id));
+  const mapStatus =
+    site.status === "down"
+      ? t("status.map.down")
+      : site.status === "degraded"
+        ? t("status.map.degraded")
+        : t("status.map.up");
+  const infraStatus =
+    site.status === "down"
+      ? t("status.infra.down")
+      : site.status === "degraded"
+        ? t("status.infra.degraded")
+        : t("status.infra.up");
   const labelSide =
     site.id === "barcelona" ||
     site.id === "valencia" ||
@@ -103,31 +119,31 @@ function SiteMarker({
 
   return (
     <g transform={`translate(${point[0]} ${point[1]})`}>
-      <title>{`${site.name}: ${mapStatusLabel(site.status)}`}</title>
+      <title>{`${name}: ${mapStatus}`}</title>
       {site.status !== "up" ? (
         <circle r="10" fill={color} opacity="0.18" />
       ) : null}
-      <circle r="7" fill="#070b14" stroke={color} strokeWidth="2.2" />
+      <circle r="7" fill="var(--map-node-fill)" stroke={color} strokeWidth="2.2" />
       <circle r="3.2" fill={color} />
       {site.id === "madrid" ? (
         <g transform="translate(16, -28)">
           <rect
             x="0"
             y="0"
-            width="148"
+            width="168"
             height="46"
             rx="8"
-            fill="#121b2c"
-            stroke="rgba(255,255,255,0.08)"
+            fill="var(--map-callout)"
+            stroke="var(--border)"
           />
-          <text x="10" y="16" fill="#f4f7fb" fontSize="11" fontWeight="600">
-            {site.name}
+          <text x="10" y="16" fill="var(--foreground)" fontSize="11" fontWeight="600">
+            {name}
           </text>
-          <text x="10" y="28" fill="#9aa6b8" fontSize="9">
-            {site.role}
+          <text x="10" y="28" fill="var(--muted-foreground)" fontSize="9">
+            {t("map.primaryDc")}
           </text>
           <text x="10" y="40" fill={color} fontSize="9">
-            {infraStatusLabel(site.status)}
+            {infraStatus}
           </text>
         </g>
       ) : showLabel ? (
@@ -135,10 +151,10 @@ function SiteMarker({
           x={labelSide === "right" ? 12 : -12}
           y="4"
           textAnchor={labelSide === "right" ? "start" : "end"}
-          fill="#d7deea"
+          fill="var(--foreground)"
           fontSize="11"
         >
-          {site.name}
+          {name}
         </text>
       ) : null}
     </g>
@@ -147,11 +163,12 @@ function SiteMarker({
 
 export function SpainMap() {
   const { snapshot } = useDashboard();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const { t } = useI18n();
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   const { mainland, canarias } = useMemo(
     () => splitSpain(spain as FeatureCollection),
@@ -207,23 +224,22 @@ export function SpainMap() {
 
   if (!mounted) {
     return (
-      <div className="relative h-full min-h-0 overflow-hidden rounded-[18px] border border-white/8 bg-[#0a1220]" />
+      <div className="relative h-full min-h-0 overflow-hidden rounded-lg border border-border bg-card" />
     );
   }
 
   return (
-    <div className="relative h-full min-h-0 overflow-hidden rounded-[18px] border border-white/8 bg-[#0a1220]">
+    <div className="relative h-full min-h-0 overflow-hidden rounded-lg border border-border bg-card">
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         className="h-full w-full"
         role="img"
-        aria-label="Mapa de centros de datos en España"
+        aria-label={t("map.aria")}
       >
         <defs>
           <radialGradient id="map-glow" cx="48%" cy="42%" r="52%">
-            <stop offset="0%" stopColor="#1a2f4d" stopOpacity="0.55" />
-            <stop offset="70%" stopColor="#0a1220" stopOpacity="0.15" />
-            <stop offset="100%" stopColor="#070b14" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--map-glow)" stopOpacity="1" />
+            <stop offset="100%" stopColor="var(--map-bg)" stopOpacity="0" />
           </radialGradient>
           <radialGradient id="impact-glow" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#ff7a3a" stopOpacity="0.95" />
@@ -261,12 +277,12 @@ export function SpainMap() {
             );
           })}
         </defs>
-        <rect width={WIDTH} height={HEIGHT} fill="#0a1220" />
+        <rect width={WIDTH} height={HEIGHT} fill="var(--map-bg)" />
         <rect width={WIDTH} height={HEIGHT} fill="url(#map-glow)" />
         <path
           d={mainlandPath}
-          fill="#102033"
-          stroke="#1e3b55"
+          fill="var(--map-land)"
+          stroke="var(--map-stroke)"
           strokeWidth="1.1"
           filter="url(#land-glow)"
         />
@@ -275,19 +291,19 @@ export function SpainMap() {
           y="466"
           width="254"
           height="132"
-          rx="16"
-          fill="#0b1524"
-          stroke="#1e3b55"
+          rx="8"
+          fill="var(--map-inset)"
+          stroke="var(--map-stroke)"
         />
-        <path d={canariasPath} fill="#102033" stroke="#1e3b55" strokeWidth="1" />
+        <path d={canariasPath} fill="var(--map-land)" stroke="var(--map-stroke)" strokeWidth="1" />
         <text
           x="662"
           y="590"
           textAnchor="middle"
-          fill="#7f8da3"
+          fill="var(--muted-foreground)"
           fontSize="10"
         >
-          Islas Canarias
+          {t("map.canaries")}
         </text>
 
         {snapshot.links.map((link) => {
@@ -333,13 +349,20 @@ export function SpainMap() {
 }
 
 function LegendDot({ status }: { status: HealthStatus }) {
+  const { t } = useI18n();
+  const label =
+    status === "down"
+      ? t("status.map.down")
+      : status === "degraded"
+        ? t("status.map.degraded")
+        : t("status.map.up");
   return (
     <span className="inline-flex items-center gap-1.5">
       <span
         className="size-2 rounded-full"
         style={{ backgroundColor: STATUS_HEX[status] }}
       />
-      {mapStatusLabel(status)}
+      {label}
     </span>
   );
 }

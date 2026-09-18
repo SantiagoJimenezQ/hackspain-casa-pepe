@@ -17,6 +17,7 @@ O solo esta app:
 
 ```bash
 pnpm --filter web dev
+pnpm --filter web test
 ```
 
 La interfaz queda en [http://localhost:3000](http://localhost:3000).

@@ -1,5 +1,5 @@
-import { PlaceholderView } from "@/components/dashboard/placeholder-view";
+import { redirect } from "next/navigation";
 
 export default function IncidentesPage() {
-  return <PlaceholderView titleKey="nav.incidents" />;
+  redirect("/");
 }

@@ -1,5 +1,5 @@
-import { PlaceholderView } from "@/components/dashboard/placeholder-view";
+import { redirect } from "next/navigation";
 
 export default function EmpresasPage() {
-  return <PlaceholderView titleKey="nav.companies" />;
+  redirect("/");
 }

@@ -1,36 +1,29 @@
-# Interfaz de operaciones
+# Casa Pepe operations dashboard
 
-Responsable: frente de UI.
+The dashboard is the operator interface for the deployed Casa Pepe backend. It has no mock-data fallback: an unavailable or unconfigured API produces an explicit connection screen.
 
-Dashboard de operaciones de Casa Pepe. Primera entrega: **Visión general** con datos de ejemplo, mapa de centros de datos y un panel de demo oculto.
+## Configure
 
-## Comandos
-
-Desde la raíz del repositorio:
+Copy the example file and use the team deployment values:
 
 ```bash
-pnpm install
-pnpm dev
+cp .env.example .env.local
 ```
 
-O solo esta app:
+`CASA_PEPE_API_BASE_URL` may be either the deployment origin or its `/api` URL. `CASA_PEPE_API_KEY` stays server-side in Next.js; it is never sent to the browser.
+
+## Run
+
+From the repository root:
 
 ```bash
-pnpm --filter web dev
-pnpm --filter web test
+pnpm --filter web dev --port 3001
 ```
 
-La interfaz queda en [http://localhost:3000](http://localhost:3000).
+Open `http://localhost:3001`. The dashboard opens in a ready state; start the Spanish scenario from the main screen or the **Demo** controls (`D`). The controls run: start → impact → capacity twist → operator/agent decision cycle → approval → recovery and verification.
 
-## Alcance actual
+## Live updates
 
-- Resumen del incidente y consecuencias para el negocio.
-- Mapa de España con nodos y enlaces verde / ámbar / rojo.
-- Plan del agente, empresas afectadas, migración e infraestructura.
-- Controles de demo (botón Demo o tecla `D`) para reiniciar, ciclar estados y avanzar el agente.
+The interface fetches the canonical `/overview` snapshot, then proxies the authenticated SSE activity stream through its own `/api/casa-pepe/activity/stream` route. Events appear instantly and trigger a debounced snapshot reconciliation.
 
-Pendiente de integración: sustituir el snapshot mock por la API y los eventos en directo, sin reescribir las tarjetas.
-
-## Integración
-
-Consumir la API NestJS de `apps/server/` (`GET /api/overview` y los controles `/api/demo/*`) y los formatos acordados en `packages/contracts/`. Los datos de ejemplo viven ahora en `src/lib/mock-snapshot.ts` y deben alinearse con esos contratos. No incluir credenciales ni importar implementaciones de herramientas en el navegador.
+The dashboard renders the backend’s actual incident, services, capacity, plan, approvals, calls, tools, tasks, activity, learning insights, and current run report.

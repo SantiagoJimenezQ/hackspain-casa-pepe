@@ -16,11 +16,11 @@ export class EnvironmentVariables {
 
 	@IsString()
 	@MinLength(1)
-	DATABASE_URL: string =
+	SUPABASE_DATABASE_URL: string =
 		"postgresql://casa_pepe:casa_pepe@localhost:5432/casa_pepe"
 
 	@IsIn(["true", "false"])
-	DATABASE_SSL: string = "false"
+	SUPABASE_DATABASE_SSL: string = "false"
 
 	@IsString()
 	@MinLength(1)

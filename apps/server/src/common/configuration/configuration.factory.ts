@@ -44,8 +44,8 @@ export function createApplicationConfiguration(
 			apiKey: variables.API_KEY,
 		},
 		database: {
-			ssl: variables.DATABASE_SSL === "true",
-			url: variables.DATABASE_URL,
+			ssl: variables.SUPABASE_DATABASE_SSL === "true",
+			url: variables.SUPABASE_DATABASE_URL,
 		},
 		demo: {
 			engineerName: variables.DEMO_ENGINEER_NAME,

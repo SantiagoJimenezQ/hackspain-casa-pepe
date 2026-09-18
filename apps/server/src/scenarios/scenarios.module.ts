@@ -5,7 +5,7 @@ import { SeededSimulationService } from "@scenarios/services/seeded-simulation.s
 
 @Module({
 	controllers: [ScenariosController],
-	exports: [ScenariosService],
-	providers: [ScenariosService],
+	exports: [ScenariosService, SeededSimulationService],
+	providers: [ScenariosService, SeededSimulationService],
 })
 export class ScenariosModule {}

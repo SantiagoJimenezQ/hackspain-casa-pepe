@@ -1,15 +1,10 @@
 {
   "name": "casa-pepe",
   "private": true,
-  "type": "module",
-  "engines": {
-    "node": ">=22"
-  },
   "scripts": {
-    "dev:server": "node --watch apps/server/index.mjs",
-    "start:server": "node apps/server/index.mjs",
-    "test": "node --test",
-    "docs:generate": "node packages/contracts/generate-openapi.mjs",
-    "demo:api": "node apps/server/demo-client.mjs"
-  }
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "lint": "pnpm --filter web lint"
+  },
+  "packageManager": "pnpm@11.7.0"
 }

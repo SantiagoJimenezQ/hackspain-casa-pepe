@@ -1,0 +1,461 @@
+# API reference
+
+Base URL: `http://localhost:3000/api`. Interactive OpenAPI documentation at `http://localhost:3000/documentation`.
+
+Every response is JSON. Identifiers carry a prefix: `run_`, `inc_`, `plan_`, `apr_`, `task_`, `tool_`, `call_`, `rec_`, `act_`, `whs_`, `whd_`, `hev_`, `fact_`, `dec_`.
+
+## Authentication
+
+| Scope | Header | Who |
+|---|---|---|
+| `operator` (default) | `Authorization: API <API_KEY>` | Frontend, operator and demo controls |
+| `public` | none | `/health` and inbound webhooks (they verify their own secret) |
+
+Without a valid credential: `401` with `{ "statusCode": 401, "message": "An API key is required" }`.
+
+## Error format
+
+```json
+{
+  "statusCode": 409,
+  "error": "Stale Run",
+  "message": "Run run_… is no longer active, late results are ignored",
+  "details": [],
+  "path": "/api/webhooks/recovery",
+  "correlationIdentifier": "…",
+  "timestamp": "2026-09-18T19:21:00.000Z"
+}
+```
+
+Common errors:
+
+| Code | `error` | When |
+|---|---|---|
+| 400 | `Bad Request` | Body or query validation (`details` lists the fields) |
+| 401 | `Unauthorized`, `Invalid Signature` | Missing API key, or the inbound webhook secret does not match |
+| 404 | `Not Found` | Unknown identifier |
+| 409 | `No Active Run` | No active run; call `POST /demo/start` first |
+| 409 | `Invalid State Transition` | Deciding an approval that is already decided or superseded, duplicated call result |
+| 409 | `Stale Run` | Late result from a run that was reset |
+| 502 | `Integration Failure` | Unexpected response from HappyRobot or the recovery environment |
+
+## Common parameter `runIdentifier`
+
+List queries accept `?runIdentifier=run_…`. When omitted they use the active run. Without an active run they return `409 No Active Run`.
+
+---
+
+## Health
+
+### `GET /health` (public)
+
+Checks the Postgres (Supabase) connection and returns the integration modes.
+
+```json
+{ "status": "ok", "info": { "database": { "status": "up" }, "integrations": { "status": "up", "engineerCalls": "simulated", "recoveryEnvironment": "simulated" } } }
+```
+
+---
+
+## Demo controls (`/demo`)
+
+Separate from the operator controls. Each call returns the resulting `IncidentSnapshot` and emits activity events.
+
+### `POST /demo/start`
+
+Optional body `{ "scenarioIdentifier": "meteorite-eu-west-1" }`. Deactivates the previous run (it ends in `reset` state) and creates a new one with every service healthy. Events: `incident.run-started`.
+
+### `POST /demo/impact`
+
+Applies the meteorite: services become `down` or `degraded`, the initial facts are loaded and the incident becomes `detected`. The agent starts its first cycle: plan v1, engineer call and task assignment. Events: `incident.impact-detected`, `incident.event-applied`, `incident.status-changed`, `plan.created`, `decision.recorded`, …
+
+### `POST /demo/twist`
+
+Applies the scenario twist: the backup capacity is confirmed at 7 units. The agent revises the plan (v2), invalidates pending approvals and postpones what no longer fits. Events: `resource.capacity-changed`, `incident.event-applied`, `approval.superseded`, `plan.revised`, `decision.recorded`.
+
+### `POST /demo/events`
+
+Arbitrary harness event.
+
+```json
+{ "type": "meteorite-impact" }
+{ "type": "capacity-limited", "availableCapacity": 9, "reason": "Another team released capacity" }
+{ "type": "service-health-changed", "serviceIdentifier": "events-stream", "status": "healthy", "reason": "Recovered manually" }
+{ "type": "fact-reported", "statement": "…", "factStatus": "confirmed", "source": "Platform team" }
+```
+
+`status` accepts `healthy | degraded | down | recovering`; `factStatus` accepts `confirmed | pending | refuted`. `capacity-limited` and `service-health-changed` trigger a plan revision.
+
+### `POST /demo/reset`
+
+Marks the current run as `reset` and creates a new one from the same scenario. Late results from the previous run (calls, recoveries) are rejected with `409 Stale Run`. Events: `incident.run-reset`, `incident.run-started`.
+
+---
+
+## Incident (`/incidents`)
+
+### `GET /incidents/current`
+
+`IncidentSnapshot` of the active run.
+
+| Field | Content |
+|---|---|
+| `identifier`, `runIdentifier`, `runKind` (`live` \| `replay`), `sourceRunIdentifier` | Run identity |
+| `status` | `normal` \| `detected` \| `responding` \| `partially-recovered` \| `recovered` \| `reset` |
+| `active`, `startedAt`, `impactedAt`, `resolvedAt` | Lifecycle |
+| `title`, `company`, `narrative`, `region`, `backupRegion`, `businessImpactSummary` | Context for the incident summary |
+| `services[]` | `identifier`, `name`, `status`, `statusReason`, `businessImpact`, `impactDescription`, `dependencies[]`, `recoveryCapacityUnits`, `recoveryActionKind`, `recoveryActionDescription`, `recoveryRequiresApproval`, `recoveryConsequences[]`, `lastChangedAt` |
+| `resources[]` | `identifier`, `name`, `region`, `unit`, `totalCapacity`, `allocatedCapacity`, `confirmed`, `note` |
+| `facts[]` | `statement`, `status` (`confirmed` \| `pending` \| `refuted`), `source`, `recordedAt` |
+| `harnessEvents[]` | Events applied by the harness with date and source |
+| `agentCycles` | Cycles executed by the agent |
+
+### `GET /incidents/runs`
+
+Runs, newest first: `runIdentifier`, `incidentIdentifier`, `runKind`, `status`, `active`, `startedAt`, `agentCycles`.
+
+### `GET /incidents/runs/:runIdentifier`
+
+`IncidentSnapshot` of a specific run, active or not.
+
+---
+
+## Overview for the UI
+
+### `GET /overview?runIdentifier=`
+
+The full initial state in one call.
+
+```json
+{
+  "incident": { "…IncidentSnapshot" },
+  "plan": { "kind": "plan", "plan": { "…PlanRecord" } },
+  "pendingApprovals": [ "…ApprovalRecord" ],
+  "tasks": [ "…TaskRecord" ],
+  "engineerCalls": [ "…EngineerCallRecord" ],
+  "toolCalls": [ "…ToolCallRecord" ],
+  "recentActivity": [ "…ActivityRecord (latest 50)" ],
+  "tools": [ { "name": "contact_engineer", "description": "…", "interaction": "real-call", "asynchronous": true, "simulated": true } ],
+  "agent": { "…AgentStatus" }
+}
+```
+
+`plan` is `{ "kind": "none" }` before the impact.
+
+---
+
+## Agent (`/agent`)
+
+### `GET /agent/status`
+
+```json
+{
+  "runIdentifier": "run_…", "incidentStatus": "partially-recovered",
+  "cycles": 6, "maximumCycles": 60, "cycleInProgress": false,
+  "planVersion": 2, "pendingApprovals": 0, "runningToolCalls": 0,
+  "engineerCallMode": "simulated", "recoveryMode": "simulated",
+  "lastCycleAt": "…", "lastCycleOutcome": { "kind": "completed", "planVersion": 2, "executedSteps": 1, "waitingFor": [] }
+}
+```
+
+`lastCycleOutcome.kind`: `completed` \| `skipped` \| `limit-reached` \| `failed`.
+
+### `POST /agent/cycle`
+
+Optional body `{ "operatorName": "Luis" }`. Forces a decision cycle. Useful after `agent.limit-reached` or to resume a completed plan under new conditions. Returns the `CycleOutcome`.
+
+---
+
+## Plans (`/plans`)
+
+### `GET /plans/current?runIdentifier=`
+
+`{ "kind": "none", "runIdentifier": "…" }` or `{ "kind": "plan", "plan": PlanRecord }` with the latest version (active or completed).
+
+### `GET /plans?runIdentifier=`
+
+Every version, from 1 onwards.
+
+### `GET /plans/:identifier`
+
+A specific version.
+
+**PlanRecord**
+
+| Field | Content |
+|---|---|
+| `identifier`, `version`, `status` (`active` \| `superseded` \| `completed`), `previousPlanIdentifier` | Versioning |
+| `decisionIdentifier`, `reason`, `triggeredBy`, `summary` | Why this version exists and what it proposes |
+| `priorities[]` | `rank`, `serviceIdentifier`, `serviceName`, `score`, `businessImpact`, `capacityUnits`, `decision` (`recover-now` \| `postpone` \| `waiting-for-dependency` \| `already-healthy`), `reason`, `blockedBy[]` |
+| `capacity` | `resourceIdentifier`, `totalCapacity`, `plannedUnits`, `remainingUnits`, `postponedUnits`, `confirmed` |
+| `steps[]` | See PlanStep |
+| `changesFromPrevious[]` | `kind` (`capacity-changed` \| `step-postponed` \| `step-added` \| `step-removed` \| `priority-changed` \| `step-reprioritized`), `description`, `serviceIdentifier`, `stepIdentifier` |
+
+**PlanStep**
+
+| Field | Content |
+|---|---|
+| `identifier` | Stable across versions: `stp_contact-engineer`, `stp_<service>_task`, `stp_<service>_execute`, `stp_<service>_verify`, `stp_support-communication` |
+| `order`, `title`, `reason` | Presentation |
+| `invocation` | `{ name: ToolName, input }` the agent will execute |
+| `owner` | `{ kind: "agent" \| "engineer" \| "operator", name }` |
+| `serviceIdentifier`, `capacityUnits`, `requiresApproval`, `dependsOn[]` | Constraints |
+| `status` | `proposed` \| `awaiting-approval` \| `approved` \| `rejected` \| `running` \| `completed` \| `failed` \| `cancelled` \| `postponed` |
+| `statusReason`, `resultSummary`, `attempts`, `toolCallIdentifier`, `approvalIdentifier`, `updatedAt` | Traceability |
+
+The UI must distinguish proposed (`proposed`, `awaiting-approval`, `approved`), in progress (`running`) and completed (`completed`) steps, plus `postponed`, `failed` and `rejected`.
+
+---
+
+## Approvals (`/approvals`)
+
+### `GET /approvals?runIdentifier=&status=`
+
+Optional `status`: `pending` \| `approved` \| `rejected` \| `superseded` \| `expired`.
+
+### `GET /approvals/:identifier`
+
+**ApprovalRecord**: `identifier`, `runIdentifier`, `planIdentifier`, `planVersion`, `planStepIdentifier`, `toolCallIdentifier`, `decisionIdentifier`, `serviceIdentifier`, `actionSummary`, `reason`, `consequences[]`, `capacityUnits`, `status`, `requestedAt`, `expiresAt`, `decidedAt`, `decidedBy`, `comment`, `invalidationReason`.
+
+### `POST /approvals/:identifier/decision`
+
+```json
+{ "decision": "approve", "operatorName": "Luis", "comment": "Go ahead" }
+```
+
+`decision`: `approve` \| `reject`. Rules:
+
+- Only a `pending` approval can be decided; otherwise `409 Invalid State Transition`.
+- The approval must belong to the active plan version. If the plan changed it is marked `superseded` and the call answers `409`; the agent will already have requested a new one.
+- `approve`: the step becomes `approved` and runs in the next cycle.
+- `reject`: the step becomes `rejected`, the agent revises the plan and postpones the service with the operator comment. The decision is respected in later versions.
+- No decision before `AGENT_APPROVAL_TIMEOUT_MILLISECONDS`: `expired`, and the agent requests it again.
+
+Events: `approval.decided`, then `plan-step.updated`, and `plan.revised` when applicable.
+
+---
+
+## Tasks (`/tasks`)
+
+### `GET /tasks?runIdentifier=&status=`
+
+Optional `status`: `open` \| `in-progress` \| `done` \| `cancelled`.
+
+**TaskRecord**: `identifier`, `title`, `description`, `assignee { name, role }`, `priority` (`critical` \| `high` \| `medium` \| `low`), `status`, `statusNote`, `serviceIdentifier`, `createdBy { kind, name }`, `planIdentifier`, `planStepIdentifier`, `toolCallIdentifier`, `createdAt`, `updatedAt`.
+
+### `PATCH /tasks/:identifier/status`
+
+```json
+{ "status": "done", "note": "Failover prepared", "updatedBy": "Marta Ruiz" }
+```
+
+Event: `task.updated`.
+
+---
+
+## Activity (`/activity`)
+
+### `GET /activity?runIdentifier=&types=&afterSequence=&limit=&offset=`
+
+| Parameter | Description |
+|---|---|
+| `types` | Comma separated list of event types |
+| `afterSequence` | Only events with a greater `sequence`. Use it to page live without losing events |
+| `limit` | 1 to 500, default 100 |
+| `offset` | Default 0 |
+
+Response `{ items: ActivityRecord[], total, limit, offset }` ordered by ascending `sequence`.
+
+**ActivityRecord**
+
+| Field | Content |
+|---|---|
+| `identifier`, `runIdentifier`, `incidentIdentifier`, `sequence`, `occurredAt` | Order and ownership |
+| `type` | See the event catalog |
+| `source` | `harness` \| `agent` \| `operator` \| `tool` \| `integration` \| `system` \| `replay` |
+| `title`, `summary` | Ready-to-display text |
+| `payload` | Full related object (plan, approval, task, call, verification…) |
+| `correlation` | `harnessEventIdentifier`, `decisionIdentifier`, `planIdentifier`, `planVersion`, `planStepIdentifier`, `toolCallIdentifier`, `approvalIdentifier`, `taskIdentifier`, `engineerCallIdentifier`, `recoveryActionIdentifier`, `serviceIdentifier` (only those that apply) |
+| `simulated` | `true` when the data or the action is simulated |
+| `replayed`, `replayOfEventIdentifier` | `true` in replays, with the original event |
+
+---
+
+## Tools (`/tools`)
+
+### `GET /tools`
+
+The eight tools with `name`, `description`, `interaction` (`harness` \| `simulated-data` \| `real-call` \| `real-record` \| `operator-interaction` \| `test-environment`), `asynchronous` and `simulated` for this deployment.
+
+### `GET /tools/calls?runIdentifier=`, `GET /tools/calls/:identifier`
+
+**ToolCallRecord**: `identifier`, `name`, `interaction`, `input`, `status` (`pending` \| `running` \| `succeeded` \| `failed` \| `cancelled`), `output` (union by `kind`: `incident-state`, `service-health`, `recovery-capacity`, `engineer-call`, `task`, `approval`, `recovery-execution`, `recovery-verification`), `error { code, message, retryable }`, `externalReference`, `simulated`, `attempt`, `idempotencyKey`, `planIdentifier`, `planVersion`, `planStepIdentifier`, `decisionIdentifier`, `startedAt`, `finishedAt`.
+
+Error codes: `TIMEOUT`, `CALL_FAILED`, `APPROVAL_INVALID`, `CAPACITY_INSUFFICIENT`, `EXECUTION_FAILED`, `UNEXPECTED_ERROR`, `CANCELLED`.
+
+---
+
+## Engineer calls (`/engineers/calls`)
+
+### `GET /engineers/calls?runIdentifier=`, `GET /engineers/calls/:identifier`
+
+**EngineerCallRecord**: `identifier`, `engineer { name, phone, role }`, `purpose`, `questions[] { key, question }`, `mode` (`simulated` \| `live`), `status` (`dialing` \| `in-progress` \| `completed` \| `failed` \| `no-answer`), `providerReference`, `result { outcome, summary, transcript, answers[] { key, question, answer } }`, `failureReason`, `startedAt`, `finishedAt`, `toolCallIdentifier`, `planStepIdentifier`.
+
+---
+
+## Recovery (`/recovery/actions`)
+
+### `GET /recovery/actions?runIdentifier=`
+
+**RecoveryActionRecord**: `identifier`, `serviceIdentifier`, `actionKind` (`failover-database` \| `redeploy-service` \| `restart-stream` \| `scale-service`), `actionDescription`, `capacityUnits`, `resourceIdentifier`, `approvalIdentifier`, `mode` (`simulated` \| `http`), `status` (`requested` \| `running` \| `succeeded` \| `partial` \| `failed`), `providerReference`, `result { outcome, detail }`, `startedAt`, `finishedAt`.
+
+Capacity is reserved in the harness before executing; when it is insufficient the tool fails with `CAPACITY_INSUFFICIENT` and nothing runs. When the action fails, the capacity is released.
+
+---
+
+## Replays (`/replays`)
+
+### `POST /replays`
+
+```json
+{ "sourceRunIdentifier": "run_…", "speedFactor": 4 }
+```
+
+Creates a new run with `runKind: "replay"`, deactivates the current one and re-emits the recorded events keeping their timing (divided by `speedFactor`, at most 5 s between events). Every event is emitted with `replayed: true` and title `[Replay] …`. The agent executes nothing during replays. `409` when a replay is already running.
+
+### `GET /replays/status`
+
+`{ status: "idle" | "running" | "finished" | "cancelled", runIdentifier, sourceRunIdentifier, totalEvents, emittedEvents, speedFactor, startedAt, finishedAt }`.
+
+---
+
+## Outbound webhooks (`/webhooks`)
+
+### `POST /webhooks/subscriptions`
+
+```json
+{
+  "name": "Operations UI",
+  "description": "Next.js route handler",
+  "targetURL": "http://localhost:3001/api/casa-pepe/webhook",
+  "secret": "at-least-sixteen-characters",
+  "eventTypes": ["plan.created", "plan.revised", "approval.requested"]
+}
+```
+
+Empty or omitted `eventTypes` receives everything. Response: `WebhookSubscriptionRecord` (`identifier`, `name`, `description`, `targetURL`, `eventTypes`, `active`, `createdAt`, `updatedAt`). The secret is never returned.
+
+### `GET /webhooks/subscriptions`, `GET /webhooks/subscriptions/:identifier`
+
+### `DELETE /webhooks/subscriptions/:identifier`
+
+`204`. Pending deliveries are abandoned.
+
+### `POST /webhooks/subscriptions/:identifier/ping`
+
+Sends a test delivery with `eventType: "webhook.ping"` and returns the `WebhookDeliveryRecord`.
+
+### `GET /webhooks/deliveries?subscriptionIdentifier=&status=&limit=`
+
+`status`: `pending` \| `delivered` \| `failed` \| `exhausted`. **WebhookDeliveryRecord**: `identifier`, `subscriptionIdentifier`, `eventIdentifier`, `eventType`, `runIdentifier`, `status`, `attempts`, `nextAttemptAt`, `lastAttemptAt`, `lastStatusCode`, `lastError`, `createdAt`, `deliveredAt`.
+
+### Delivery format
+
+`POST` to `targetURL` with:
+
+| Header | Value |
+|---|---|
+| `content-type` | `application/json` |
+| `x-casa-pepe-event` | Event type |
+| `x-casa-pepe-delivery` | Delivery identifier (deduplicate retries with it) |
+| `x-casa-pepe-timestamp` | ISO 8601 of the send |
+| `x-casa-pepe-signature` | `sha256=<hex>` |
+
+Body:
+
+```json
+{ "deliveryIdentifier": "whd_…", "subscriptionIdentifier": "whs_…", "attempt": 1, "sentAt": "…", "eventType": "plan.revised", "event": { "…ActivityRecord" } }
+```
+
+Signature verification (Node):
+
+```js
+const expected = `sha256=${createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex")}`
+timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
+```
+
+The receiver must answer 2xx. On any other response or timeout (`WEBHOOK_TIMEOUT_MILLISECONDS`) the delivery is retried with exponential backoff (2 s, 4 s, 8 s… up to 60 s) until `WEBHOOK_MAXIMUM_ATTEMPTS`; then it becomes `exhausted`.
+
+---
+
+## Inbound webhooks (public with secret)
+
+### `POST /webhooks/happyrobot`
+
+Header `x-happyrobot-signature: <HAPPYROBOT_WEBHOOK_SECRET>`.
+
+```json
+{
+  "callIdentifier": "call_…",
+  "outcome": "completed",
+  "summary": "Snapshot is twelve minutes old…",
+  "transcript": "…",
+  "answers": [ { "key": "database-snapshot", "answer": "About twelve minutes" } ]
+}
+```
+
+`outcome`: `completed` \| `failed` \| `no-answer`. The `key` values must match the questions sent when the call was triggered. Response `202 { "accepted": true }`. The agent turns the answers into confirmed or pending facts and continues the plan.
+
+### `POST /webhooks/recovery`
+
+Header `x-recovery-signature: <RECOVERY_WEBHOOK_SECRET>`.
+
+```json
+{ "actionIdentifier": "rec_…", "status": "succeeded", "detail": "Replica promoted" }
+```
+
+`status`: `succeeded` \| `partial` \| `failed`. Response `202`. Updates the service state in the harness, completes the tool call and triggers the verification.
+
+---
+
+## Activity event catalog
+
+| Type | Source | When |
+|---|---|---|
+| `incident.run-started` | harness | New run |
+| `incident.impact-detected` | harness | Meteorite applied |
+| `incident.event-applied` | harness | Any harness event |
+| `incident.status-changed` | system | `detected` → `responding` → `partially-recovered` → `recovered` |
+| `incident.run-reset` | harness | Reset |
+| `service.health-changed` | harness / integration | Service health change |
+| `resource.capacity-changed` | harness | Total or allocated capacity changes |
+| `fact.recorded` | agent | Fact confirmed or left pending after the call |
+| `plan.created`, `plan.revised` | agent | New plan version (payload: full plan) |
+| `plan-step.updated` | agent | Step status change |
+| `decision.recorded` | agent | Explanation of priorities and changes |
+| `tool-call.started`, `tool-call.completed`, `tool-call.failed` | tool | Tool execution |
+| `approval.requested`, `approval.decided`, `approval.superseded`, `approval.expired` | agent / operator | Approval lifecycle |
+| `task.assigned`, `task.updated` | agent / operator | Tasks |
+| `engineer-call.started`, `engineer-call.completed`, `engineer-call.failed` | tool / integration | HappyRobot call |
+| `recovery.executed`, `recovery.verified` | integration / tool | Action and verification in the test environment |
+| `agent.cycle-finished` | agent | Summary: recovered, pending and next step |
+| `agent.limit-reached` | agent | Cycle limit reached |
+| `replay.started`, `replay.finished` | replay | Reproduction |
+| `webhook.ping` | system | Test deliveries only |
+
+## Internal flow in short
+
+```
+POST /demo/impact
+  → harness applies the impact → internal event → AgentService.requestCycle
+  → plan v1 → contact_engineer (asynchronous) + assign_task ×N
+  → call finishes (simulated timer or POST /webhooks/happyrobot) → facts → request_approval (database)
+POST /demo/twist
+  → capacity 7 → plan v2, approval v1 superseded, new approval v2
+POST /approvals/:id/decision approve
+  → execute_recovery (reserves capacity) → result (timer or POST /webhooks/recovery) → verify_recovery
+  → route-assignment runs without approval → verification → degraded services heal on their own
+  → agent.cycle-finished: recovered / pending / next step
+```
+
+Every activity event is persisted, delivered through webhooks to the subscriptions and queryable at `GET /activity` with its correlation identifiers.

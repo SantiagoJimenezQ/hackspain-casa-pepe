@@ -1,0 +1,108 @@
+import { ENVIRONMENTS } from "@common/constants/application.constant"
+import { Type } from "class-transformer"
+import { IsIn, IsInt, IsString, IsUrl, Min, MinLength } from "class-validator"
+
+export class EnvironmentVariables {
+	@IsIn(ENVIRONMENTS)
+	ENVIRONMENT: string = "local"
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(1)
+	PORT: number = 3000
+
+	@IsString()
+	PUBLIC_BASE_URL: string = "http://localhost:3000"
+
+	@IsString()
+	@MinLength(1)
+	DATABASE_URL: string =
+		"postgresql://casa_pepe:casa_pepe@localhost:5432/casa_pepe"
+
+	@IsIn(["true", "false"])
+	DATABASE_SSL: string = "false"
+
+	@IsString()
+	@MinLength(1)
+	API_KEY: string = ""
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(100)
+	WEBHOOK_TIMEOUT_MILLISECONDS: number = 5000
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(1)
+	WEBHOOK_MAXIMUM_ATTEMPTS: number = 5
+
+	@IsIn(["simulated", "live"])
+	HAPPYROBOT_MODE: string = "simulated"
+
+	@IsString()
+	HAPPYROBOT_TRIGGER_URL: string = ""
+
+	@IsString()
+	HAPPYROBOT_API_KEY: string = ""
+
+	@IsString()
+	@MinLength(1)
+	HAPPYROBOT_WEBHOOK_SECRET: string = ""
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(0)
+	SIMULATED_CALL_DELAY_MILLISECONDS: number = 4000
+
+	@IsIn(["simulated", "http"])
+	RECOVERY_MODE: string = "simulated"
+
+	@IsUrl({ require_tld: false })
+	RECOVERY_ENVIRONMENT_URL: string = "http://localhost:4100"
+
+	@IsString()
+	RECOVERY_ENVIRONMENT_API_KEY: string = ""
+
+	@IsString()
+	@MinLength(1)
+	RECOVERY_WEBHOOK_SECRET: string = ""
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(0)
+	SIMULATED_RECOVERY_DELAY_MILLISECONDS: number = 1500
+
+	@IsString()
+	DEMO_ENGINEER_NAME: string = "Marta Ruiz"
+
+	@IsString()
+	DEMO_ENGINEER_PHONE: string = "+34600000000"
+
+	@IsString()
+	DEMO_ENGINEER_ROLE: string = "Platform on-call engineer"
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(1)
+	AGENT_MAXIMUM_CYCLES_PER_RUN: number = 60
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(1)
+	AGENT_MAXIMUM_STEPS_PER_CYCLE: number = 6
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(1)
+	AGENT_MAXIMUM_STEP_ATTEMPTS: number = 2
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(1000)
+	AGENT_APPROVAL_TIMEOUT_MILLISECONDS: number = 600000
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(1000)
+	AGENT_TOOL_TIMEOUT_MILLISECONDS: number = 20000
+}

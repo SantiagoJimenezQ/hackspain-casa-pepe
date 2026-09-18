@@ -1,0 +1,26 @@
+export const AGENT_TRIGGER_KINDS = [
+	"impact-detected",
+	"conditions-changed",
+	"tool-call-finished",
+	"approval-decided",
+	"timeouts-expired",
+	"operator-requested",
+	"follow-up",
+] as const
+
+export const AGENT_TICK_INTERVAL_MILLISECONDS = 5000
+
+export const DEPENDENT_SERVICE_SCORE_BONUS = 15
+
+export const AGENT_ACTOR_NAME = "Casa Pepe agent"
+
+export const STEP_IDENTIFIER_PREFIX = "stp"
+
+export const CONTACT_ENGINEER_STEP_IDENTIFIER = "stp_contact-engineer"
+
+export const SUPPORT_COMMUNICATION_STEP_IDENTIFIER = "stp_support-communication"
+
+export const NEGATIVE_ANSWER_PATTERN =
+	/not sure|unsure|cannot confirm|can't confirm|no estoy segur|no puedo confirmar|let me check|i will check|don't know|do not know/i
+
+export const RECENT_ACTIVITY_LIMIT = 50

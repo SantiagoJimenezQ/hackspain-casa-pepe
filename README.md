@@ -6,12 +6,12 @@ Our project for the HackSpain hackathon.
 
 [MASTER.md](MASTER.md) recoge el alcance y el reparto del trabajo. [AGENTS.md](AGENTS.md) contiene la guía del reto para los asistentes de desarrollo.
 
-Usaremos una estructura de monorepo, con Next.js para la interfaz. Cada frente tiene su carpeta y comparte los contratos de integración. La UI de `apps/web` ya arranca con `pnpm install` y `pnpm dev`.
+Usaremos una estructura de monorepo, con Next.js como propuesta para la interfaz. Cada frente tiene su carpeta y comparte los contratos de integración. El backend está implementado en `apps/server/` (ver su README para arrancarlo). El resto de frentes conserva por ahora la estructura documental.
 
 ```text
 apps/
-  web/                 Interfaz de operaciones (Next.js)
-  server/              API, eventos y proceso de ejecución
+  web/                 Interfaz de operaciones (Next.js previsto)
+  server/              API, eventos y proceso de ejecución (NestJS, implementado)
 packages/
   contracts/           Contratos compartidos y ejemplos de mensajes
   harness/             Simulación, escenarios y reinicio
@@ -43,3 +43,7 @@ Next.js cubre la interfaz. El proceso que espera llamadas, aprobaciones y nuevos
 4. Coordinar los cambios de configuración raíz y mantener un único gestor de paquetes y su archivo de bloqueo cuando se inicialice el proyecto.
 5. Integrar pronto el recorrido: evento, UI, propuesta, aprobación, acción y comprobación del resultado.
 6. Documentar en cada carpeta sus comandos reales cuando exista implementación. Mantener las credenciales fuera del repositorio.
+
+## API simulada para UI y agente
+
+[Guía de integración](apps/server/API.md) · [OpenAPI](packages/contracts/openapi.json) · [Cliente ejecutable](apps/server/demo-client.mjs). La simulación admite modo manual y modo aleatorio reproducible por semilla, con controles de pausa, avance y reanudación.

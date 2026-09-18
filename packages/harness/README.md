@@ -1,22 +1,13 @@
-# Harness y escenarios
+# Simulation harness
 
-Responsable: frente de harness y backend.
+The harness owns the simulated environment. Recovery decisions belong to the agent; the harness does not prescribe which company to migrate or where.
 
-Esta carpeta contendrá el estado y las reglas del entorno simulado, los escenarios y sus datos de prueba.
+- `index.mjs`: run lifecycle, events, guards, clock and command dispatch.
+- `dashboard.mjs`: region/company health, hosting slots, migrations and derived totals.
+- `random.mjs`: validated scenario config and independent seeded random streams.
 
-## Alcance
+`createHarness()` returns `snapshot()`, `apply(command, body)` and `clockTick()`. Snapshot reads are passive. `clockTick()` is a no-op while paused or without an active incident; the HTTP server schedules it approximately once per second. Explicit `advance` processes integer simulated minutes even while paused.
 
-- Estado de servicios, dependencias, recursos e impacto.
-- Escenario inicial de caída regional de AWS provocada por un meteorito.
-- Eventos que modifican las condiciones durante la ejecución.
-- Resultados simulados coherentes con el estado y los recursos disponibles.
-- Reinicio reproducible y registro de cambios.
-- Casos de capacidad insuficiente, fallos y recuperación parcial.
+The original manual fixture remains the default. Randomized mode samples initial spare backup capacity and migration duration/failure, and can inject one secondary fault during recovery. Same config, implementation version, actions and ticks reproduce outcomes; UUIDs and real timestamps differ. Separate random streams prevent polling from affecting the future.
 
-## Límites
-
-El harness controla el entorno. Las decisiones corresponden al agente. No codificar en el escenario la secuencia exacta de herramientas que el agente debe ejecutar.
-
-Utilizar los contratos compartidos. Distinguir los resultados simulados de los que proceden de una acción real del entorno de pruebas. Los guiones de presentación pertenecen a `demo/`.
-
-Primera entrega: escenario inicial, evento de caída, giro de capacidad y reinicio, con pruebas de las transiciones de estado y los límites de recursos.
+Read [API.md](../../apps/server/API.md) for complete rules and control contracts. Tests run from the repository root with `npm test`; they cover state transitions, resource limits, failures, seeded replay, clock behavior and reset isolation. There are no real AWS actions or agent decisions here.

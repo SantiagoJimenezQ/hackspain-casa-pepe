@@ -54,6 +54,7 @@ export interface AgentConfiguration {
 	readonly maximumStepAttempts: number
 	readonly approvalTimeoutMilliseconds: number
 	readonly toolTimeoutMilliseconds: number
+	readonly callTimeoutMilliseconds: number
 }
 
 export interface EmailConfiguration {

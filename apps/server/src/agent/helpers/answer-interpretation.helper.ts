@@ -7,7 +7,11 @@ export function interpretAnswer(
 	question: ScenarioEngineerQuestion,
 	answer: string,
 	mode: EngineerCallMode,
+	explicitConfirmation?: boolean,
 ): FactStatus {
+	if (explicitConfirmation !== undefined) {
+		return explicitConfirmation ? "confirmed" : "pending"
+	}
 	switch (mode) {
 		case "simulated":
 			return question.simulatedConfirms ? "confirmed" : "pending"

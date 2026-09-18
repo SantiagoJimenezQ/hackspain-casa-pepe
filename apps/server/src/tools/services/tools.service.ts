@@ -23,6 +23,7 @@ import {
 	ToolCallRecord,
 	ToolError,
 	ToolExecutionResult,
+	ToolName,
 	ToolOutput,
 } from "@tools/types/tool.type"
 import { Repository } from "typeorm"
@@ -163,7 +164,7 @@ export class ToolsService {
 		for (const entity of running) {
 			if (
 				elapsedMilliseconds(entity.startedAt, now) >
-				this.configuration.agent.toolTimeoutMilliseconds
+				this.timeoutFor(entity.name)
 			) {
 				this.logger.warn(LOG_MESSAGES.TOOLS.CALL_TIMED_OUT, {
 					name: entity.name,
@@ -248,6 +249,16 @@ export class ToolsService {
 		)
 	}
 
+	private timeoutFor(name: ToolName): number {
+		switch (name) {
+			case "call_engineer":
+			case "contact_engineer":
+				return this.configuration.agent.callTimeoutMilliseconds
+			default:
+				return this.configuration.agent.toolTimeoutMilliseconds
+		}
+	}
+
 	private async runWithTimeout(
 		entity: ToolCallEntity,
 		request: ExecuteToolRequest,
@@ -266,7 +277,7 @@ export class ToolsService {
 		const timeout = new Promise<ToolExecutionResult>((resolve) => {
 			timer = setTimeout(
 				() => resolve({ error: TIMEOUT_ERROR, status: "failed" }),
-				this.configuration.agent.toolTimeoutMilliseconds,
+				this.timeoutFor(request.invocation.name),
 			)
 		})
 		try {

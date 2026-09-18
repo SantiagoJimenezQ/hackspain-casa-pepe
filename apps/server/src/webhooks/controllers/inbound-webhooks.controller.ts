@@ -65,6 +65,7 @@ export class InboundWebhooksController {
 				const question = questionsByKey.get(answer.key)
 				return {
 					answer: answer.answer,
+					confirmed: answer.confirmed,
 					key: answer.key,
 					question: question ? question : answer.key,
 				}

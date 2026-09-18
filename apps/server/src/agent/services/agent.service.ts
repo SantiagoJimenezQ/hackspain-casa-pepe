@@ -1,5 +1,8 @@
 import { ActivityService } from "@activity/services/activity.service"
-import { AGENT_TICK_INTERVAL_MILLISECONDS } from "@agent/constants/agent.constant"
+import {
+	AGENT_TICK_INTERVAL_MILLISECONDS,
+	CONTACT_ENGINEER_STEP_IDENTIFIER,
+} from "@agent/constants/agent.constant"
 import { AGENT_MESSAGES } from "@agent/constants/agent-messages.constant"
 import { interpretAnswer } from "@agent/helpers/answer-interpretation.helper"
 import {
@@ -503,6 +506,26 @@ export class AgentService {
 		return latest
 	}
 
+	private callFailedWhileStepsWait(plan: PlanRecord): boolean {
+		const contact = plan.steps.find(
+			(step) => step.identifier === CONTACT_ENGINEER_STEP_IDENTIFIER,
+		)
+		if (!contact) {
+			return false
+		}
+		if (
+			contact.status !== "failed" ||
+			contact.attempts < this.configuration.agent.maximumStepAttempts
+		) {
+			return false
+		}
+		return plan.steps.some(
+			(step) =>
+				step.dependsOn.includes(CONTACT_ENGINEER_STEP_IDENTIFIER) &&
+				OPEN_STATUSES.includes(step.status),
+		)
+	}
+
 	private requiresRevision(plan: PlanRecord, trigger: AgentTrigger): boolean {
 		switch (trigger.kind) {
 			case "conditions-changed":
@@ -513,6 +536,9 @@ export class AgentService {
 			case "follow-up":
 			case "operator-requested":
 			case "impact-detected":
+				if (this.callFailedWhileStepsWait(plan)) {
+					return true
+				}
 				return plan.steps.some((step) => {
 					const priority = plan.priorities.find(
 						(candidate) =>
@@ -1157,6 +1183,7 @@ export class AgentService {
 		answers: ReadonlyArray<{
 			readonly key: string
 			readonly answer: string
+			readonly confirmed?: boolean
 		}>,
 		mode: "simulated" | "live",
 	): Promise<number> {
@@ -1169,7 +1196,12 @@ export class AgentService {
 			if (!question) {
 				continue
 			}
-			const status = interpretAnswer(question, answer.answer, mode)
+			const status = interpretAnswer(
+				question,
+				answer.answer,
+				mode,
+				answer.confirmed,
+			)
 			await this.incidentsService.recordFact(
 				incident.runIdentifier,
 				question.confirmsFact,

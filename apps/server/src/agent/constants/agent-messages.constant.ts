@@ -87,6 +87,15 @@ const ENGLISH: AgentMessages = {
 		`${rank}. ${serviceName}: ${reason}`,
 	dependsOnBlocked: (dependencies) =>
 		`Depends on ${dependencies.join(", ")}, which cannot be recovered right now`,
+	engineerFollowUpDescription: (pendingFacts) =>
+		`The engineer could not be reached by phone. Confirm through another channel: ${pendingFacts.join("; ")}.`,
+	engineerFollowUpReason:
+		"Recovery continues, but the unconfirmed facts must be checked by someone",
+	engineerFollowUpTaskTitle:
+		"Confirm the backup region facts by another channel",
+	engineerFollowUpTitle: "Chase the unconfirmed facts after the failed call",
+	engineerUnreachable: (pendingFacts) =>
+		`The engineer could not be reached after the allowed attempts. The plan continues with ${pendingFacts} unconfirmed ${pendingFacts === 1 ? "fact" : "facts"} and asks for confirmation by another channel`,
 	factsConfirmed: (count, mode) =>
 		`${count} facts confirmed by the engineer in ${mode} mode`,
 	followUpTaskDescription: (serviceIdentifier, detail) =>
@@ -219,6 +228,16 @@ const SPANISH: AgentMessages = {
 		`${rank}. ${serviceName}: ${reason}`,
 	dependsOnBlocked: (dependencies) =>
 		`Depende de ${dependencies.join(", ")}, que no puede recuperarse ahora`,
+	engineerFollowUpDescription: (pendingFacts) =>
+		`No se pudo contactar con la ingeniera por teléfono. Confirmar por otro canal: ${pendingFacts.join("; ")}.`,
+	engineerFollowUpReason:
+		"La recuperación continúa, pero alguien debe comprobar los hechos sin confirmar",
+	engineerFollowUpTaskTitle:
+		"Confirmar los datos de la región de respaldo por otro canal",
+	engineerFollowUpTitle:
+		"Perseguir los hechos sin confirmar tras la llamada fallida",
+	engineerUnreachable: (pendingFacts) =>
+		`No se pudo contactar con la ingeniera tras los intentos permitidos. El plan continúa con ${pendingFacts} ${pendingFacts === 1 ? "hecho sin confirmar" : "hechos sin confirmar"} y pide confirmación por otro canal`,
 	factsConfirmed: (count, mode) =>
 		`${count} hechos confirmados por la ingeniera en modo ${labelOr(MODE_LABELS_ES, mode)}`,
 	followUpTaskDescription: (serviceIdentifier, detail) =>

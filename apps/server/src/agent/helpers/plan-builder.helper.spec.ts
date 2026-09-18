@@ -77,6 +77,77 @@ function toPlanRecord(
 }
 
 describe("buildPlanDraft", () => {
+	it("continues without the engineer when the call failed for good, and asks for confirmation by another channel", () => {
+		const first = buildPlanDraft(createInput(12))
+		const previous = toPlanRecord(first, 1)
+		const failedCall = previous.steps.map(
+			(step): PlanStep =>
+				step.identifier === "stp_contact-engineer"
+					? {
+							...step,
+							attempts: 2,
+							status: "failed",
+							statusReason: "No answer",
+						}
+					: step,
+		)
+		const draft = buildPlanDraft(
+			createInput(12, { ...previous, steps: failedCall }),
+		)
+
+		const contact = stepOf(draft.steps, "stp_contact-engineer")
+		const databaseExecute = stepOf(
+			draft.steps,
+			stepIdentifierFor("orders-database", "execute"),
+		)
+		expect(contact.status).toBe("failed")
+		expect(databaseExecute.dependsOn).not.toContain("stp_contact-engineer")
+		expect(
+			draft.steps.some(
+				(step) =>
+					step.identifier === "stp_engineer-follow-up" &&
+					step.invocation.name === "assign_task",
+			),
+		).toBe(true)
+		expect(
+			draft.assumptions.some((assumption) =>
+				assumption.includes("could not be reached"),
+			),
+		).toBe(true)
+	})
+
+	it("keeps waiting for the engineer while the call can still be retried", () => {
+		const first = buildPlanDraft(createInput(12))
+		const previous = toPlanRecord(first, 1)
+		const retryableCall = previous.steps.map(
+			(step): PlanStep =>
+				step.identifier === "stp_contact-engineer"
+					? {
+							...step,
+							attempts: 1,
+							status: "failed",
+							statusReason: "Timeout",
+						}
+					: step,
+		)
+		const draft = buildPlanDraft(
+			createInput(12, { ...previous, steps: retryableCall }),
+		)
+
+		expect(stepOf(draft.steps, "stp_contact-engineer").status).toBe(
+			"proposed",
+		)
+		expect(
+			stepOf(draft.steps, stepIdentifierFor("orders-database", "execute"))
+				.dependsOn,
+		).toContain("stp_contact-engineer")
+		expect(
+			draft.steps.some(
+				(step) => step.identifier === "stp_engineer-follow-up",
+			),
+		).toBe(false)
+	})
+
 	it("plans with the capacity confirmed in previous runs when the current report is unconfirmed", () => {
 		const draft = buildPlanDraft({
 			...createInput(12),

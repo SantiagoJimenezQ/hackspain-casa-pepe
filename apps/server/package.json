@@ -42,6 +42,7 @@
 			"^@learning/(.*)$": "<rootDir>/learning/$1"
 		},
 		"rootDir": "src",
+		"setupFiles": ["<rootDir>/testing/jest.setup.ts"],
 		"testEnvironment": "node",
 		"testRegex": ".*\\.spec\\.ts$",
 		"transform": {

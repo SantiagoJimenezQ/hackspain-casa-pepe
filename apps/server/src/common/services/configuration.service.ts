@@ -30,6 +30,9 @@ export class ConfigurationService {
 		this.configuration = createApplicationConfiguration(variables)
 	}
 
+	get email() {
+		return this.configuration.email
+	}
 	get all(): ApplicationConfiguration {
 		return this.configuration
 	}

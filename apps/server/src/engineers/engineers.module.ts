@@ -4,24 +4,30 @@ import { HappyRobotEngineerCallAdapter } from "@engineers/adapters/happyrobot-en
 import { SimulatedEngineerCallAdapter } from "@engineers/adapters/simulated-engineer-call.adapter"
 import { ENGINEER_CALL_ADAPTER } from "@engineers/constants/engineer.constant"
 import { EngineersController } from "@engineers/controllers/engineers.controller"
+import { IncomingCallsController } from "@engineers/controllers/incoming-calls.controller"
 import { EngineerCallEntity } from "@engineers/entities/engineer-call.entity"
+import { IncomingCallEntity } from "@engineers/entities/incoming-call.entity"
 import { EngineersService } from "@engineers/services/engineers.service"
+import { IncomingCallsService } from "@engineers/services/incoming-calls.service"
 import { EngineerCallAdapter } from "@engineers/types/engineer.type"
+import { IncidentsModule } from "@incidents/incidents.module"
 import { RunsModule } from "@incidents/runs.module"
 import { HttpModule } from "@nestjs/axios"
 import { Module } from "@nestjs/common"
 import { TypeOrmModule } from "@nestjs/typeorm"
 
 @Module({
-	controllers: [EngineersController],
-	exports: [EngineersService],
+	controllers: [EngineersController, IncomingCallsController],
+	exports: [EngineersService, IncomingCallsService],
 	imports: [
-		TypeOrmModule.forFeature([EngineerCallEntity]),
+		TypeOrmModule.forFeature([EngineerCallEntity, IncomingCallEntity]),
+		IncidentsModule,
 		HttpModule,
 		ActivityModule,
 		RunsModule,
 	],
 	providers: [
+		IncomingCallsService,
 		SimulatedEngineerCallAdapter,
 		HappyRobotEngineerCallAdapter,
 		{

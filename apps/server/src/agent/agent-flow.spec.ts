@@ -7,6 +7,7 @@ import { ApprovalsService } from "@approvals/services/approvals.service"
 import { CommonModule } from "@common/common.module"
 import { EngineersModule } from "@engineers/engineers.module"
 import { EngineerCallEntity } from "@engineers/entities/engineer-call.entity"
+import { IncomingCallEntity } from "@engineers/entities/incoming-call.entity"
 import { IncidentEntity } from "@incidents/entities/incident.entity"
 import { IncidentsModule } from "@incidents/incidents.module"
 import { IncidentsService } from "@incidents/services/incidents.service"
@@ -35,10 +36,13 @@ import { ScenariosModule } from "@scenarios/scenarios.module"
 import { TaskEntity } from "@tasks/entities/task.entity"
 import { TasksService } from "@tasks/services/tasks.service"
 import { TasksModule } from "@tasks/tasks.module"
+import { StatusPublicationEntity } from "@tools/entities/status-publication.entity"
 import { ToolCallEntity } from "@tools/entities/tool-call.entity"
 import { ToolsModule } from "@tools/tools.module"
 
 const ENTITIES = [
+	IncomingCallEntity,
+	StatusPublicationEntity,
 	IncidentEntity,
 	ActivityEventEntity,
 	PlanEntity,
@@ -63,15 +67,6 @@ describe("agent flow (integration with in-memory repositories)", () => {
 	let runReportService: RunReportService
 
 	beforeAll(async () => {
-		process.env.API_KEY = "test-api-key"
-		process.env.SUPABASE_DATABASE_URL =
-			"postgresql://postgres:postgres@localhost:5432/test"
-		process.env.HAPPYROBOT_WEBHOOK_SECRET = "test-happyrobot-secret"
-		process.env.RECOVERY_WEBHOOK_SECRET = "test-recovery-secret"
-		process.env.SIMULATED_CALL_DELAY_MILLISECONDS = "0"
-		process.env.SIMULATED_RECOVERY_DELAY_MILLISECONDS = "0"
-		process.env.AGENT_TOOL_TIMEOUT_MILLISECONDS = "5000"
-
 		let builder = Test.createTestingModule({
 			imports: [
 				CommonModule,
@@ -108,7 +103,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 	})
 
 	afterAll(async () => {
-		await application.close()
+		await application?.close()
 	})
 
 	async function waitForPlanVersion(

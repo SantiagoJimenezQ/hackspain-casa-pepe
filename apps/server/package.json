@@ -45,8 +45,11 @@
 		"testEnvironment": "node",
 		"testRegex": ".*\\.spec\\.ts$",
 		"transform": {
-			"^.+\\.(t|j)s$": "ts-jest"
-		}
+			"^.+\\.ts$": "ts-jest"
+		},
+		"setupFiles": [
+			"<rootDir>/testing/environment.setup.ts"
+		]
 	},
 	"dependencies": {
 		"@nestjs/axios": "^4.0.1",
@@ -67,7 +70,8 @@
 		"reflect-metadata": "^0.2.0",
 		"rxjs": "^7.8.2",
 		"typeorm": "^0.3.20",
-		"uuid": "^11.0.3"
+		"uuid": "^11.0.3",
+		"@casa-pepe/tools": "workspace:*"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.3.3",

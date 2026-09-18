@@ -51,6 +51,10 @@ export class InMemoryRepository<Entity extends { identifier: string }> {
 		return { ...stored }
 	}
 
+	async upsert(entity: Entity, _conflictPaths: string[]): Promise<void> {
+		await this.save(entity)
+	}
+
 	async find(options: FindOptions<Entity> = {}): Promise<Entity[]> {
 		const {
 			order = {},

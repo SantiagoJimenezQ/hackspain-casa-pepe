@@ -27,6 +27,7 @@ import { describeError } from "@common/helpers/external-response.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { EngineersService } from "@engineers/services/engineers.service"
+import { IncomingCallsService } from "@engineers/services/incoming-calls.service"
 import { toIncidentSnapshot } from "@incidents/helpers/incident-state.helper"
 import { IncidentsService } from "@incidents/services/incidents.service"
 import { RunsService } from "@incidents/services/runs.service"
@@ -64,6 +65,7 @@ const OPEN_STATUSES: ReadonlyArray<PlanStep["status"]> = [
 
 @Injectable()
 export class AgentService {
+	private readonly pendingChanges = new Map<string, AgentTrigger>()
 	private readonly logger = new Logger(AgentService.name)
 
 	constructor(
@@ -78,8 +80,30 @@ export class AgentService {
 		private readonly learningService: LearningService,
 		private readonly configuration: ConfigurationService,
 		private readonly cycleState: AgentCycleStateService,
+		private readonly incomingCalls: IncomingCallsService,
 	) {}
 
+	@OnEvent(DOMAIN_EVENTS.INCOMING_CALL_CONFIRMED, {
+		async: true,
+		promisify: true,
+	})
+	async onIncomingCallConfirmed(event: {
+		runIdentifier: string
+		callIdentifier: string
+	}) {
+		await this.requestCycle(event.runIdentifier, {
+			description: "Operator confirmed the incoming capacity report",
+			harnessEventIdentifier: event.callIdentifier,
+			kind: "conditions-changed",
+		})
+	}
+	@OnEvent(DOMAIN_EVENTS.INCOMING_CALL_RECEIVED, {
+		async: true,
+		promisify: true,
+	})
+	async onIncomingCall(event: { runIdentifier: string }) {
+		await this.requestCycle(event.runIdentifier, { kind: "follow-up" })
+	}
 	@OnEvent(DOMAIN_EVENTS.INCIDENT_EVENT_APPLIED, {
 		async: true,
 		promisify: true,
@@ -88,6 +112,7 @@ export class AgentService {
 		event: IncidentEventAppliedEvent,
 	): Promise<void> {
 		const { applied, incident } = event
+		if (applied.source.startsWith("incoming-call:")) return
 		switch (applied.event.type) {
 			case "meteorite-impact":
 				await this.requestCycle(incident.runIdentifier, {
@@ -217,6 +242,8 @@ export class AgentService {
 			trigger: trigger.kind,
 		})
 		if (!this.cycleState.tryBegin(runIdentifier)) {
+			if (trigger.kind === "conditions-changed")
+				this.pendingChanges.set(runIdentifier, trigger)
 			return {
 				kind: "skipped",
 				reason: "A cycle is already in progress, a follow-up cycle was queued",
@@ -235,7 +262,11 @@ export class AgentService {
 		}
 		const rerun = this.cycleState.finish(runIdentifier, outcome)
 		if (rerun) {
-			void this.requestCycle(runIdentifier, { kind: "follow-up" })
+			const next = this.pendingChanges.get(runIdentifier) ?? {
+				kind: "follow-up" as const,
+			}
+			this.pendingChanges.delete(runIdentifier)
+			void this.requestCycle(runIdentifier, next)
 		}
 		return outcome
 	}
@@ -304,6 +335,12 @@ export class AgentService {
 			}
 		}
 		const messages = this.messagesFor(incident)
+		const pendingCalls = await this.incomingCalls.list(runIdentifier)
+		if (pendingCalls.some((call) => call.status === "pending"))
+			return {
+				kind: "skipped",
+				reason: "Incoming capacity report requires operator confirmation before further action",
+			}
 		const cycles =
 			await this.incidentsService.incrementAgentCycles(runIdentifier)
 		if (cycles > this.configuration.agent.maximumCyclesPerRun) {
@@ -333,7 +370,24 @@ export class AgentService {
 			trigger: trigger.kind,
 		})
 
-		let plan = await this.ensurePlan(incident, trigger, messages)
+		const observed = await this.toolsService.execute({
+			attempt: 1,
+			decisionIdentifier: "",
+			idempotencyKey: `observe:${cycles}`,
+			incidentIdentifier: incident.identifier,
+			invocation: { input: {}, name: "get_incident_context" },
+			planIdentifier: "",
+			planStepIdentifier: "observe",
+			planVersion: 0,
+			runIdentifier,
+		})
+		if (observed.toolCall.output?.kind !== "incident-context")
+			throw new Error("Could not observe incident context")
+		let plan = await this.ensurePlan(
+			observed.toolCall.output.incident,
+			trigger,
+			messages,
+		)
 		let executed = 0
 		let progressed = plan.status === "active"
 		while (
@@ -341,12 +395,19 @@ export class AgentService {
 			executed < this.configuration.agent.maximumStepsPerCycle
 		) {
 			progressed = false
+			if (this.pendingChanges.has(runIdentifier)) break
 			const step = this.nextRunnableStep(plan)
 			if (!step) {
 				break
 			}
 			const refreshedIncident =
 				await this.runsService.getByRunIdentifier(runIdentifier)
+			if (
+				(await this.incomingCalls.list(runIdentifier)).some(
+					(call) => call.status === "pending",
+				)
+			)
+				break
 			await this.executeStep(refreshedIncident, plan, step, messages)
 			executed += 1
 			progressed = true
@@ -358,6 +419,11 @@ export class AgentService {
 			plan = refreshed
 		}
 
+		if (
+			executed >= this.configuration.agent.maximumStepsPerCycle &&
+			this.nextRunnableStep(plan)
+		)
+			this.cycleState.tryBegin(runIdentifier)
 		const finalIncident =
 			await this.runsService.getByRunIdentifier(runIdentifier)
 		const waitingFor = plan.steps
@@ -475,12 +541,6 @@ export class AgentService {
 		messages: AgentMessages,
 	): Promise<PlanRecord> {
 		const scenario = this.scenarioOf(incident)
-		if (previous) {
-			await this.approvalsService.supersedePending(
-				incident.runIdentifier,
-				messages.planRevised(triggeredBy),
-			)
-		}
 		const rejectedApprovals = await this.approvalsService.list(
 			incident.runIdentifier,
 			"rejected",
@@ -543,20 +603,38 @@ export class AgentService {
 				)
 			: []
 		const decisionIdentifier = createPrefixedIdentifier("dec")
-		const plan = await this.plansService.createVersion({
-			assumptions: draft.assumptions,
-			capacity: draft.capacity,
-			changesFromPrevious: changes,
+		const saved = await this.toolsService.execute({
+			attempt: 1,
 			decisionIdentifier,
+			idempotencyKey: `save-plan:v${(previous?.version ?? 0) + 1}`,
 			incidentIdentifier: incident.identifier,
-			previous,
-			priorities: draft.priorities,
-			reason: draft.reason,
+			invocation: {
+				input: {
+					assumptions: draft.assumptions,
+					capacity: draft.capacity,
+					changesFromPrevious: changes,
+					decisionIdentifier,
+					expectedPreviousIdentifier: previous?.identifier ?? "",
+					incidentIdentifier: incident.identifier,
+					priorities: draft.priorities,
+					reason: draft.reason,
+					runIdentifier: incident.runIdentifier,
+					steps: draft.steps,
+					summary: draft.summary,
+					triggeredBy,
+				},
+				name: "save_recovery_plan",
+			},
+			planIdentifier: previous?.identifier ?? "",
+			planStepIdentifier: "save-plan",
+			planVersion: (previous?.version ?? 0) + 1,
 			runIdentifier: incident.runIdentifier,
-			steps: draft.steps,
-			summary: draft.summary,
-			triggeredBy,
 		})
+		if (saved.toolCall.output?.kind !== "recovery-plan")
+			throw new Error(
+				saved.toolCall.error?.message ?? "Could not save recovery plan",
+			)
+		const plan = saved.toolCall.output.plan
 		this.logger.log(
 			previous
 				? LOG_MESSAGES.AGENT.PLAN_REVISED
@@ -801,6 +879,15 @@ export class AgentService {
 					name: "verify_recovery",
 				}
 			}
+			case "send_incident_email":
+			case "publish_status_update":
+				return {
+					input: { planIdentifier: plan.identifier },
+					name: invocation.name,
+				}
+			case "save_recovery_plan":
+			case "get_incident_context":
+			case "call_engineer":
 			case "get_incident_state":
 			case "get_service_health":
 			case "get_recovery_capacity":
@@ -960,6 +1047,20 @@ export class AgentService {
 					messages,
 				)
 				return
+			case "communication":
+				await this.plansService.updateStep(
+					plan.identifier,
+					step.identifier,
+					{
+						resultSummary: `${output.mode}: ${output.reference}`,
+						status: "completed",
+						statusReason: output.detail,
+						toolCallIdentifier: toolCall.identifier,
+					},
+				)
+				return
+			case "incident-context":
+			case "recovery-plan":
 			case "approval":
 			case "incident-state":
 			case "service-health":

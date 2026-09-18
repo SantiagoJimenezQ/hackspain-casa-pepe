@@ -1,4 +1,5 @@
 export const ACTIVITY_EVENT_TYPES = [
+	"engineer-call.incoming",
 	"incident.run-started",
 	"incident.impact-detected",
 	"incident.event-applied",

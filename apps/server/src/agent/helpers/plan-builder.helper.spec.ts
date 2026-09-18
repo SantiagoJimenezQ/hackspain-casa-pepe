@@ -126,6 +126,23 @@ describe("buildPlanDraft", () => {
 		)
 	})
 
+	it("emails each plan version and publishes status after recovery checks", () => {
+		const first = buildPlanDraft(createInput(12))
+		const revised = buildPlanDraft(createInput(7, toPlanRecord(first, 1)))
+		expect(first.steps[0].invocation.name).toBe("send_incident_email")
+		expect(revised.steps[0].identifier).not.toBe(first.steps[0].identifier)
+		expect(
+			first.steps.some((s) => s.invocation.name === "call_engineer"),
+		).toBe(true)
+		const publish = revised.steps.find(
+			(s) => s.invocation.name === "publish_status_update",
+		)
+		expect(publish?.dependsOn).toEqual(
+			revised.steps
+				.filter((s) => s.invocation.name === "verify_recovery")
+				.map((s) => s.identifier),
+		)
+	})
 	it("recovers every failing service when the reported capacity is enough", () => {
 		const draft = buildPlanDraft(createInput(12))
 

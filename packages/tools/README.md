@@ -1,24 +1,32 @@
-# Herramientas e integraciones
+# MVP tools and adapters
 
-Responsable: frente de agente e integraciones, con apoyo del responsable del harness.
+The agent's eight MVP tools are registered in `apps/server/src/tools`. Shared integration payloads live in `packages/contracts/tools.d.ts`. This package provides server-only, dependency-free HTTP/email adapters; NestJS owns persistence, authorization, orchestration and callbacks.
 
-Aquí irán las interfaces de herramientas y sus adaptadores, separando integraciones reales y simuladas.
+| Tool | Behavior |
+|---|---|
+| `get_incident_context` | Read the incident and latest plan, including services, dependencies, capacity and business impact. |
+| `call_engineer` | Start the existing asynchronous HappyRobot call adapter. |
+| `save_recovery_plan` | Check the previous version, supersede pending approvals and persist the new plan. |
+| `send_incident_email` | Render the persisted plan and send it to the configured operator via Resend, or simulate it. |
+| `request_approval` | Ask the operator to authorize a specific plan step. |
+| `execute_recovery` | Check active plan, service requirements, dependencies, capacity and matching approval before executing. |
+| `verify_recovery` | Independently check recovery; HTTP route-assignment verification submits a test delivery. |
+| `publish_status_update` | Publish a customer-safe service snapshot at `/api/status` (JSON: `/api/status/public`), marking simulation and unverified recovery explicitly. |
 
-## Herramientas propuestas
+Legacy tools (`get_incident_state`, `get_service_health`, `get_recovery_capacity`, `contact_engineer`, `assign_task`) remain available for existing plans and integrations. They are not additional MVP deliverables.
 
-- `get_incident_state`: consultar el incidente.
-- `get_service_health`: consultar servicios y dependencias.
-- `get_recovery_capacity`: consultar recursos de respaldo.
-- `contact_engineer`: llamada real con HappyRobot y recepción del resultado.
-- `assign_task`: registrar una tarea y su responsable.
-- `request_approval`: registrar la acción pendiente de decisión del operador.
-- `execute_recovery`: ejecutar una acción en el entorno de pruebas.
-- `verify_recovery`: comprobar el resultado mediante una consulta independiente.
+## Incoming calls
 
-## Integración
+`POST /api/webhooks/happyrobot/incoming` receives a call report, authenticated with the existing HappyRobot webhook secret. A provider call ID plus run ID deduplicates retries. The report is persisted as **pending**, and the agent pauses further work until an authenticated operator confirms capacity through `POST /api/engineers/incoming-calls/:identifier/confirm`. Confirmation triggers replanning after it is persisted. Caller-supplied names are claims, not authentication.
 
-Definir entradas, salidas, errores y estados en coordinación con `packages/contracts/`. Las consultas simuladas delegan en el harness. El servidor conecta los adaptadores con sus dependencias y recibe las respuestas asíncronas.
+The authenticated `/api/engineers/incoming-calls/simulate` endpoint provides the same flow in simulated HappyRobot mode. Reset/replay runs reject reports and confirmations. See the [demo walkthrough](../../demo/MVP-TOOLS.md).
 
-Mantener credenciales en el servidor. Evitar acciones duplicadas y comprobar que la aprobación sigue siendo válida antes de ejecutar una acción que la requiera. No presentar una respuesta simulada como resultado de una integración real.
+## Email adapter
 
-Primera entrega: interfaces acordadas y adaptadores de prueba, seguidos de una llamada real con HappyRobot y una recuperación verificable en el entorno de pruebas.
+`sendIncidentEmail` uses the [Resend email API](https://resend.com/docs/api-reference/emails/send-email). Its stable run/plan/channel idempotency key is reused for retries. The result means provider acceptance, not confirmed inbox delivery. Provider response bodies and credentials are never included in error messages. Network calls have bounded timeouts and reject redirects.
+
+`INCIDENT_EMAIL_MODE=simulated` never contacts a provider. Live sending requires server-side `RESEND_API_KEY`, `INCIDENT_EMAIL_FROM` and `INCIDENT_EMAIL_TO`. The agent cannot choose arbitrary recipients. The generated email is explicitly labelled as a demo.
+
+## Operational boundary
+
+This is a single coordinator hackathon runtime. It uses the existing database-backed tool log and per-run cycle serialization. It does not provide distributed scheduling or exactly-once side effects across crashes; email also relies on the provider's idempotency retention window. Unknown outcomes must be reconciled before retrying after that window. Deployments must configure the HappyRobot workflow and a reachable callback URL; adding these tools does not provision phone numbers or provider accounts.

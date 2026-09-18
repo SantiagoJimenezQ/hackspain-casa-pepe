@@ -1,5 +1,4 @@
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
-import { describeError } from "@common/helpers/external-response.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { EngineerCallMode } from "@common/types/configuration.type"
 import {
@@ -49,7 +48,7 @@ export class HappyRobotEngineerCallAdapter implements EngineerCallAdapter {
 			run_identifier: request.call.runIdentifier,
 		}
 		try {
-			const response = await firstValueFrom(
+			await firstValueFrom(
 				this.httpService.post<unknown>(triggerURL, payload, {
 					headers: {
 						Authorization: `Bearer ${apiKey}`,
@@ -60,10 +59,11 @@ export class HappyRobotEngineerCallAdapter implements EngineerCallAdapter {
 			)
 			return {
 				kind: "accepted",
-				providerReference: JSON.stringify(response.data).slice(0, 500),
+				providerReference: request.call.identifier,
 			}
-		} catch (error) {
-			const reason = describeError(error)
+		} catch {
+			const reason =
+				"HappyRobot trigger failed or timed out; check the provider before retrying"
 			this.logger.error(
 				LOG_MESSAGES.ENGINEERS.HAPPYROBOT_REQUEST_FAILED,
 				reason,

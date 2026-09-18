@@ -1,4 +1,9 @@
 export const TOOL_NAMES = [
+	"get_incident_context",
+	"call_engineer",
+	"save_recovery_plan",
+	"send_incident_email",
+	"publish_status_update",
 	"get_incident_state",
 	"get_service_health",
 	"get_recovery_capacity",
@@ -32,6 +37,37 @@ export const TOOL_DEFINITIONS: ReadonlyArray<{
 	readonly interaction: (typeof TOOL_INTERACTION_KINDS)[number]
 	readonly asynchronous: boolean
 }> = [
+	{
+		asynchronous: false,
+		description: "Read incident and current plan",
+		interaction: "harness",
+		name: "get_incident_context",
+	},
+	{
+		asynchronous: true,
+		description: "Call the engineer and collect answers",
+		interaction: "real-call",
+		name: "call_engineer",
+	},
+	{
+		asynchronous: false,
+		description: "Save a versioned plan and supersede pending approvals",
+		interaction: "real-record",
+		name: "save_recovery_plan",
+	},
+	{
+		asynchronous: false,
+		description: "Email the persisted plan to the configured operator",
+		interaction: "real-record",
+		name: "send_incident_email",
+	},
+	{
+		asynchronous: false,
+		description: "Publish verified service status",
+		interaction: "real-record",
+		name: "publish_status_update",
+	},
+
 	{
 		asynchronous: false,
 		description: "Read the incident state kept by the harness",

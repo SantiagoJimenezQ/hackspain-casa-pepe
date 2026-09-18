@@ -570,3 +570,18 @@ POST /approvals/:id/decision approve
 ```
 
 Every activity event is persisted, delivered through webhooks to the subscriptions and queryable at `GET /activity` with its correlation identifiers.
+
+## MVP communications and incoming calls
+
+See [MVP tools rehearsal](../../../demo/MVP-TOOLS.md) for configuration, payloads and the complete sequence.
+
+| Method and route | Authorization | Behavior |
+|---|---|---|
+| `POST /webhooks/happyrobot/incoming` | HappyRobot shared-secret header | Record an untrusted incoming capacity report; deduplicate by run/provider call ID. |
+| `POST /engineers/incoming-calls/simulate` | Operator API key | Same flow, labelled simulated; disabled when HappyRobot is live. |
+| `GET /engineers/incoming-calls` | Operator API key | Reports for the active run, including confirmation state. |
+| `POST /engineers/incoming-calls/:identifier/confirm` | Operator API key | Confirm numeric capacity and trigger a revised plan. |
+| `GET /status` | Public | Readable service-status page with a manual refresh link. |
+| `GET /status/public` | Public | Explicitly published, customer-safe JSON service status for the active run; no credentials, call details or internal plan data. |
+
+`GET /tools` now includes the eight MVP names plus the legacy tools. Email destinations are server configuration, never agent input. The email tool records provider acceptance separately from inbox delivery; simulated emails send nothing. HTTP `verify_recovery` submits a test delivery for `route-assignment`; other services use health queries scoped to the run.

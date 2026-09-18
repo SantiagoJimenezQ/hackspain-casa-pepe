@@ -55,7 +55,15 @@ export interface AgentConfiguration {
 	readonly toolTimeoutMilliseconds: number
 }
 
+export interface EmailConfiguration {
+	readonly mode: "simulated" | "live"
+	readonly apiKey: string
+	readonly from: string
+	readonly to: string
+}
 export interface ApplicationConfiguration {
+	readonly email: EmailConfiguration
+
 	readonly runtime: RuntimeConfiguration
 	readonly database: DatabaseConfiguration
 	readonly authentication: AuthenticationConfiguration

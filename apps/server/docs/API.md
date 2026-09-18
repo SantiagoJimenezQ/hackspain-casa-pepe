@@ -510,11 +510,43 @@ Header `x-happyrobot-signature: <HAPPYROBOT_WEBHOOK_SECRET>`.
   "outcome": "completed",
   "summary": "Snapshot is twelve minutes old…",
   "transcript": "…",
-  "answers": [ { "key": "database-snapshot", "answer": "About twelve minutes" } ]
+  "answers": [
+    { "key": "database-snapshot", "answer": "About twelve minutes", "confirmed": true },
+    { "key": "backup-capacity", "answer": "I am not sure, let me check", "confirmed": false }
+  ]
 }
 ```
 
-`outcome`: `completed` \| `failed` \| `no-answer`. The `key` values must match the questions sent when the call was triggered. Response `202 { "accepted": true }`. The agent turns the answers into confirmed or pending facts and continues the plan.
+`outcome`: `completed` \| `failed` \| `no-answer`. The `key` values must match the questions sent when the call was triggered. `confirmed` is optional: when the HappyRobot extraction node provides it, it decides whether the fact becomes `confirmed` or stays `pending`; when absent, the answer text is interpreted (doubt keywords keep the fact pending). Response `202 { "accepted": true }`. The agent records the facts and continues the plan.
+
+#### What the service sends to HappyRobot
+
+In `HAPPYROBOT_MODE=live`, starting the call does `POST HAPPYROBOT_TRIGGER_URL` with `Authorization: Bearer <HAPPYROBOT_API_KEY>` and this body:
+
+```json
+{
+  "call_identifier": "call_…",
+  "run_identifier": "run_…",
+  "incident_identifier": "inc_…",
+  "engineer_name": "Marta Ruiz",
+  "engineer_phone": "+34600000000",
+  "engineer_role": "Platform on-call engineer",
+  "purpose": "Confirm the state of the backup region…",
+  "questions": [
+    { "key": "database-snapshot", "question": "How old is the latest orders database snapshot…?" },
+    { "key": "route-assignment-readiness", "question": "Is the route assignment service ready…?" },
+    { "key": "backup-capacity", "question": "Can we count on the twelve compute units…?" }
+  ],
+  "callback_url": "<PUBLIC_BASE_URL>/api/webhooks/happyrobot"
+}
+```
+
+The HappyRobot use case must: accept this JSON in a web trigger, run the voice agent with the three questions, extract one answer per `key` (ideally with a boolean `confirmed`), and finish with a webhook node that posts the result above to `callback_url` with the `x-happyrobot-signature` header. Field names on both sides can be adapted once the use case exists.
+
+#### Timing and fallback
+
+- A call may take up to `AGENT_CALL_TIMEOUT_MILLISECONDS` (default 5 minutes) before it is marked as timed out; other tools use `AGENT_TOOL_TIMEOUT_MILLISECONDS`.
+- A timed out, failed or unanswered call is retried once (`AGENT_MAXIMUM_STEP_ATTEMPTS`). If it fails again, the agent revises the plan: recovery steps stop depending on the call, the plan states in `assumptions` that it continues with unconfirmed facts, and a critical task is assigned to confirm those facts by another channel. Approvals are still required exactly as before.
 
 ### `POST /webhooks/recovery`
 

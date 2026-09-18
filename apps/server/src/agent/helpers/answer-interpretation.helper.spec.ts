@@ -14,6 +14,23 @@ describe("interpretAnswer", () => {
 		)
 	})
 
+	it("trusts an explicit verdict from the extraction over the text", () => {
+		expect(
+			interpretAnswer(capacityQuestion, "I am not sure", "live", true),
+		).toBe("confirmed")
+		expect(
+			interpretAnswer(
+				snapshotQuestion,
+				"Yes, twelve minutes",
+				"live",
+				false,
+			),
+		).toBe("pending")
+		expect(
+			interpretAnswer(capacityQuestion, "anything", "simulated", true),
+		).toBe("confirmed")
+	})
+
 	it("keeps a fact pending when a live answer expresses doubt", () => {
 		expect(
 			interpretAnswer(

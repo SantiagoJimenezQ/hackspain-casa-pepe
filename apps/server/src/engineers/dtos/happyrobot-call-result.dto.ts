@@ -4,6 +4,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger"
 import { Type } from "class-transformer"
 import {
 	IsArray,
+	IsBoolean,
 	IsIn,
 	IsOptional,
 	IsString,
@@ -18,6 +19,14 @@ export class HappyRobotAnswerDTO {
 	@ApiProperty()
 	@IsString()
 	answer: string
+
+	@ApiPropertyOptional({
+		description:
+			"Explicit verdict from the HappyRobot extraction node. When present it overrides the text interpretation",
+	})
+	@IsOptional()
+	@IsBoolean()
+	confirmed?: boolean
 }
 
 export class HappyRobotCallResultDTO {

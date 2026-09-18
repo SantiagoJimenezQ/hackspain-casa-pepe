@@ -23,6 +23,7 @@ export interface EngineerAnswer {
 	readonly key: string
 	readonly question: string
 	readonly answer: string
+	readonly confirmed?: boolean
 }
 
 export interface EngineerCallResult {

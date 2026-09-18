@@ -135,4 +135,9 @@ export interface AgentMessages {
 	): string
 	changeStepAdded(title: string): string
 	changeStepRemoved(title: string): string
+	engineerUnreachable(pendingFacts: number): string
+	readonly engineerFollowUpTitle: string
+	readonly engineerFollowUpReason: string
+	engineerFollowUpDescription(pendingFacts: ReadonlyArray<string>): string
+	readonly engineerFollowUpTaskTitle: string
 }

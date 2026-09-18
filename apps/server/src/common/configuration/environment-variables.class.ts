@@ -127,4 +127,9 @@ export class EnvironmentVariables {
 	@IsInt()
 	@Min(1000)
 	AGENT_TOOL_TIMEOUT_MILLISECONDS: number = 20000
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(1000)
+	AGENT_CALL_TIMEOUT_MILLISECONDS: number = 300000
 }

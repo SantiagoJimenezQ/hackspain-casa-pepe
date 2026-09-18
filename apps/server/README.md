@@ -132,7 +132,7 @@ Webhooks reach the Next.js server, not the browser. For the browser the same eve
 
 When triggering the call, the service sends `HAPPYROBOT_TRIGGER_URL` the `call_identifier`, the engineer details, the questions with their `key` and the `callback_url`. The HappyRobot flow must return those same `key` values in `answers`. In `http` mode the recovery does `POST {RECOVERY_ENVIRONMENT_URL}/recovery/actions` and verifies with `GET {RECOVERY_ENVIRONMENT_URL}/recovery/services/:service/health`.
 
-A result that arrives after a reset is rejected with `409 Stale Run` and does not alter the new run.
+A result that arrives after a reset is rejected with `409 Stale Run` and does not alter the new run. A phone call may take up to `AGENT_CALL_TIMEOUT_MILLISECONDS` (five minutes by default); if the engineer cannot be reached after the allowed attempts, the agent continues with the unconfirmed facts, says so in the plan, and assigns a task to confirm them by another channel. See [docs/API.md](docs/API.md) for the exact payloads exchanged with HappyRobot.
 
 ## How the agent decides
 

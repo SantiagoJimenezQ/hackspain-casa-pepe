@@ -35,6 +35,7 @@ export function createApplicationConfiguration(
 		agent: {
 			approvalTimeoutMilliseconds:
 				variables.AGENT_APPROVAL_TIMEOUT_MILLISECONDS,
+			callTimeoutMilliseconds: variables.AGENT_CALL_TIMEOUT_MILLISECONDS,
 			maximumCyclesPerRun: variables.AGENT_MAXIMUM_CYCLES_PER_RUN,
 			maximumStepAttempts: variables.AGENT_MAXIMUM_STEP_ATTEMPTS,
 			maximumStepsPerCycle: variables.AGENT_MAXIMUM_STEPS_PER_CYCLE,

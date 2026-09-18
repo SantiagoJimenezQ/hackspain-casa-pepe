@@ -2,6 +2,7 @@ import {
 	AGENT_ACTOR_NAME,
 	CONTACT_ENGINEER_STEP_IDENTIFIER,
 	DEPENDENT_SERVICE_SCORE_BONUS,
+	ENGINEER_FOLLOW_UP_STEP_IDENTIFIER,
 	STEP_IDENTIFIER_PREFIX,
 	SUPPORT_COMMUNICATION_STEP_IDENTIFIER,
 } from "@agent/constants/agent.constant"
@@ -263,6 +264,16 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 		(fact) => fact.status === "pending",
 	)
 	const previousContact = previousSteps.get(CONTACT_ENGINEER_STEP_IDENTIFIER)
+	const engineerUnreachable = previousContact
+		? previousContact.status === "failed" &&
+			previousContact.attempts >= input.maximumStepAttempts
+		: false
+	const pendingFacts = incident.facts.filter(
+		(fact) => fact.status === "pending",
+	)
+	if (engineerUnreachable) {
+		assumptions.push(messages.engineerUnreachable(pendingFacts.length))
+	}
 	if (previousContact) {
 		steps.push(
 			carryOrReset(
@@ -327,7 +338,9 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 				: []
 		const executeDependencies = uniqueValues([
 			...(steps.some(
-				(step) => step.identifier === CONTACT_ENGINEER_STEP_IDENTIFIER,
+				(step) =>
+					step.identifier === CONTACT_ENGINEER_STEP_IDENTIFIER &&
+					step.status !== "failed",
 			)
 				? [CONTACT_ENGINEER_STEP_IDENTIFIER]
 				: []),
@@ -378,38 +391,42 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 			),
 		)
 		steps.push(
-			carryOrCreate(
-				previousSteps.get(executeIdentifier),
-				input.maximumStepAttempts,
-				timestamp,
-				messages,
-				() =>
-					createStep(
-						executeIdentifier,
-						service.recoveryActionDescription,
-						reasonFor(decisions, serviceIdentifier, messages),
-						{
-							input: {
-								actionDescription:
-									service.recoveryActionDescription,
-								actionKind: service.recoveryActionKind,
-								approvalIdentifier: "",
-								capacityUnits: service.recoveryCapacityUnits,
-								resourceIdentifier: resource.identifier,
-								serviceIdentifier,
+			refreshDependencies(
+				carryOrCreate(
+					previousSteps.get(executeIdentifier),
+					input.maximumStepAttempts,
+					timestamp,
+					messages,
+					() =>
+						createStep(
+							executeIdentifier,
+							service.recoveryActionDescription,
+							reasonFor(decisions, serviceIdentifier, messages),
+							{
+								input: {
+									actionDescription:
+										service.recoveryActionDescription,
+									actionKind: service.recoveryActionKind,
+									approvalIdentifier: "",
+									capacityUnits:
+										service.recoveryCapacityUnits,
+									resourceIdentifier: resource.identifier,
+									serviceIdentifier,
+								},
+								name: "execute_recovery",
 							},
-							name: "execute_recovery",
-						},
-						service.recoveryRequiresApproval
-							? { kind: "operator", name: "Operator" }
-							: AGENT_ACTOR,
-						serviceIdentifier,
-						service.recoveryCapacityUnits,
-						service.recoveryRequiresApproval,
-						executeDependencies,
-						timestamp,
-						messages,
-					),
+							service.recoveryRequiresApproval
+								? { kind: "operator", name: "Operator" }
+								: AGENT_ACTOR,
+							serviceIdentifier,
+							service.recoveryCapacityUnits,
+							service.recoveryRequiresApproval,
+							executeDependencies,
+							timestamp,
+							messages,
+						),
+				),
+				executeDependencies,
 			),
 		)
 		steps.push(
@@ -438,6 +455,46 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 						0,
 						false,
 						[executeIdentifier],
+						timestamp,
+						messages,
+					),
+			),
+		)
+	}
+
+	if (engineerUnreachable) {
+		steps.push(
+			carryOrCreate(
+				previousSteps.get(ENGINEER_FOLLOW_UP_STEP_IDENTIFIER),
+				input.maximumStepAttempts,
+				timestamp,
+				messages,
+				() =>
+					createStep(
+						ENGINEER_FOLLOW_UP_STEP_IDENTIFIER,
+						messages.engineerFollowUpTitle,
+						messages.engineerFollowUpReason,
+						{
+							input: {
+								assigneeName: input.engineer.name,
+								assigneeRole: input.engineer.role,
+								description:
+									messages.engineerFollowUpDescription(
+										pendingFacts.map(
+											(fact) => fact.statement,
+										),
+									),
+								priority: "critical",
+								serviceIdentifier: "",
+								title: messages.engineerFollowUpTaskTitle,
+							},
+							name: "assign_task",
+						},
+						{ kind: "engineer", name: input.engineer.name },
+						"",
+						0,
+						false,
+						[],
 						timestamp,
 						messages,
 					),
@@ -830,6 +887,16 @@ function createStep(
 		toolCallIdentifier: "",
 		updatedAt: timestamp,
 	}
+}
+
+function refreshDependencies(
+	step: PlanStep,
+	dependsOn: ReadonlyArray<string>,
+): PlanStep {
+	if (CARRIED_STATUSES.includes(step.status)) {
+		return step
+	}
+	return { ...step, dependsOn }
 }
 
 function carryOrCreate(

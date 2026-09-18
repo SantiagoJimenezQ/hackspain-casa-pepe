@@ -20,6 +20,8 @@ export const CONTACT_ENGINEER_STEP_IDENTIFIER = "stp_contact-engineer"
 
 export const SUPPORT_COMMUNICATION_STEP_IDENTIFIER = "stp_support-communication"
 
+export const ENGINEER_FOLLOW_UP_STEP_IDENTIFIER = "stp_engineer-follow-up"
+
 export const NEGATIVE_ANSWER_PATTERN =
 	/not sure|unsure|cannot confirm|can't confirm|no estoy segur|no puedo confirmar|let me check|i will check|don't know|do not know/i
 

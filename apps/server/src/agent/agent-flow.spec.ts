@@ -306,6 +306,11 @@ describe("agent flow (integration with in-memory repositories)", () => {
 				(priority) => priority.serviceIdentifier === "package-tracking",
 			)?.decision,
 		).toBe("postpone")
+		await waitForStepStatus(
+			restarted.runIdentifier,
+			"stp_contact-engineer",
+			"completed",
+		)
 	})
 
 	it("respects an operator rejection and keeps the service postponed in the revised plan", async () => {
@@ -341,10 +346,15 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		expect(database?.decision).toBe("postpone")
 		expect(database?.reason).toContain("Rejected by Luis")
 		expect(
-			revised.priorities.filter(
-				(priority) => priority.decision === "recover-now",
-			),
-		).toHaveLength(0)
+			revised.priorities
+				.filter((priority) => priority.decision === "recover-now")
+				.map((priority) => priority.serviceIdentifier),
+		).toEqual(["events-stream"])
+		expect(
+			revised.priorities.find(
+				(priority) => priority.serviceIdentifier === "route-assignment",
+			)?.decision,
+		).toBe("postpone")
 		expect(
 			(await approvalsService.list(started.runIdentifier, "pending"))
 				.length,

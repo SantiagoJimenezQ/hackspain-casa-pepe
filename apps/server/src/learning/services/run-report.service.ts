@@ -8,6 +8,7 @@ import { LearningService } from "@learning/services/learning.service"
 import { ReportApproval, RunReport } from "@learning/types/learning.type"
 import { Injectable } from "@nestjs/common"
 import { PlansService } from "@plans/services/plans.service"
+import { ScenariosService } from "@scenarios/services/scenarios.service"
 import { ToolsService } from "@tools/services/tools.service"
 
 function firstOfType(
@@ -43,6 +44,7 @@ export class RunReportService {
 		private readonly approvalsService: ApprovalsService,
 		private readonly toolsService: ToolsService,
 		private readonly learningService: LearningService,
+		private readonly scenariosService: ScenariosService,
 	) {}
 
 	async build(runIdentifier: string): Promise<RunReport> {
@@ -54,7 +56,11 @@ export class RunReportService {
 				this.plansService.listForRun(runIdentifier),
 				this.approvalsService.list(runIdentifier),
 				this.toolsService.list(runIdentifier),
-				this.learningService.list(incident.scenarioIdentifier),
+				this.learningService.list(
+					this.scenariosService.getByIdentifier(
+						incident.scenarioIdentifier,
+					).family,
+				),
 			])
 		const firstRecovery = events.find(
 			(event) => event.type === "recovery.executed",

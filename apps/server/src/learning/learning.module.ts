@@ -8,6 +8,7 @@ import { RunReportService } from "@learning/services/run-report.service"
 import { Module } from "@nestjs/common"
 import { TypeOrmModule } from "@nestjs/typeorm"
 import { PlansModule } from "@plans/plans.module"
+import { ScenariosModule } from "@scenarios/scenarios.module"
 import { ToolsModule } from "@tools/tools.module"
 
 @Module({
@@ -20,6 +21,7 @@ import { ToolsModule } from "@tools/tools.module"
 		PlansModule,
 		ApprovalsModule,
 		ToolsModule,
+		ScenariosModule,
 	],
 	providers: [LearningService, RunReportService],
 })

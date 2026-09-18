@@ -1,7 +1,9 @@
+import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
+import { describeError } from "@common/helpers/external-response.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { RecoveryMode } from "@common/types/configuration.type"
 import { RunsService } from "@incidents/services/runs.service"
-import { Injectable } from "@nestjs/common"
+import { Injectable, Logger } from "@nestjs/common"
 import {
 	AdapterExecuteOutcome,
 	AdapterExecuteRequest,
@@ -14,6 +16,8 @@ import {
 export class SimulatedRecoveryAdapter implements RecoveryAdapter {
 	readonly mode: RecoveryMode = "simulated"
 
+	private readonly logger = new Logger(SimulatedRecoveryAdapter.name)
+
 	constructor(
 		private readonly configuration: ConfigurationService,
 		private readonly runsService: RunsService,
@@ -24,9 +28,14 @@ export class SimulatedRecoveryAdapter implements RecoveryAdapter {
 		deliverResult: DeliverRecoveryResult,
 	): Promise<AdapterExecuteOutcome> {
 		setTimeout(() => {
-			void deliverResult(request.action.identifier, {
+			deliverResult(request.action.identifier, {
 				detail: request.simulatedScript.detail,
 				outcome: request.simulatedScript.outcome,
+			}).catch((error) => {
+				this.logger.warn(
+					LOG_MESSAGES.INCIDENTS.STALE_RESULT_IGNORED,
+					describeError(error),
+				)
 			})
 		}, this.configuration.recovery.simulatedDelayMilliseconds)
 		return {

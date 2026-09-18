@@ -43,7 +43,7 @@ SUPABASE_DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-0-<regi
 
 The connection string is in Supabase under *Project settings > Database > Connection string (URI)*. Use the session pooler on port 5432; the transaction pooler (6543) does not support the prepared statements TypeORM uses, and the direct connection is IPv6 only on the free plan. Tables are created automatically on startup (`synchronize`), which is enough for the hackathon; a stable deployment should move to migrations. TLS is enabled automatically for Supabase hosts (and for any URL with `sslmode=require`); any other Postgres, such as a local install, connects without TLS.
 
-Every environment variable is documented in [.env.example](.env.example).
+Every environment variable is documented in [.env.example](.env.example). Set `DATABASE_QUERY_LOGGING=true` to print every SQL statement when diagnosing latency; against the Supabase pooler each round trip costs about 120 ms, so the service writes with single-statement inserts and updates and keeps webhook subscriptions cached.
 
 ## Authentication
 
@@ -114,6 +114,7 @@ Every activity event is delivered to the active subscriptions. The UI subscribes
 - Headers `x-casa-pepe-event`, `x-casa-pepe-delivery`, `x-casa-pepe-timestamp` and `x-casa-pepe-signature`.
 - Signature: `sha256=HMAC_SHA256(secret, "<timestamp>.<body>")`. Verify with a constant-time comparison.
 - Retries with exponential backoff up to `WEBHOOK_MAXIMUM_ATTEMPTS`; the delivery log is at `GET /webhooks/deliveries`.
+- Subscribing again with the same `targetURL` updates the existing subscription instead of duplicating deliveries.
 - `eventTypes` filters the subscription; empty receives everything. Types live in `src/activity/constants/activity.constant.ts`.
 
 Every event carries `simulated` (simulated data or action) and `replayed` (reproduction), as the interface requires.

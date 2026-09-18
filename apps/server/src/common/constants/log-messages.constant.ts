@@ -75,5 +75,7 @@ export const LOG_MESSAGES = {
 			"Inbound webhook rejected because the signature is invalid",
 		SUBSCRIPTION_CREATED: "Webhook subscription created",
 		SUBSCRIPTION_REMOVED: "Webhook subscription removed",
+		SUBSCRIPTION_UPDATED:
+			"Webhook subscription updated for an existing target URL",
 	},
 } as const

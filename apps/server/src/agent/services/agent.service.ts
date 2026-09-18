@@ -27,6 +27,7 @@ import { describeError } from "@common/helpers/external-response.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { EngineersService } from "@engineers/services/engineers.service"
+import { toIncidentSnapshot } from "@incidents/helpers/incident-state.helper"
 import { IncidentsService } from "@incidents/services/incidents.service"
 import { RunsService } from "@incidents/services/runs.service"
 import {
@@ -97,14 +98,19 @@ export class AgentService {
 			case "capacity-limited": {
 				const scenario = this.scenarioOf(incident)
 				await this.learningService.recordCapacityObservation(
-					scenario.identifier,
+					scenario.family,
 					scenario.resource.identifier,
 					scenario.resource.reportedCapacity,
 					applied.event.availableCapacity,
 					incident.runIdentifier,
 				)
 				await this.requestCycle(incident.runIdentifier, {
-					description: `Backup capacity confirmed at ${applied.event.availableCapacity} units: ${applied.event.reason}`,
+					description: AGENT_MESSAGES[
+						scenario.language
+					].capacityConfirmed(
+						applied.event.availableCapacity,
+						applied.event.reason,
+					),
 					harnessEventIdentifier: applied.identifier,
 					kind: "conditions-changed",
 				})
@@ -112,7 +118,11 @@ export class AgentService {
 			}
 			case "service-health-changed":
 				await this.requestCycle(incident.runIdentifier, {
-					description: `${applied.event.serviceIdentifier} changed to ${applied.event.status}: ${applied.event.reason}`,
+					description: this.messagesFor(incident).serviceChanged(
+						applied.event.serviceIdentifier,
+						applied.event.status,
+						applied.event.reason,
+					),
 					harnessEventIdentifier: applied.identifier,
 					kind: "conditions-changed",
 				})
@@ -190,7 +200,9 @@ export class AgentService {
 		)
 		if (expiredApprovals.length || expiredCalls.length) {
 			await this.requestCycle(active.runIdentifier, {
-				description: `${expiredApprovals.length} approvals and ${expiredCalls.length} tool calls timed out`,
+				description: this.messagesFor(
+					toIncidentSnapshot(active),
+				).timeoutsExpired(expiredApprovals.length, expiredCalls.length),
 				kind: "timeouts-expired",
 			})
 		}
@@ -520,11 +532,15 @@ export class AgentService {
 		}
 		const draft = buildPlanDraft(input)
 		const changes = previous
-			? diffPlans(previous, {
-					priorities: draft.priorities,
-					steps: draft.steps,
-					totalCapacity: draft.capacity.totalCapacity,
-				})
+			? diffPlans(
+					previous,
+					{
+						priorities: draft.priorities,
+						steps: draft.steps,
+						totalCapacity: draft.capacity.totalCapacity,
+					},
+					messages,
+				)
 			: []
 		const decisionIdentifier = createPrefixedIdentifier("dec")
 		const plan = await this.plansService.createVersion({
@@ -590,7 +606,7 @@ export class AgentService {
 			return null
 		}
 		const insight = await this.learningService.findCapacityInsight(
-			scenario.identifier,
+			scenario.family,
 			resource.identifier,
 		)
 		if (!insight) {
@@ -899,7 +915,7 @@ export class AgentService {
 				return
 			case "recovery-execution":
 				await this.learningService.recordRecoveryOutcome(
-					incident.scenarioIdentifier,
+					this.scenarioOf(incident).family,
 					step.serviceIdentifier,
 					output.outcome,
 					output.detail,

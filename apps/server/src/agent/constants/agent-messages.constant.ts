@@ -18,6 +18,35 @@ const IMPACT_LABELS_ES: Record<BusinessImpactLevel, string> = {
 	medium: "medio",
 }
 
+const MODE_LABELS_ES: Record<string, string> = {
+	http: "HTTP",
+	live: "real",
+	simulated: "simulado",
+}
+
+const OUTCOME_LABELS_ES: Record<string, string> = {
+	failure: "fallida",
+	partial: "parcial",
+	success: "correcta",
+}
+
+const STATUS_LABELS_ES: Record<string, string> = {
+	degraded: "degradado",
+	down: "caído",
+	healthy: "sano",
+	recovering: "en recuperación",
+}
+
+const STEP_STATUS_LABELS_ES: Record<string, string> = {
+	"awaiting-approval": "esperando aprobación",
+	running: "en curso",
+}
+
+function labelOr(labels: Record<string, string>, key: string): string {
+	const { [key]: label = key } = labels
+	return label
+}
+
 function withComment(base: string, comment: string): string {
 	if (comment) {
 		return `${base}: ${comment}`
@@ -33,6 +62,18 @@ const ENGLISH: AgentMessages = {
 	approvedBy: (name, comment) => withComment(`Approved by ${name}`, comment),
 	attemptFailedRetrying: (attempt, message) =>
 		`Attempt ${attempt} failed (${message}). Retrying`,
+	capacityConfirmed: (units, reason) =>
+		`Backup capacity confirmed at ${units} units: ${reason}`,
+	changeBackInPlan: (serviceName, reason) =>
+		`${serviceName} moved back into the plan: ${reason}`,
+	changeCapacity: (previousUnits, nextUnits) =>
+		`Backup capacity changed from ${previousUnits} to ${nextUnits} units`,
+	changePostponed: (serviceName, reason) =>
+		`${serviceName} postponed: ${reason}`,
+	changePriority: (serviceName, previousRank, nextRank) =>
+		`${serviceName} moved from priority ${previousRank} to ${nextRank}`,
+	changeStepAdded: (title) => `New step: ${title}`,
+	changeStepRemoved: (title) => `Removed step: ${title}`,
 	contactEngineerTitle:
 		"Call the on-call engineer to confirm the backup region facts",
 	couldNotRequestApproval: "Could not request the approval",
@@ -61,9 +102,11 @@ const ENGLISH: AgentMessages = {
 		`Needs ${details.neededUnits} ${details.unit} (${details.ownUnits} own${details.chain.length ? ` plus ${details.chainUnits} for ${details.chain.join(", ")}` : ""}) but only ${details.remainingUnits} remain in ${details.region}`,
 	limitReached: (cycles) =>
 		`The agent stopped after ${cycles} cycles to avoid running without progress. An operator can request a cycle manually`,
+	modeLabel: (mode) => mode,
 	nextStep: (title) => `Next: ${title}`,
 	notEvaluated: "Not evaluated",
 	nothingRunnable: "Nothing runnable right now",
+	outcomeLabel: (outcome) => outcome,
 	partiallyRecovered:
 		"Partially recovered. A follow-up task was assigned to finish the recovery",
 	planFinished: "Plan finished",
@@ -96,6 +139,8 @@ const ENGLISH: AgentMessages = {
 	requiredByDependent: (impact, dependentName, units, unit) =>
 		`${IMPACT_LABELS_EN[impact]} impact and required by ${dependentName}. Uses ${units} ${unit}`,
 	retryingAfterFailure: (reason) => `Retrying after failure: ${reason}`,
+	serviceChanged: (serviceIdentifier, status, reason) =>
+		`${serviceIdentifier} changed to ${status}: ${reason}`,
 	stepWaiting: (title, status) => `${title} (${status})`,
 	summaryAllHealthy: "Every service is healthy. Nothing left to recover.",
 	summaryNothingFits: (totalUnits, unit, postponed) =>
@@ -118,6 +163,8 @@ const ENGLISH: AgentMessages = {
 	supportTitle: "Brief customer support about the services that stay down",
 	taskCreated: (taskIdentifier) => `Task ${taskIdentifier} created`,
 	taskRegistered: "Task registered with an owner",
+	timeoutsExpired: (approvals, toolCalls) =>
+		`${approvals} approvals and ${toolCalls} tool calls timed out`,
 	toolWithoutResult: "The tool finished without a result",
 	triggerApprovalDecided: (approvalIdentifier) =>
 		`Operator decided on approval ${approvalIdentifier}`,
@@ -147,6 +194,18 @@ const SPANISH: AgentMessages = {
 	approvedBy: (name, comment) => withComment(`Aprobado por ${name}`, comment),
 	attemptFailedRetrying: (attempt, message) =>
 		`El intento ${attempt} falló (${message}). Reintentando`,
+	capacityConfirmed: (units, reason) =>
+		`Capacidad de respaldo confirmada en ${units} unidades: ${reason}`,
+	changeBackInPlan: (serviceName, reason) =>
+		`${serviceName} vuelve al plan: ${reason}`,
+	changeCapacity: (previousUnits, nextUnits) =>
+		`La capacidad de respaldo pasó de ${previousUnits} a ${nextUnits} unidades`,
+	changePostponed: (serviceName, reason) =>
+		`${serviceName} pospuesto: ${reason}`,
+	changePriority: (serviceName, previousRank, nextRank) =>
+		`${serviceName} pasó de la prioridad ${previousRank} a la ${nextRank}`,
+	changeStepAdded: (title) => `Paso nuevo: ${title}`,
+	changeStepRemoved: (title) => `Paso eliminado: ${title}`,
 	contactEngineerTitle:
 		"Llamar a la ingeniera de guardia para confirmar los datos de la región de respaldo",
 	couldNotRequestApproval: "No se pudo solicitar la aprobación",
@@ -161,7 +220,7 @@ const SPANISH: AgentMessages = {
 	dependsOnBlocked: (dependencies) =>
 		`Depende de ${dependencies.join(", ")}, que no puede recuperarse ahora`,
 	factsConfirmed: (count, mode) =>
-		`${count} hechos confirmados por la ingeniera en modo ${mode}`,
+		`${count} hechos confirmados por la ingeniera en modo ${labelOr(MODE_LABELS_ES, mode)}`,
 	followUpTaskDescription: (serviceIdentifier, detail) =>
 		`${serviceIdentifier} responde pero está degradado: ${detail}. Terminar la recuperación y confirmar cuando esté sano.`,
 	followUpTaskTitle: (serviceIdentifier) =>
@@ -175,9 +234,11 @@ const SPANISH: AgentMessages = {
 		`Necesita ${details.neededUnits} ${details.unit} (${details.ownUnits} propias${details.chain.length ? ` más ${details.chainUnits} para ${details.chain.join(", ")}` : ""}) pero solo quedan ${details.remainingUnits} en ${details.region}`,
 	limitReached: (cycles) =>
 		`El agente se detuvo tras ${cycles} ciclos para no seguir sin progreso. Un operador puede solicitar un ciclo manualmente`,
+	modeLabel: (mode) => labelOr(MODE_LABELS_ES, mode),
 	nextStep: (title) => `Siguiente: ${title}`,
 	notEvaluated: "Sin evaluar",
 	nothingRunnable: "Nada ejecutable ahora mismo",
+	outcomeLabel: (outcome) => labelOr(OUTCOME_LABELS_ES, outcome),
 	partiallyRecovered:
 		"Recuperado parcialmente. Se asignó una tarea de seguimiento para terminar la recuperación",
 	planFinished: "Plan terminado",
@@ -201,11 +262,11 @@ const SPANISH: AgentMessages = {
 	recoverNow: (impact, impactDescription, units, unit) =>
 		`Impacto ${IMPACT_LABELS_ES[impact]}: ${impactDescription}. Usa ${units} ${unit}`,
 	recoveryFailed: (mode, detail) =>
-		`La recuperación falló en modo ${mode}: ${detail}`,
+		`La recuperación falló en modo ${labelOr(MODE_LABELS_ES, mode)}: ${detail}`,
 	recoveryFailedConstraint: (reason) => `La recuperación falló: ${reason}`,
 	recoveryInProgress: "Recuperación ya en curso con capacidad reservada",
 	recoveryPendingVerification: (outcome, mode) =>
-		`Recuperación ${outcome} en modo ${mode}. Pendiente de verificación`,
+		`Recuperación ${labelOr(OUTCOME_LABELS_ES, outcome)} en modo ${labelOr(MODE_LABELS_ES, mode)}. Pendiente de verificación`,
 	rejectedBy: (name, comment) =>
 		withComment(`Rechazado por ${name}`, comment),
 	rejectedConstraint: (name, comment) =>
@@ -213,7 +274,10 @@ const SPANISH: AgentMessages = {
 	requiredByDependent: (impact, dependentName, units, unit) =>
 		`Impacto ${IMPACT_LABELS_ES[impact]} y necesario para ${dependentName}. Usa ${units} ${unit}`,
 	retryingAfterFailure: (reason) => `Reintentando tras el fallo: ${reason}`,
-	stepWaiting: (title, status) => `${title} (${status})`,
+	serviceChanged: (serviceIdentifier, status, reason) =>
+		`${serviceIdentifier} pasó a ${labelOr(STATUS_LABELS_ES, status)}: ${reason}`,
+	stepWaiting: (title, status) =>
+		`${title} (${labelOr(STEP_STATUS_LABELS_ES, status)})`,
 	summaryAllHealthy:
 		"Todos los servicios están sanos. No queda nada por recuperar.",
 	summaryNothingFits: (totalUnits, unit, postponed) =>
@@ -237,6 +301,8 @@ const SPANISH: AgentMessages = {
 		"Informar a atención al cliente de los servicios que siguen caídos",
 	taskCreated: (taskIdentifier) => `Tarea ${taskIdentifier} creada`,
 	taskRegistered: "Tarea registrada con responsable",
+	timeoutsExpired: (approvals, toolCalls) =>
+		`${approvals} aprobaciones y ${toolCalls} llamadas a herramientas expiraron`,
 	toolWithoutResult: "La herramienta terminó sin resultado",
 	triggerApprovalDecided: (approvalIdentifier) =>
 		`El operador decidió sobre la aprobación ${approvalIdentifier}`,
@@ -246,7 +312,7 @@ const SPANISH: AgentMessages = {
 	triggerToolFinished: (toolCallIdentifier) =>
 		`Terminó la llamada a herramienta ${toolCallIdentifier}`,
 	verificationFailed: (status, detail) =>
-		`La verificación falló, el servicio sigue ${status}: ${detail}`,
+		`La verificación falló, el servicio sigue ${labelOr(STATUS_LABELS_ES, status)}: ${detail}`,
 	verifyReason:
 		"Una recuperación solo se da por completa cuando una comprobación independiente la confirma",
 	verifyTitle: (serviceName, backupRegion) =>

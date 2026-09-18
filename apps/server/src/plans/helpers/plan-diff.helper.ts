@@ -1,3 +1,4 @@
+import { AgentMessages } from "@agent/types/agent-messages.type"
 import {
 	PlanChange,
 	PlanRecord,
@@ -14,11 +15,15 @@ interface DraftPlan {
 export function diffPlans(
 	previous: PlanRecord,
 	next: DraftPlan,
+	messages: AgentMessages,
 ): ReadonlyArray<PlanChange> {
 	const changes: PlanChange[] = []
 	if (previous.capacity.totalCapacity !== next.totalCapacity) {
 		changes.push({
-			description: `Backup capacity changed from ${previous.capacity.totalCapacity} to ${next.totalCapacity} units`,
+			description: messages.changeCapacity(
+				previous.capacity.totalCapacity,
+				next.totalCapacity,
+			),
 			kind: "capacity-changed",
 			serviceIdentifier: "",
 			stepIdentifier: "",
@@ -40,7 +45,10 @@ export function diffPlans(
 			priority.decision === "postpone"
 		) {
 			changes.push({
-				description: `${priority.serviceName} postponed: ${priority.reason}`,
+				description: messages.changePostponed(
+					priority.serviceName,
+					priority.reason,
+				),
 				kind: "step-postponed",
 				serviceIdentifier: priority.serviceIdentifier,
 				stepIdentifier: "",
@@ -50,14 +58,21 @@ export function diffPlans(
 			priority.decision === "recover-now"
 		) {
 			changes.push({
-				description: `${priority.serviceName} moved back into the plan: ${priority.reason}`,
+				description: messages.changeBackInPlan(
+					priority.serviceName,
+					priority.reason,
+				),
 				kind: "step-added",
 				serviceIdentifier: priority.serviceIdentifier,
 				stepIdentifier: "",
 			})
 		} else if (before.rank !== priority.rank) {
 			changes.push({
-				description: `${priority.serviceName} moved from priority ${before.rank} to ${priority.rank}`,
+				description: messages.changePriority(
+					priority.serviceName,
+					before.rank,
+					priority.rank,
+				),
 				kind: "priority-changed",
 				serviceIdentifier: priority.serviceIdentifier,
 				stepIdentifier: "",
@@ -71,7 +86,7 @@ export function diffPlans(
 	for (const step of next.steps) {
 		if (!previousSteps.has(step.identifier)) {
 			changes.push({
-				description: `New step: ${step.title}`,
+				description: messages.changeStepAdded(step.title),
 				kind: "step-added",
 				serviceIdentifier: step.serviceIdentifier,
 				stepIdentifier: step.identifier,
@@ -90,7 +105,7 @@ export function diffPlans(
 			!postponedServices.has(step.serviceIdentifier)
 		) {
 			changes.push({
-				description: `Removed step: ${step.title}`,
+				description: messages.changeStepRemoved(step.title),
 				kind: "step-removed",
 				serviceIdentifier: step.serviceIdentifier,
 				stepIdentifier: step.identifier,

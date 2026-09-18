@@ -116,4 +116,23 @@ export interface AgentMessages {
 	decisionPostponed(serviceName: string, reason: string): string
 	decisionChanges(count: number, previousVersion: number): string
 	limitReached(cycles: number): string
+	outcomeLabel(outcome: string): string
+	modeLabel(mode: string): string
+	capacityConfirmed(units: number, reason: string): string
+	serviceChanged(
+		serviceIdentifier: string,
+		status: string,
+		reason: string,
+	): string
+	timeoutsExpired(approvals: number, toolCalls: number): string
+	changeCapacity(previousUnits: number, nextUnits: number): string
+	changePostponed(serviceName: string, reason: string): string
+	changeBackInPlan(serviceName: string, reason: string): string
+	changePriority(
+		serviceName: string,
+		previousRank: number,
+		nextRank: number,
+	): string
+	changeStepAdded(title: string): string
+	changeStepRemoved(title: string): string
 }

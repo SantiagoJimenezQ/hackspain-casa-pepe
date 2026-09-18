@@ -1,3 +1,4 @@
+import { AGENT_MESSAGES } from "@agent/constants/agent-messages.constant"
 import { buildPlanDraft } from "@agent/helpers/plan-builder.helper"
 import { diffPlans } from "@plans/helpers/plan-diff.helper"
 import { PlanRecord } from "@plans/types/plan.type"
@@ -48,11 +49,15 @@ describe("diffPlans", () => {
 		}
 		const second = draftFor(7)
 
-		const changes = diffPlans(previous, {
-			priorities: second.priorities,
-			steps: second.steps,
-			totalCapacity: second.capacity.totalCapacity,
-		})
+		const changes = diffPlans(
+			previous,
+			{
+				priorities: second.priorities,
+				steps: second.steps,
+				totalCapacity: second.capacity.totalCapacity,
+			},
+			AGENT_MESSAGES.en,
+		)
 
 		expect(
 			changes.some((change) => change.kind === "capacity-changed"),

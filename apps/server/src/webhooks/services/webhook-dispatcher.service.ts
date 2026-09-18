@@ -49,14 +49,14 @@ export class WebhookDispatcherService {
 			record.type,
 		)
 		for (const subscription of targets) {
-			const delivery = await this.createDelivery(
+			const delivery = this.buildDelivery(
 				subscription,
 				record.identifier,
 				record.type,
 				record.runIdentifier,
 				record,
 			)
-			await this.attempt(delivery, subscription)
+			await this.attempt(delivery, subscription, "insert")
 		}
 	}
 
@@ -66,7 +66,7 @@ export class WebhookDispatcherService {
 		const subscription = await this.subscriptions.getEntity(
 			subscriptionIdentifier,
 		)
-		const delivery = await this.createDelivery(
+		const delivery = this.buildDelivery(
 			subscription,
 			createPrefixedIdentifier("ping"),
 			WEBHOOK_PING_EVENT_TYPE,
@@ -76,7 +76,7 @@ export class WebhookDispatcherService {
 				sentAt: nowISO(),
 			},
 		)
-		return this.attempt(delivery, subscription)
+		return this.attempt(delivery, subscription, "insert")
 	}
 
 	async processDue(): Promise<number> {
@@ -99,7 +99,7 @@ export class WebhookDispatcherService {
 				await updateEntity(this.repository, delivery)
 				continue
 			}
-			await this.attempt(delivery, subscription)
+			await this.attempt(delivery, subscription, "update")
 			processed += 1
 		}
 		return processed
@@ -125,13 +125,13 @@ export class WebhookDispatcherService {
 		return entities.map(toDeliveryRecord)
 	}
 
-	private async createDelivery(
+	private buildDelivery(
 		subscription: WebhookSubscriptionEntity,
 		eventIdentifier: string,
 		eventType: string,
 		runIdentifier: string,
 		payload: WebhookEnvelope["event"],
-	): Promise<WebhookDeliveryEntity> {
+	): WebhookDeliveryEntity {
 		const timestamp = nowISO()
 		const identifier = createPrefixedIdentifier("whd")
 		const envelope: WebhookEnvelope = {
@@ -142,30 +142,28 @@ export class WebhookDispatcherService {
 			sentAt: timestamp,
 			subscriptionIdentifier: subscription.identifier,
 		}
-		return insertEntity(
-			this.repository,
-			this.repository.create({
-				attempts: 0,
-				createdAt: timestamp,
-				deliveredAt: "",
-				envelope,
-				eventIdentifier,
-				eventType,
-				identifier,
-				lastAttemptAt: "",
-				lastError: "",
-				lastStatusCode: 0,
-				nextAttemptAt: timestamp,
-				runIdentifier,
-				status: "pending",
-				subscriptionIdentifier: subscription.identifier,
-			}),
-		)
+		return this.repository.create({
+			attempts: 0,
+			createdAt: timestamp,
+			deliveredAt: "",
+			envelope,
+			eventIdentifier,
+			eventType,
+			identifier,
+			lastAttemptAt: "",
+			lastError: "",
+			lastStatusCode: 0,
+			nextAttemptAt: timestamp,
+			runIdentifier,
+			status: "pending",
+			subscriptionIdentifier: subscription.identifier,
+		})
 	}
 
 	private async attempt(
 		delivery: WebhookDeliveryEntity,
 		subscription: WebhookSubscriptionEntity,
+		persistence: "insert" | "update",
 	): Promise<WebhookDeliveryRecord> {
 		const attempt = delivery.attempts + 1
 		const sentAt = nowISO()
@@ -219,7 +217,11 @@ export class WebhookDispatcherService {
 				}
 				break
 		}
-		return toDeliveryRecord(await updateEntity(this.repository, delivery))
+		const persisted =
+			persistence === "insert"
+				? await insertEntity(this.repository, delivery)
+				: await updateEntity(this.repository, delivery)
+		return toDeliveryRecord(persisted)
 	}
 
 	private async post(

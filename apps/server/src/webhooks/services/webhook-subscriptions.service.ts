@@ -18,6 +18,8 @@ import { Repository } from "typeorm"
 export class WebhookSubscriptionsService {
 	private readonly logger = new Logger(WebhookSubscriptionsService.name)
 
+	private activeCache: ReadonlyArray<WebhookSubscriptionEntity> | null = null
+
 	constructor(
 		@InjectRepository(WebhookSubscriptionEntity)
 		private readonly repository: Repository<WebhookSubscriptionEntity>,
@@ -27,6 +29,23 @@ export class WebhookSubscriptionsService {
 		command: CreateWebhookSubscriptionCommand,
 	): Promise<WebhookSubscriptionRecord> {
 		const timestamp = nowISO()
+		const existing = await this.repository.findOne({
+			where: { active: true, targetURL: command.targetURL },
+		})
+		if (existing) {
+			existing.name = command.name
+			existing.description = command.description
+			existing.secret = command.secret
+			existing.eventTypes = [...command.eventTypes]
+			existing.updatedAt = timestamp
+			await updateEntity(this.repository, existing)
+			this.activeCache = null
+			this.logger.log(LOG_MESSAGES.WEBHOOKS.SUBSCRIPTION_UPDATED, {
+				subscriptionIdentifier: existing.identifier,
+				targetURL: existing.targetURL,
+			})
+			return toSubscriptionRecord(existing)
+		}
 		const entity = this.repository.create({
 			active: true,
 			createdAt: timestamp,
@@ -39,6 +58,7 @@ export class WebhookSubscriptionsService {
 			updatedAt: timestamp,
 		})
 		const saved = await insertEntity(this.repository, entity)
+		this.activeCache = null
 		this.logger.log(LOG_MESSAGES.WEBHOOKS.SUBSCRIPTION_CREATED, {
 			subscriptionIdentifier: saved.identifier,
 			targetURL: saved.targetURL,
@@ -76,6 +96,7 @@ export class WebhookSubscriptionsService {
 		entity.active = false
 		entity.updatedAt = nowISO()
 		await updateEntity(this.repository, entity)
+		this.activeCache = null
 		this.logger.log(LOG_MESSAGES.WEBHOOKS.SUBSCRIPTION_REMOVED, {
 			subscriptionIdentifier: identifier,
 		})
@@ -84,10 +105,21 @@ export class WebhookSubscriptionsService {
 	async findActiveForEventType(
 		eventType: string,
 	): Promise<ReadonlyArray<WebhookSubscriptionEntity>> {
-		const entities = await this.repository.find({ where: { active: true } })
-		return entities.filter((entity) =>
+		const active = await this.loadActive()
+		return active.filter((entity) =>
 			matchesEventType(entity.eventTypes, eventType),
 		)
+	}
+
+	private async loadActive(): Promise<
+		ReadonlyArray<WebhookSubscriptionEntity>
+	> {
+		if (this.activeCache) {
+			return this.activeCache
+		}
+		const entities = await this.repository.find({ where: { active: true } })
+		this.activeCache = entities
+		return entities
 	}
 }
 

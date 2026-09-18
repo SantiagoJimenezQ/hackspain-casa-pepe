@@ -453,7 +453,7 @@ Post-incident **RunReport**:
 }
 ```
 
-Empty or omitted `eventTypes` receives everything. Response: `WebhookSubscriptionRecord` (`identifier`, `name`, `description`, `targetURL`, `eventTypes`, `active`, `createdAt`, `updatedAt`). The secret is never returned.
+Empty or omitted `eventTypes` receives everything. Creating a subscription for a `targetURL` that already has an active one updates that subscription (name, secret, event types) instead of adding a duplicate, so a UI can call it on every start. Response: `WebhookSubscriptionRecord` (`identifier`, `name`, `description`, `targetURL`, `eventTypes`, `active`, `createdAt`, `updatedAt`). The secret is never returned.
 
 ### `GET /webhooks/subscriptions`, `GET /webhooks/subscriptions/:identifier`
 

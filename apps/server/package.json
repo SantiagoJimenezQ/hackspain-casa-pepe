@@ -1,0 +1,88 @@
+{
+	"name": "@casa-pepe/server",
+	"version": "0.1.0",
+	"private": true,
+	"scripts": {
+		"build": "nest build",
+		"develop": "nest start --watch",
+		"format": "pnpm exec biome format --write .",
+		"lint": "pnpm exec biome check .",
+		"start": "nest start",
+		"test": "jest",
+		"typecheck": "tsc --noEmit -p tsconfig.json"
+	},
+	"jest": {
+		"collectCoverageFrom": [
+			"**/*.(t|j)s"
+		],
+		"coverageDirectory": "../coverage",
+		"moduleFileExtensions": [
+			"js",
+			"json",
+			"ts"
+		],
+		"moduleNameMapper": {
+			"^@root/(.*)$": "<rootDir>/$1",
+			"^@common/(.*)$": "<rootDir>/common/$1",
+			"^@database/(.*)$": "<rootDir>/common/database/$1",
+			"^@authentication/(.*)$": "<rootDir>/authentication/$1",
+			"^@health/(.*)$": "<rootDir>/health/$1",
+			"^@webhooks/(.*)$": "<rootDir>/webhooks/$1",
+			"^@scenarios/(.*)$": "<rootDir>/scenarios/$1",
+			"^@incidents/(.*)$": "<rootDir>/incidents/$1",
+			"^@activity/(.*)$": "<rootDir>/activity/$1",
+			"^@plans/(.*)$": "<rootDir>/plans/$1",
+			"^@approvals/(.*)$": "<rootDir>/approvals/$1",
+			"^@tasks/(.*)$": "<rootDir>/tasks/$1",
+			"^@engineers/(.*)$": "<rootDir>/engineers/$1",
+			"^@recovery/(.*)$": "<rootDir>/recovery/$1",
+			"^@tools/(.*)$": "<rootDir>/tools/$1",
+			"^@agent/(.*)$": "<rootDir>/agent/$1",
+			"^@replays/(.*)$": "<rootDir>/replays/$1"
+		},
+		"rootDir": "src",
+		"testEnvironment": "node",
+		"testRegex": ".*\\.spec\\.ts$",
+		"transform": {
+			"^.+\\.(t|j)s$": "ts-jest"
+		}
+	},
+	"dependencies": {
+		"@nestjs/axios": "^4.0.1",
+		"@nestjs/common": "^10.0.0",
+		"@nestjs/config": "^4.0.2",
+		"@nestjs/core": "^10.0.0",
+		"@nestjs/event-emitter": "^2.1.1",
+		"@nestjs/platform-express": "^10.0.0",
+		"@nestjs/schedule": "^4.1.2",
+		"@nestjs/swagger": "^11.2.0",
+		"@nestjs/terminus": "^10.3.0",
+		"@nestjs/typeorm": "^10.0.2",
+		"axios": "^1.13.2",
+		"class-transformer": "^0.5.1",
+		"class-validator": "^0.14.2",
+		"express": "^4.21.2",
+		"pg": "^8.23.0",
+		"reflect-metadata": "^0.2.0",
+		"rxjs": "^7.8.2",
+		"typeorm": "^0.3.20",
+		"uuid": "^11.0.3"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.3.3",
+		"@nestjs/cli": "^10.0.0",
+		"@nestjs/schematics": "^10.0.0",
+		"@types/express": "^5.0.0",
+		"@types/jest": "^29.5.14",
+		"@types/node": "^20.3.1",
+		"@types/pg": "^8.23.1",
+		"jest": "^29.7.0",
+		"source-map-support": "^0.5.21",
+		"ts-jest": "^29.4.12",
+		"ts-loader": "^9.4.3",
+		"ts-node": "^10.9.1",
+		"tsconfig-paths": "^4.2.0",
+		"typescript": "^5.1.3"
+	},
+	"packageManager": "pnpm@10.18.0"
+}

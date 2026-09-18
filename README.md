@@ -96,13 +96,13 @@ apps/
   server/       NestJS API, simulation, planning, and execution
 packages/
   contracts/    Shared payload definitions
-  harness/      Standalone simulation harness
+  harness/      Reusable simulation boundary
   agent/        Decision-making package boundary
   tools/        Integration adapter package boundary
 demo/           Demo planning and presentation materials
 ```
 
-The incident coordination runtime lives in `apps/server`. An earlier standalone simulation remains in `packages/harness` and `apps/server/index.mjs`. The agent and tools package folders document the intended separation of responsibilities.
+The incident coordination runtime lives in `apps/server`, including the persisted simulation state and seeded environment behavior. `packages/harness` documents the reusable simulation boundary; it does not start a second server. The agent and tools package folders document the intended separation of responsibilities.
 
 The dashboard is intended to integrate through the API and shared contracts. Credentials and external integrations belong on the server.
 
@@ -123,3 +123,5 @@ The dashboard is intended to integrate through the API and shared contracts. Cre
 - [Shared contracts](packages/contracts/)
 - [Demo planning](demo/README.md)
 - [Official HackSpain 2026 challenge](https://hackspain2026.happyrobot.ai/)
+
+The canonical API is NestJS. It exposes `/documentation`, supports reproducible manual and randomized runs through `POST /api/demo/start`, and provides `/api/demo/pause`, `/api/demo/resume`, and `/api/demo/advance` for simulation control.

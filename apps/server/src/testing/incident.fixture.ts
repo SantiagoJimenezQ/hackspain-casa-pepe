@@ -5,6 +5,7 @@ import {
 } from "@incidents/helpers/incident-state.helper"
 import { IncidentSnapshot } from "@incidents/types/incident.type"
 import { METEORITE_SCENARIO } from "@scenarios/constants/meteorite-scenario.constant"
+import { SimulationState } from "@scenarios/types/simulation.type"
 
 export const FIXTURE_TIMESTAMP = "2026-09-18T10:00:00.000Z"
 
@@ -50,6 +51,19 @@ export function createImpactedIncident(
 			METEORITE_SCENARIO,
 			FIXTURE_IMPACT_TIMESTAMP,
 		),
+		simulation: {
+			automaticEvents: true,
+			difficulty: "medium",
+			disruptionDraws: 0,
+			elapsedMinutes: 0,
+			generatedDisruptions: 0,
+			initialDraws: 0,
+			maxConcurrentDisruptions: 2,
+			mode: "manual",
+			paused: true,
+			recoveryDraws: 0,
+			seed: 42,
+		} satisfies SimulationState,
 		sourceRunIdentifier: "",
 		startedAt: FIXTURE_TIMESTAMP,
 		status: "detected",

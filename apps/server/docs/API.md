@@ -63,7 +63,7 @@ Separate from the operator controls. Each call returns the resulting `IncidentSn
 
 ### `POST /demo/start`
 
-Optional body `{ "scenarioIdentifier": "meteorite-eu-west-1" }`. Deactivates the previous run (it ends in `reset` state) and creates a new one with every service healthy. Events: `incident.run-started`.
+Optional body `{ "scenarioIdentifier": "meteorite-eu-west-1", "mode": "randomized", "seed": 42, "difficulty": "medium", "automaticEvents": true, "maxConcurrentDisruptions": 2 }`. Deactivates the previous run (it ends in `reset` state) and creates a new one with every service healthy. The response includes the persisted `simulation` state. Omitted fields use `manual`, seed `42`, `medium`, automatic events enabled, and a disruption cap of `2`. Events: `incident.run-started`.
 
 ### `POST /demo/impact`
 
@@ -90,6 +90,58 @@ Arbitrary harness event.
 
 Marks the current run as `reset` and creates a new one from the same scenario. Late results from the previous run (calls, recoveries) are rejected with `409 Stale Run`. Events: `incident.run-reset`, `incident.run-started`.
 
+### `POST /demo/pause`
+
+Pauses the automatic clock for a randomized run. It is idempotent. Manual controls, recovery actions and harness event injection remain available while paused. The incident must already be active (apply `/demo/impact` first). Returns `400` for a manual run or a run that has not entered an incident.
+
+### `POST /demo/resume`
+
+Resumes the automatic clock for a randomized run. The server advances approximately one simulated minute per second while an incident is active. The clock is paused when a run starts, so a demo must apply `/demo/impact` and explicitly resume it.
+
+### `POST /demo/advance`
+
+Advances a randomized run synchronously, even while paused. The incident must be active before the clock can advance.
+
+```json
+{ "minutes": 3 }
+```
+
+`minutes` is optional and must be an integer from 1 to 60. This endpoint is the preferred control for deterministic tests and recorded demos. It records `simulation.advanced` activity and may inject seeded secondary `service-health-changed` events, up to the configured disruption cap.
+
+## Seeded simulation
+
+Randomness belongs to the environment, never to the agent's decision policy. A run stores its complete simulation state in the incident row, including seed and draw counters, so reads do not change the next outcome. The same implementation version, start configuration and accepted action/clock sequence reproduce the same environment trajectory; UUIDs and wall-clock timestamps still differ.
+
+`mode: "manual"` preserves the original fixed scenario. `mode: "randomized"` samples the initial backup capacity, recovery outcomes and a possible secondary disruption. Difficulties use these rules:
+
+| Difficulty | Spare capacity | Recovery failure | Secondary disruption |
+|---|---:|---:|---:|
+| `easy` | 0–3 units | 0.2% base per recovery | 15% per eligible minute |
+| `medium` | 0–2 units | 0.8% base per recovery | 30% per eligible minute |
+| `hard` | 0–1 unit | 1.5% base per recovery | 50% per eligible minute |
+
+The backup capacity never falls below one unit. Recovery failure probability increases with allocated capacity, up to three times the base rate at full utilization. A failed simulated recovery releases its allocation and records a failure reason; the agent can reassess and request a new cycle. Generated secondary disruptions only target currently healthy services, stop when the configured cap is reached, and respect the maximum number of concurrent unhealthy services. Manual `/demo/events` injections are independent of this budget.
+
+The response's `simulation` object is:
+
+```json
+{
+  "mode": "randomized",
+  "seed": 42,
+  "difficulty": "medium",
+  "automaticEvents": true,
+  "maxConcurrentDisruptions": 2,
+  "paused": true,
+  "elapsedMinutes": 0,
+  "generatedDisruptions": 0,
+  "initialDraws": 1,
+  "recoveryDraws": 0,
+  "disruptionDraws": 0
+}
+```
+
+`automaticEvents` controls only the generated secondary fault. `pause` and `resume` control the clock. A manual `advance` call can generate the seeded fault while paused. Polling `GET /api/overview` or any other read endpoint never consumes random draws.
+
 ---
 
 ## Incident (`/incidents`)
@@ -104,6 +156,7 @@ Marks the current run as `reset` and creates a new one from the same scenario. L
 | `status` | `normal` \| `detected` \| `responding` \| `partially-recovered` \| `recovered` \| `reset` |
 | `active`, `startedAt`, `impactedAt`, `resolvedAt` | Lifecycle |
 | `title`, `company`, `narrative`, `region`, `backupRegion`, `businessImpactSummary` | Context for the incident summary |
+| `simulation` | Seed, mode, difficulty, pause state, elapsed minutes and persisted random draw counters |
 | `services[]` | `identifier`, `name`, `status`, `statusReason`, `businessImpact`, `impactDescription`, `dependencies[]`, `recoveryCapacityUnits`, `recoveryActionKind`, `recoveryActionDescription`, `recoveryRequiresApproval`, `recoveryConsequences[]`, `lastChangedAt` |
 | `resources[]` | `identifier`, `name`, `region`, `unit`, `totalCapacity`, `allocatedCapacity`, `confirmed`, `note` |
 | `facts[]` | `statement`, `status` (`confirmed` \| `pending` \| `refuted`), `source`, `recordedAt` |
@@ -427,6 +480,7 @@ Header `x-recovery-signature: <RECOVERY_WEBHOOK_SECRET>`.
 | `incident.event-applied` | harness | Any harness event |
 | `incident.status-changed` | system | `detected` → `responding` → `partially-recovered` → `recovered` |
 | `incident.run-reset` | harness | Reset |
+| `simulation.advanced` | harness | Simulation clock advanced manually or automatically |
 | `service.health-changed` | harness / integration | Service health change |
 | `resource.capacity-changed` | harness | Total or allocated capacity changes |
 | `fact.recorded` | agent | Fact confirmed or left pending after the call |

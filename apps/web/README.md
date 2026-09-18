@@ -28,8 +28,8 @@ La interfaz queda en [http://localhost:3000](http://localhost:3000).
 - Plan del agente, empresas afectadas, migración e infraestructura.
 - Controles de demo (botón Demo o tecla `D`) para reiniciar, ciclar estados y avanzar el agente.
 
-Pendiente cuando exista `apps/server/`: sustituir el snapshot mock por la API y los eventos en directo, sin reescribir las tarjetas.
+Pendiente de integración: sustituir el snapshot mock por la API y los eventos en directo, sin reescribir las tarjetas.
 
 ## Integración
 
-Consumir la API de `apps/server/` y los formatos acordados en `packages/contracts/`. Los datos de ejemplo viven ahora en `src/lib/mock-snapshot.ts` y deben alinearse con esos contratos. No incluir credenciales ni importar implementaciones de herramientas en el navegador.
+Consumir la API NestJS de `apps/server/` (`GET /api/overview` y los controles `/api/demo/*`) y los formatos acordados en `packages/contracts/`. Los datos de ejemplo viven ahora en `src/lib/mock-snapshot.ts` y deben alinearse con esos contratos. No incluir credenciales ni importar implementaciones de herramientas en el navegador.

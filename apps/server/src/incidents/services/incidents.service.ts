@@ -1,6 +1,7 @@
 import { ActivityService } from "@activity/services/activity.service"
 import { DOMAIN_EVENTS } from "@common/constants/domain-events.constant"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
+import { StaleRunException } from "@common/exceptions/domain.exception"
 import { nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
 import { IncidentEntity } from "@incidents/entities/incident.entity"
@@ -27,19 +28,27 @@ import {
 	IncidentSnapshot,
 	RunKind,
 } from "@incidents/types/incident.type"
-import { Injectable, Logger } from "@nestjs/common"
+import { BadRequestException, Injectable, Logger } from "@nestjs/common"
 import { EventEmitter2 } from "@nestjs/event-emitter"
+import { Interval } from "@nestjs/schedule"
 import { InjectRepository } from "@nestjs/typeorm"
 import { ScenariosService } from "@scenarios/services/scenarios.service"
+import { SeededSimulationService } from "@scenarios/services/seeded-simulation.service"
 import {
 	ScenarioDefinition,
 	ServiceHealthStatus,
 } from "@scenarios/types/scenario.type"
+import {
+	SimulationConfigInput,
+	SimulationRecoveryScript,
+	SimulationState,
+} from "@scenarios/types/simulation.type"
 import { Repository } from "typeorm"
 
 @Injectable()
 export class IncidentsService {
 	private readonly logger = new Logger(IncidentsService.name)
+	private readonly automaticTicks = new Set<string>()
 
 	constructor(
 		@InjectRepository(IncidentEntity)
@@ -48,14 +57,23 @@ export class IncidentsService {
 		private readonly scenariosService: ScenariosService,
 		private readonly activityService: ActivityService,
 		private readonly eventEmitter: EventEmitter2,
+		private readonly seededSimulation: SeededSimulationService,
 	) {}
 
-	async startRun(scenarioIdentifier: string): Promise<IncidentSnapshot> {
+	async startRun(
+		scenarioIdentifier: string,
+		config: SimulationConfigInput = {},
+	): Promise<IncidentSnapshot> {
 		const scenario =
 			this.scenariosService.getByIdentifier(scenarioIdentifier)
+		const simulation = this.seededSimulation.createState(config)
+		const runtimeScenario = this.seededSimulation.withInitialCapacity(
+			scenario,
+			simulation,
+		)
 		await this.deactivateCurrentRun("A new run was started")
 		const entity = await this.repository.save(
-			this.buildBaselineEntity(scenario, "live", ""),
+			this.buildBaselineEntity(runtimeScenario, "live", "", simulation),
 		)
 		const snapshot = toIncidentSnapshot(entity)
 		this.logger.log(LOG_MESSAGES.INCIDENTS.RUN_STARTED, {
@@ -85,9 +103,24 @@ export class IncidentsService {
 		const scenario = this.scenariosService.getByIdentifier(
 			source.scenarioIdentifier,
 		)
+		const simulation =
+			source.simulation ?? this.seededSimulation.createState()
+		const replayCapacityState = {
+			...simulation,
+			initialDraws: 0,
+		}
+		const runtimeScenario = this.seededSimulation.withInitialCapacity(
+			scenario,
+			replayCapacityState,
+		)
 		await this.deactivateCurrentRun("A replay was started")
 		const entity = await this.repository.save(
-			this.buildBaselineEntity(scenario, "replay", sourceRunIdentifier),
+			this.buildBaselineEntity(
+				runtimeScenario,
+				"replay",
+				sourceRunIdentifier,
+				simulation,
+			),
 		)
 		return toIncidentSnapshot(entity)
 	}
@@ -117,11 +150,182 @@ export class IncidentsService {
 		return this.startRun(scenarioIdentifier)
 	}
 
+	async getActiveRunIdentifier(): Promise<string> {
+		return (await this.runsService.getActiveEntity()).runIdentifier
+	}
+
+	async setSimulationPaused(
+		runIdentifier: string,
+		paused: boolean,
+	): Promise<IncidentSnapshot> {
+		const entity =
+			await this.runsService.getEntityByRunIdentifier(runIdentifier)
+		if (entity.simulation?.mode !== "randomized") {
+			throw new BadRequestException(
+				"Simulation clock controls require randomized mode",
+			)
+		}
+		if (
+			!entity.active ||
+			entity.status === "normal" ||
+			entity.status === "reset"
+		) {
+			throw new BadRequestException(
+				"An active incident is required before changing simulation time",
+			)
+		}
+		entity.simulation = { ...entity.simulation, paused }
+		entity.updatedAt = nowISO()
+		return toIncidentSnapshot(await this.repository.save(entity))
+	}
+
+	async advanceSimulation(
+		runIdentifier: string,
+		minutes: number,
+	): Promise<IncidentSnapshot> {
+		const entity =
+			await this.runsService.getEntityByRunIdentifier(runIdentifier)
+		if (entity.simulation?.mode !== "randomized") {
+			throw new BadRequestException(
+				"Simulation stepping requires randomized mode",
+			)
+		}
+		if (
+			!entity.active ||
+			entity.status === "normal" ||
+			entity.status === "reset"
+		) {
+			throw new BadRequestException(
+				"An active incident is required before advancing time",
+			)
+		}
+		const simulation = { ...entity.simulation }
+		const disruptions: Array<{
+			serviceIdentifier: string
+			status: ServiceHealthStatus
+			reason: string
+		}> = []
+		let services = [...entity.services]
+		for (let index = 0; index < minutes; index += 1) {
+			simulation.elapsedMinutes += 1
+			const disruption = this.seededSimulation.maybeDisrupt(
+				simulation,
+				services,
+				true,
+			)
+			if (disruption) {
+				disruptions.push(disruption)
+				services = services.map((service) =>
+					service.identifier === disruption.serviceIdentifier
+						? { ...service, status: disruption.status }
+						: service,
+				)
+			}
+		}
+		entity.simulation = simulation
+		entity.updatedAt = nowISO()
+		await this.repository.save(entity)
+		for (const disruption of disruptions) {
+			await this.applyHarnessEvent(
+				{
+					reason: disruption.reason,
+					serviceIdentifier: disruption.serviceIdentifier,
+					status: disruption.status,
+					type: "service-health-changed",
+				},
+				"Seeded simulation",
+				runIdentifier,
+			)
+		}
+		const snapshot =
+			await this.runsService.getByRunIdentifier(runIdentifier)
+		await this.activityService.record({
+			correlation: {},
+			incidentIdentifier: snapshot.identifier,
+			payload: {
+				elapsedMinutes: snapshot.simulation.elapsedMinutes,
+				minutes,
+			},
+			runIdentifier,
+			simulated: true,
+			source: "harness",
+			summary: `Simulation advanced by ${minutes} minute${minutes === 1 ? "" : "s"}`,
+			title: "Simulation clock advanced",
+			type: "simulation.advanced",
+		})
+		return snapshot
+	}
+
+	async sampleRecoveryScript(
+		runIdentifier: string,
+		serviceIdentifier: string,
+		fallback: SimulationRecoveryScript,
+	): Promise<SimulationRecoveryScript> {
+		const entity =
+			await this.runsService.getEntityByRunIdentifier(runIdentifier)
+		if (!entity.simulation) {
+			return fallback
+		}
+		const scenario = this.scenariosService.getByIdentifier(
+			entity.scenarioIdentifier,
+		)
+		const service = scenario.services.find(
+			(candidate) => candidate.identifier === serviceIdentifier,
+		)
+		if (!service) {
+			return fallback
+		}
+		const resource = entity.resources[0]
+		const script = this.seededSimulation.sampleRecovery(
+			entity.simulation,
+			service,
+			resource?.allocatedCapacity ?? 0,
+			resource?.totalCapacity ?? service.recoveryCapacityUnits,
+		)
+		entity.updatedAt = nowISO()
+		await this.repository.save(entity)
+		return script
+	}
+
+	@Interval(1000)
+	async advanceAutomaticSimulation(): Promise<void> {
+		const entity = await this.runsService.findActiveEntity()
+		if (
+			!entity?.simulation ||
+			entity.simulation.mode !== "randomized" ||
+			entity.simulation.paused ||
+			entity.status === "normal" ||
+			entity.status === "recovered" ||
+			entity.status === "reset" ||
+			this.automaticTicks.has(entity.runIdentifier)
+		) {
+			return
+		}
+		this.automaticTicks.add(entity.runIdentifier)
+		try {
+			await this.advanceSimulation(entity.runIdentifier, 1)
+		} catch (error) {
+			this.logger.warn(
+				`Automatic simulation tick skipped: ${error instanceof Error ? error.message : String(error)}`,
+			)
+		} finally {
+			this.automaticTicks.delete(entity.runIdentifier)
+		}
+	}
+
 	async applyHarnessEvent(
 		harnessEvent: HarnessEvent,
 		source: string,
+		expectedRunIdentifier?: string,
 	): Promise<IncidentSnapshot> {
-		const entity = await this.runsService.getActiveEntity()
+		const entity = expectedRunIdentifier
+			? await this.runsService.getEntityByRunIdentifier(
+					expectedRunIdentifier,
+				)
+			: await this.runsService.getActiveEntity()
+		if (expectedRunIdentifier && !entity.active) {
+			throw new StaleRunException(expectedRunIdentifier)
+		}
 		const timestamp = nowISO()
 		const applied: AppliedHarnessEvent = {
 			appliedAt: timestamp,
@@ -557,6 +761,7 @@ export class IncidentsService {
 		scenario: ScenarioDefinition,
 		runKind: RunKind,
 		sourceRunIdentifier: string,
+		simulation: SimulationState,
 	): IncidentEntity {
 		const timestamp = nowISO()
 		return this.repository.create({
@@ -578,6 +783,7 @@ export class IncidentsService {
 			runKind,
 			scenarioIdentifier: scenario.identifier,
 			services: buildBaselineServices(scenario, timestamp),
+			simulation,
 			sourceRunIdentifier,
 			startedAt: timestamp,
 			status: "normal",

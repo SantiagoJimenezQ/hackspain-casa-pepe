@@ -23,7 +23,7 @@ From `apps/server/`:
 
 ```bash
 pnpm install
-cp .env.example .env.local          # set API_KEY and SUPABASE_DATABASE_URL (Supabase, see below)
+cp .env.example .env.local          # set API_KEY and SUPABASE_DATABASE_URL (see below)
 pnpm develop                        # http://localhost:3000/api, OpenAPI at /documentation
 ```
 
@@ -39,10 +39,9 @@ The service persists in Postgres. Point it at the team Supabase project in `.env
 
 ```bash
 SUPABASE_DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
-SUPABASE_DATABASE_SSL=true
 ```
 
-The connection string is in Supabase under *Project settings > Database > Connection string (URI)*. Use the session pooler on port 5432; the transaction pooler (6543) does not support the prepared statements TypeORM uses, and the direct connection is IPv6 only on the free plan. Tables are created automatically on startup (`synchronize`), which is enough for the hackathon; a stable deployment should move to migrations. Any other Postgres (a local install, for instance) works the same with `SUPABASE_DATABASE_SSL=false`.
+The connection string is in Supabase under *Project settings > Database > Connection string (URI)*. Use the session pooler on port 5432; the transaction pooler (6543) does not support the prepared statements TypeORM uses, and the direct connection is IPv6 only on the free plan. Tables are created automatically on startup (`synchronize`), which is enough for the hackathon; a stable deployment should move to migrations. TLS is enabled automatically for Supabase hosts (and for any URL with `sslmode=require`); any other Postgres, such as a local install, connects without TLS.
 
 Every environment variable is documented in [.env.example](.env.example).
 

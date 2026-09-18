@@ -2,7 +2,7 @@
 
 Equipo, esta es la propuesta de trabajo para **Casa Pepe**, nuestro proyecto para HackSpain.
 
-Vamos a construir un coordinador de incidentes con IA para un escenario ficticio: **un meteorito provoca una caída de la región de AWS donde corre nuestra aplicación**. El sistema debe detectar el impacto, decidir qué atender primero, coordinar la respuesta y cambiar de plan cuando aparezca nueva información. Una persona podrá supervisarlo e intervenir.
+Vamos a construir un coordinador de incidentes con IA para un escenario ficticio: **un meteorito provoca una caída de la región de AWS donde corre nuestra aplicación**. El sistema debe detectar el impacto, decidir qué atender primero, coordinar la respuesta y cambiar de plan cuando aparezca nueva información. Una persona podrá supervisarlo e intervenir. El sistema también debe aprender de interacciones anteriores y utilizar ese aprendizaje en decisiones posteriores.
 
 ## 1. Escenario y objetivo de la demo
 
@@ -33,6 +33,7 @@ Necesitamos:
 - Registro de decisiones, llamadas a herramientas y cambios de estado.
 - Identificadores que permitan relacionar un evento con la decisión y la acción que provoca.
 - Una forma de reproducir una ejecución anterior, claramente identificada como reproducción.
+- Memoria persistente entre ejecuciones, con controles separados para reiniciar el incidente conservando lo aprendido o borrar la memoria de demo.
 
 El giro principal será descubrir que **la capacidad de respaldo es insuficiente para ejecutar el plan inicial**.
 
@@ -52,6 +53,24 @@ El agente debe completar un ciclo de respuesta:
 
 Necesitamos límites de ejecución, tiempos de espera y un mecanismo para evitar acciones duplicadas o bucles sin progreso.
 
+### Aprendizaje de interacciones anteriores — requisito del MVP
+
+Guardar el historial no basta: el agente debe recuperar aprendizajes relevantes y utilizarlos para decidir qué preguntar, a quién contactar o qué acción intentar en una situación posterior.
+
+El ciclo mínimo será:
+
+1. **Registrar la interacción y su resultado:** respuestas de llamadas, correcciones del operador y resultados verificados de herramientas y acciones.
+2. **Extraer un aprendizaje concreto:** qué funcionó, qué falló o qué supuesto hubo que corregir, indicando la evidencia de origen y las condiciones en las que aplica. Un rechazo sin explicación no permite deducir una regla nueva.
+3. **Persistirlo entre ejecuciones:** conservar contexto, fecha, fuente, grado de confianza y vigencia. Guardar solo la información necesaria, sin credenciales ni datos personales innecesarios.
+4. **Consultar la memoria antes de decidir:** recuperar aprendizajes relevantes, contrastarlos con el estado actual y explicar si cambian la decisión. La disponibilidad de una persona o la capacidad de respaldo observadas antes deben volver a comprobarse.
+5. **Corregir la memoria:** permitir al operador revisar, corregir o invalidar un aprendizaje; registrar los cambios y retirar los que contradiga nueva evidencia.
+
+La memoria aporta contexto, pero no sustituye las comprobaciones actuales ni las aprobaciones requeridas. El contenido de una llamada se trata como información, no como instrucciones para modificar permisos o controles del sistema.
+
+**Ejemplo para la demo:** en una primera ejecución, un ingeniero explica que recuperar la asignación de rutas requiere restaurar antes una cola, y el resultado de la recuperación confirma esa dependencia. En una segunda ejecución comparable, el agente recupera ese aprendizaje, comprueba que sigue aplicando y planifica la cola antes que el servicio. La UI muestra la interacción de origen y qué decisión ha cambiado.
+
+Para el MVP basta con memoria estructurada y recuperación por contexto; no necesitamos entrenar un modelo. El aprendizaje entre ejecuciones forma parte de la entrega obligatoria del proyecto.
+
 ## 4. Herramientas e integraciones
 
 Conjunto inicial propuesto:
@@ -66,6 +85,8 @@ Conjunto inicial propuesto:
 | `request_approval` | Pedir autorización al operador | Interacción real en la UI |
 | `execute_recovery` | Ejecutar una acción de recuperación | Acción real en un entorno de pruebas |
 | `verify_recovery` | Comprobar si la acción ha funcionado | Comprobación del entorno de pruebas |
+| `get_relevant_learnings` | Recuperar aprendizajes aplicables al contexto actual | Memoria persistente en el servidor |
+| `record_learning` | Guardar o actualizar un aprendizaje con evidencia y condiciones de aplicación | Memoria persistente en el servidor |
 
 Cada herramienta necesita entradas y salidas definidas, estados de ejecución y errores comprensibles.
 
@@ -81,6 +102,7 @@ Una pantalla principal, organizada en estas zonas:
 - **Actividad en directo:** eventos recibidos, llamadas a herramientas y resultados.
 - **Decisiones:** explicación breve de cada elección, basada en evidencias y restricciones.
 - **Aprobaciones:** acción propuesta, consecuencias y controles para aprobar o rechazar.
+- **Aprendizajes:** evidencia de origen, vigencia, decisiones que los utilizan y controles para corregirlos o invalidarlos.
 - **Cambio de plan:** qué ha cambiado respecto al plan anterior y por qué.
 - **Controles de demo:** iniciar, introducir el giro y reiniciar, separados de los controles del operador.
 
@@ -99,6 +121,8 @@ Entidades mínimas:
 - `ActivityEvent`: evento con identificador, fecha, tipo, origen y contenido.
 - `ToolCall`: ejecución, parámetros, resultado y error.
 - `Approval`: acción pendiente y decisión del operador.
+- `Learning`: aprendizaje, contexto de aplicación, evidencia de origen, fecha, confianza, vigencia y estado de revisión.
+- Referencias desde cada decisión a los aprendizajes utilizados, con el motivo de su aplicación o descarte.
 
 También necesitamos acordar:
 
@@ -106,6 +130,7 @@ También necesitamos acordar:
 - Cómo recibe las actualizaciones en directo.
 - Cómo llegan las aprobaciones al agente.
 - Cómo se introducen eventos y se reinicia la simulación.
+- Cómo se consultan, guardan, corrigen e invalidan aprendizajes y cómo se conserva o borra la memoria al reiniciar.
 - Qué estados y formatos de error utiliza cada componente.
 - Un juego de datos de ejemplo común para desarrollar la UI sin esperar al backend.
 
@@ -115,6 +140,7 @@ También necesitamos acordar:
 - Credenciales en variables de entorno y un `.env.example` sin secretos.
 - Un entorno de pruebas para ejecutar y verificar la recuperación.
 - Un despliegue accesible para enseñar la demo.
+- Almacenamiento persistente de aprendizajes en el servidor, con acceso autorizado y separado por entorno o equipo.
 - El coordinador y la interfaz disponibles fuera del entorno que simulamos como afectado.
 - Instrucciones para arrancar, configurar y reiniciar el proyecto.
 - Registro de errores suficiente para resolver problemas durante los ensayos.
@@ -132,6 +158,8 @@ Secuencia propuesta:
 7. El operador aprueba la acción propuesta.
 8. El sistema ejecuta la recuperación en el entorno de pruebas.
 9. Comprueba el resultado y muestra qué se ha recuperado y qué sigue pendiente.
+10. Muestra un aprendizaje extraído de la interacción con el ingeniero y respaldado por el resultado.
+11. Reiniciamos el incidente conservando la memoria: el agente utiliza ese aprendizaje y explica cómo cambia su siguiente decisión respecto a la primera ejecución.
 
 Necesitamos una persona presentando y otra controlando los eventos. Debemos ensayar también qué hacemos si la llamada o una integración falla.
 
@@ -148,15 +176,20 @@ La demo estará lista cuando podamos comprobar que:
 - La acción de recuperación se ejecuta y su resultado se verifica.
 - Los fallos y tiempos de espera quedan visibles.
 - El registro permite reconstruir lo ocurrido.
+- Una interacción con resultado verificado produce un aprendizaje persistente y trazable.
+- Dos ejecuciones con el mismo escenario y los mismos eventos, una sin memoria y otra con el aprendizaje anterior, muestran un cambio de decisión explicable.
+- Los aprendizajes irrelevantes, invalidados o contradichos por el estado actual no se aplican; la memoria nunca evita una aprobación requerida.
+- El operador puede corregir o invalidar un aprendizaje y las decisiones posteriores respetan el cambio.
+- Reiniciar el incidente conserva la memoria cuando se solicita; borrar la memoria permite repetir la ejecución de referencia.
 - Podemos completar varios ensayos seguidos sin corregir el estado manualmente.
 
 ## 10. Reparto del trabajo
 
 | Frente | Responsabilidad | Primera entrega |
 |---|---|---|
-| **UI** | Pantalla de operaciones, actividad, aprobaciones y controles de demo | Pantalla funcional con datos de ejemplo |
-| **Harness y backend** | Estado, eventos, simulación, reinicio y actualizaciones en directo | Escenario reproducible con el giro de capacidad |
-| **Agente e integraciones** | Lógica de decisión, herramientas, HappyRobot y recuperación | Ciclo completo de decisión, ejecución y verificación |
+| **UI** | Pantalla de operaciones, actividad, aprobaciones, aprendizajes y controles de demo | Pantalla funcional con datos de ejemplo |
+| **Harness y backend** | Estado, eventos, simulación, reinicio, memoria persistente y actualizaciones en directo | Escenario reproducible con el giro de capacidad |
+| **Agente e integraciones** | Lógica de decisión, herramientas, HappyRobot, recuperación y extracción y uso de aprendizajes | Ciclo completo de decisión, ejecución y verificación |
 | **Integración y demo** | Conectar componentes, desplegar, validar y preparar la presentación | Demo completa desde un reinicio limpio |
 
 Si somos tres desarrollando, podemos unir integración con el frente de harness. En cualquier caso, **una persona debe responsabilizarse de que la demo completa funcione**, además del trabajo de cada componente.
@@ -166,9 +199,10 @@ Si somos tres desarrollando, podemos unir integración con el frente de harness.
 - **Primero:** cerrar escenario, contratos y responsables.
 - **Después:** conectar un recorrido mínimo: evento → UI → propuesta del agente → aprobación → acción → resultado.
 - **A continuación:** integrar HappyRobot y el cambio de plan por falta de capacidad.
+- **Después del ciclo completo:** persistir aprendizajes, recuperarlos al decidir y validar la segunda ejecución con memoria.
 - **Por último:** mejorar la presentación visual, preparar la alternativa de reproducción y ensayar.
 
-Dejamos como extras el aprendizaje entre ejecuciones, más escenarios y las estadísticas históricas.
+Dejamos como extras más escenarios y las estadísticas históricas.
 
 **Estado actual:** tenemos el repositorio privado y el `AGENTS.md` con el resumen del reto. El harness, el agente, las integraciones y la UI están pendientes de implementación. La presentación todavía no está terminada.
 

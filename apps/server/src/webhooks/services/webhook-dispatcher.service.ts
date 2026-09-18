@@ -2,6 +2,7 @@ import { ActivityRecordedEvent } from "@activity/types/activity.type"
 import { HTTP_HEADERS } from "@common/constants/application.constant"
 import { DOMAIN_EVENTS } from "@common/constants/domain-events.constant"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
+import { insertEntity, updateEntity } from "@common/database/persistence.helper"
 import { addMilliseconds, nowISO } from "@common/helpers/clock.helper"
 import { describeError } from "@common/helpers/external-response.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
@@ -95,7 +96,7 @@ export class WebhookDispatcherService {
 			if (!subscription.active) {
 				delivery.status = "exhausted"
 				delivery.lastError = "Subscription removed"
-				await this.repository.save(delivery)
+				await updateEntity(this.repository, delivery)
 				continue
 			}
 			await this.attempt(delivery, subscription)
@@ -141,7 +142,8 @@ export class WebhookDispatcherService {
 			sentAt: timestamp,
 			subscriptionIdentifier: subscription.identifier,
 		}
-		return this.repository.save(
+		return insertEntity(
+			this.repository,
 			this.repository.create({
 				attempts: 0,
 				createdAt: timestamp,
@@ -217,7 +219,7 @@ export class WebhookDispatcherService {
 				}
 				break
 		}
-		return toDeliveryRecord(await this.repository.save(delivery))
+		return toDeliveryRecord(await updateEntity(this.repository, delivery))
 	}
 
 	private async post(

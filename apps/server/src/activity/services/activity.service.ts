@@ -6,6 +6,7 @@ import {
 	RecordActivityInput,
 } from "@activity/types/activity.type"
 import { DOMAIN_EVENTS } from "@common/constants/domain-events.constant"
+import { insertEntity } from "@common/database/persistence.helper"
 import { nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
 import { Page } from "@common/types/pagination.type"
@@ -98,7 +99,7 @@ export class ActivityService {
 			title: input.title,
 			type: input.type,
 		})
-		const saved = await this.repository.save(entity)
+		const saved = await insertEntity(this.repository, entity)
 		const record = toActivityRecord(saved)
 		const event: ActivityRecordedEvent = { record }
 		this.eventEmitter.emit(DOMAIN_EVENTS.ACTIVITY_RECORDED, event)

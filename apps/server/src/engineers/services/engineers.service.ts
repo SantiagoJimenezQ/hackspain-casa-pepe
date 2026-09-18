@@ -1,6 +1,7 @@
 import { ActivityService } from "@activity/services/activity.service"
 import { DOMAIN_EVENTS } from "@common/constants/domain-events.constant"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
+import { insertEntity, updateEntity } from "@common/database/persistence.helper"
 import {
 	EntityNotFoundException,
 	InvalidStateTransitionException,
@@ -69,7 +70,7 @@ export class EngineersService {
 			status: "dialing",
 			toolCallIdentifier: command.toolCallIdentifier,
 		})
-		const saved = await this.repository.save(entity)
+		const saved = await insertEntity(this.repository, entity)
 		const record = toEngineerCallRecord(saved)
 		this.logger.log(LOG_MESSAGES.ENGINEERS.CALL_STARTED, {
 			callIdentifier: record.identifier,
@@ -103,7 +104,9 @@ export class EngineersService {
 			case "accepted":
 				saved.status = "in-progress"
 				saved.providerReference = outcome.providerReference
-				return toEngineerCallRecord(await this.repository.save(saved))
+				return toEngineerCallRecord(
+					await updateEntity(this.repository, saved),
+				)
 			case "failed":
 				return this.failCall(saved, outcome.reason)
 		}
@@ -138,7 +141,9 @@ export class EngineersService {
 		entity.status = toStatus(result.outcome)
 		entity.result = result
 		entity.finishedAt = nowISO()
-		const record = toEngineerCallRecord(await this.repository.save(entity))
+		const record = toEngineerCallRecord(
+			await updateEntity(this.repository, entity),
+		)
 		this.logger.log(LOG_MESSAGES.ENGINEERS.CALL_FINISHED, {
 			callIdentifier: record.identifier,
 			outcome: result.outcome,
@@ -192,7 +197,9 @@ export class EngineersService {
 		entity.status = "failed"
 		entity.failureReason = reason
 		entity.finishedAt = nowISO()
-		const record = toEngineerCallRecord(await this.repository.save(entity))
+		const record = toEngineerCallRecord(
+			await updateEntity(this.repository, entity),
+		)
 		await this.activityService.record({
 			correlation: {
 				engineerCallIdentifier: record.identifier,

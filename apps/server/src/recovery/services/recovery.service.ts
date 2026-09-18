@@ -1,6 +1,7 @@
 import { ActivityService } from "@activity/services/activity.service"
 import { DOMAIN_EVENTS } from "@common/constants/domain-events.constant"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
+import { insertEntity, updateEntity } from "@common/database/persistence.helper"
 import {
 	EntityNotFoundException,
 	InvalidStateTransitionException,
@@ -107,7 +108,7 @@ export class RecoveryService {
 			status: "requested",
 			toolCallIdentifier: command.toolCallIdentifier,
 		})
-		const saved = await this.repository.save(entity)
+		const saved = await insertEntity(this.repository, entity)
 		this.logger.log(LOG_MESSAGES.RECOVERY.ACTION_STARTED, {
 			actionIdentifier: saved.identifier,
 			mode: saved.mode,
@@ -137,7 +138,7 @@ export class RecoveryService {
 				saved.providerReference = outcome.providerReference
 				return {
 					action: toRecoveryActionRecord(
-						await this.repository.save(saved),
+						await updateEntity(this.repository, saved),
 					),
 					kind: "in-progress",
 				}
@@ -242,7 +243,7 @@ export class RecoveryService {
 					? "partial"
 					: "failed"
 		const record = toRecoveryActionRecord(
-			await this.repository.save(entity),
+			await updateEntity(this.repository, entity),
 		)
 		this.logger.log(LOG_MESSAGES.RECOVERY.ACTION_FINISHED, {
 			actionIdentifier: record.identifier,

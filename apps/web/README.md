@@ -2,19 +2,34 @@
 
 Responsable: frente de UI.
 
-Aquí irá la aplicación Next.js. Esta carpeta todavía no contiene una aplicación ejecutable.
+Dashboard de operaciones de Casa Pepe. Primera entrega: **Visión general** con datos de ejemplo, mapa de centros de datos y un panel de demo oculto.
 
-## Alcance
+## Comandos
+
+Desde la raíz del repositorio:
+
+```bash
+pnpm install
+pnpm dev
+```
+
+O solo esta app:
+
+```bash
+pnpm --filter web dev
+```
+
+La interfaz queda en [http://localhost:3000](http://localhost:3000).
+
+## Alcance actual
 
 - Resumen del incidente y consecuencias para el negocio.
-- Servicios afectados y recursos disponibles.
-- Plan actual, responsables y cambios respecto al plan anterior.
-- Actividad en directo, con estados de ejecución y errores.
-- Aprobación y rechazo de acciones.
-- Controles separados para iniciar, modificar y reiniciar la demo.
+- Mapa de España con nodos y enlaces verde / ámbar / rojo.
+- Plan del agente, empresas afectadas, migración e infraestructura.
+- Controles de demo (botón Demo o tecla `D`) para reiniciar, ciclar estados y avanzar el agente.
+
+Pendiente cuando exista `apps/server/`: sustituir el snapshot mock por la API y los eventos en directo, sin reescribir las tarjetas.
 
 ## Integración
 
-Consumir la API de `apps/server/` y los formatos acordados en `packages/contracts/`. Los datos de ejemplo deben respetar esos mismos formatos. No incluir credenciales ni importar implementaciones de herramientas en el navegador.
-
-Primera entrega: una pantalla funcional con datos de ejemplo y estados de carga, fallo y espera de aprobación. Después, sustituir la fuente de datos por la API sin cambiar el modelo de la pantalla.
+Consumir la API de `apps/server/` y los formatos acordados en `packages/contracts/`. Los datos de ejemplo viven ahora en `src/lib/mock-snapshot.ts` y deben alinearse con esos contratos. No incluir credenciales ni importar implementaciones de herramientas en el navegador.

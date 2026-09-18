@@ -6,11 +6,11 @@ Our project for the HackSpain hackathon.
 
 [MASTER.md](MASTER.md) recoge el alcance y el reparto del trabajo. [AGENTS.md](AGENTS.md) contiene la guía del reto para los asistentes de desarrollo.
 
-Usaremos una estructura de monorepo, con Next.js como propuesta para la interfaz. Cada frente tiene su carpeta y comparte los contratos de integración. Por ahora solo existe la estructura documental: todavía no hay aplicaciones ejecutables, dependencias ni comandos de arranque.
+Usaremos una estructura de monorepo, con Next.js para la interfaz. Cada frente tiene su carpeta y comparte los contratos de integración. La UI de `apps/web` ya arranca con `pnpm install` y `pnpm dev`.
 
 ```text
 apps/
-  web/                 Interfaz de operaciones (Next.js previsto)
+  web/                 Interfaz de operaciones (Next.js)
   server/              API, eventos y proceso de ejecución
 packages/
   contracts/           Contratos compartidos y ejemplos de mensajes

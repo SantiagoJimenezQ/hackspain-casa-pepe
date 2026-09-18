@@ -4,12 +4,25 @@ import { EngineersModule } from "@engineers/engineers.module"
 import { IncidentsModule } from "@incidents/incidents.module"
 import { Module } from "@nestjs/common"
 import { TypeOrmModule } from "@nestjs/typeorm"
+import { PlansModule } from "@plans/plans.module"
 import { RecoveryModule } from "@recovery/recovery.module"
 import { TasksModule } from "@tasks/tasks.module"
+import { PublicStatusController } from "@tools/controllers/public-status.controller"
 import { ToolsController } from "@tools/controllers/tools.controller"
+import { StatusPublicationEntity } from "@tools/entities/status-publication.entity"
 import { ToolCallEntity } from "@tools/entities/tool-call.entity"
 import { AssignTaskTool } from "@tools/implementations/assign-task.tool"
+import {
+	CommunicationToolsService,
+	PublishStatusUpdateTool,
+	SendIncidentEmailTool,
+} from "@tools/implementations/communication-tools"
 import { ContactEngineerTool } from "@tools/implementations/contact-engineer.tool"
+import {
+	CallEngineerTool,
+	GetIncidentContextTool,
+	SaveRecoveryPlanTool,
+} from "@tools/implementations/mvp-tools"
 import {
 	ExecuteRecoveryTool,
 	VerifyRecoveryTool,
@@ -24,10 +37,11 @@ import { ToolRegistryService } from "@tools/services/tool-registry.service"
 import { ToolsService } from "@tools/services/tools.service"
 
 @Module({
-	controllers: [ToolsController],
+	controllers: [ToolsController, PublicStatusController],
 	exports: [ToolsService, ToolRegistryService],
 	imports: [
-		TypeOrmModule.forFeature([ToolCallEntity]),
+		TypeOrmModule.forFeature([ToolCallEntity, StatusPublicationEntity]),
+		PlansModule,
 		ActivityModule,
 		IncidentsModule,
 		EngineersModule,
@@ -36,6 +50,12 @@ import { ToolsService } from "@tools/services/tools.service"
 		RecoveryModule,
 	],
 	providers: [
+		GetIncidentContextTool,
+		CallEngineerTool,
+		SaveRecoveryPlanTool,
+		CommunicationToolsService,
+		SendIncidentEmailTool,
+		PublishStatusUpdateTool,
 		GetIncidentStateTool,
 		GetServiceHealthTool,
 		GetRecoveryCapacityTool,

@@ -1,6 +1,8 @@
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
 import { HappyRobotCallResultDTO } from "@engineers/dtos/happyrobot-call-result.dto"
+import { IncomingCallDTO } from "@engineers/dtos/incoming-call.dto"
 import { EngineersService } from "@engineers/services/engineers.service"
+import { IncomingCallsService } from "@engineers/services/incoming-calls.service"
 import {
 	Body,
 	Controller,
@@ -23,10 +25,17 @@ export class InboundWebhooksController {
 	private readonly logger = new Logger(InboundWebhooksController.name)
 
 	constructor(
+		private readonly incomingCalls: IncomingCallsService,
 		private readonly engineersService: EngineersService,
 		private readonly recoveryService: RecoveryService,
 	) {}
 
+	@Post("happyrobot/incoming")
+	@HttpCode(HttpStatus.ACCEPTED)
+	@HappyRobotInbound()
+	async incoming(@Body() body: IncomingCallDTO) {
+		return this.incomingCalls.receive(body, "live")
+	}
 	@Post("happyrobot")
 	@HttpCode(HttpStatus.ACCEPTED)
 	@HappyRobotInbound()

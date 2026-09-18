@@ -51,6 +51,12 @@ export function createApplicationConfiguration(
 			engineerPhone: variables.DEMO_ENGINEER_PHONE,
 			engineerRole: variables.DEMO_ENGINEER_ROLE,
 		},
+		email: {
+			apiKey: variables.RESEND_API_KEY,
+			from: variables.INCIDENT_EMAIL_FROM,
+			mode: variables.INCIDENT_EMAIL_MODE as "simulated" | "live",
+			to: variables.INCIDENT_EMAIL_TO,
+		},
 		happyRobot: {
 			apiKey: variables.HAPPYROBOT_API_KEY,
 			mode: variables.HAPPYROBOT_MODE as EngineerCallMode,

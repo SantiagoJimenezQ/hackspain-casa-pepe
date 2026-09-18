@@ -1,3 +1,4 @@
+import { postJSON } from "@casa-pepe/tools"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
 import {
 	describeError,
@@ -95,14 +96,52 @@ export class HTTPRecoveryAdapter implements RecoveryAdapter {
 	}
 
 	async verify(
-		_runIdentifier: string,
+		runIdentifier: string,
 		serviceIdentifier: string,
 	): Promise<VerificationResult> {
 		const { environmentURL } = this.configuration.recovery
 		try {
+			if (serviceIdentifier === "route-assignment") {
+				const deliveryIdentifier = `verification-${runIdentifier}`
+				const result = await postJSON(
+					`${environmentURL}/deliveries`,
+					this.configuration.recovery.environmentAPIKey,
+					{
+						deliveryIdentifier,
+						destination: "Demo depot",
+						runIdentifier,
+					},
+					deliveryIdentifier,
+					Math.min(
+						10000,
+						this.configuration.agent.toolTimeoutMilliseconds - 100,
+					),
+				)
+				const valid =
+					result &&
+					typeof result === "object" &&
+					"deliveryIdentifier" in result &&
+					result.deliveryIdentifier === deliveryIdentifier &&
+					"runIdentifier" in result &&
+					result.runIdentifier === runIdentifier &&
+					"routeIdentifier" in result &&
+					typeof result.routeIdentifier === "string" &&
+					result.routeIdentifier.length > 0 &&
+					"status" in result &&
+					result.status === "assigned"
+				return {
+					detail: valid
+						? `Test delivery ${deliveryIdentifier} assigned to route ${result.routeIdentifier}`
+						: "Test delivery did not receive a valid route assignment",
+					mode: "http",
+					serviceIdentifier,
+					status: valid ? "healthy" : "down",
+					verified: !!valid,
+				}
+			}
 			const response = await firstValueFrom(
 				this.httpService.get<unknown>(
-					`${environmentURL}/recovery/services/${serviceIdentifier}/health`,
+					`${environmentURL}/recovery/services/${encodeURIComponent(serviceIdentifier)}/health?runIdentifier=${encodeURIComponent(runIdentifier)}`,
 					{
 						headers: this.headers(),
 						timeout:

@@ -289,7 +289,7 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 							question: question.question,
 						})),
 					},
-					name: "contact_engineer",
+					name: "call_engineer",
 				},
 				{ kind: "engineer", name: input.engineer.name },
 				"",
@@ -533,6 +533,39 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 		)
 	}
 
+	const version = (input.previousPlan?.version ?? 0) + 1
+	steps.unshift(
+		createStep(
+			`step-email-v${version}`,
+			"Email the recovery plan to the operator",
+			"Communicate priorities, owners and tradeoffs",
+			{ input: { planIdentifier: "" }, name: "send_incident_email" },
+			AGENT_ACTOR,
+			"",
+			0,
+			false,
+			[],
+			timestamp,
+			messages,
+		),
+	)
+	steps.push(
+		createStep(
+			`step-status-v${version}`,
+			"Publish verified recovery status",
+			"Tell customers what works and what remains unavailable",
+			{ input: { planIdentifier: "" }, name: "publish_status_update" },
+			AGENT_ACTOR,
+			"",
+			0,
+			false,
+			steps
+				.filter((s) => s.invocation.name === "verify_recovery")
+				.map((s) => s.identifier),
+			timestamp,
+			messages,
+		),
+	)
 	const orderedSteps = steps.map((step, index) => ({
 		...step,
 		order: index + 1,

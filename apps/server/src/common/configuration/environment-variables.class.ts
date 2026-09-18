@@ -3,6 +3,15 @@ import { Type } from "class-transformer"
 import { IsIn, IsInt, IsString, IsUrl, Min, MinLength } from "class-validator"
 
 export class EnvironmentVariables {
+	@IsIn(["simulated", "live"])
+	INCIDENT_EMAIL_MODE: string = "simulated"
+	@IsString()
+	RESEND_API_KEY: string = ""
+	@IsString()
+	INCIDENT_EMAIL_FROM: string = ""
+	@IsString()
+	INCIDENT_EMAIL_TO: string = ""
+
 	@IsIn(ENVIRONMENTS)
 	ENVIRONMENT: string = "local"
 

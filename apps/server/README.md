@@ -165,3 +165,7 @@ src/
   webhooks/        subscriptions, signed deliveries and inbound webhooks
   replays/         reproduction of previous runs
 ```
+
+## MVP tools
+
+The runtime now also exposes the agreed MVP names, operator email (simulated or Resend), incoming phone reports with operator confirmation, and a public status page and JSON feed. Existing tool names remain compatible. See [MVP tools rehearsal](../../demo/MVP-TOOLS.md) for live integration setup, the local HTTP recovery target and the complete demo sequence.

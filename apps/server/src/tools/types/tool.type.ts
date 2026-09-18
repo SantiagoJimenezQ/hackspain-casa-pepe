@@ -3,10 +3,7 @@ import {
 	ResourceState,
 	ServiceState,
 } from "@incidents/types/incident.type"
-import {
-	RecoveryActionKind,
-	ServiceHealthStatus,
-} from "@scenarios/types/scenario.type"
+import { ServiceHealthStatus } from "@scenarios/types/scenario.type"
 import {
 	TOOL_CALL_STATUSES,
 	TOOL_INTERACTION_KINDS,
@@ -29,16 +26,14 @@ export interface ToolContext {
 	readonly decisionIdentifier: string
 }
 
-export interface ContactEngineerInput {
-	readonly engineerName: string
-	readonly engineerPhone: string
-	readonly engineerRole: string
-	readonly purpose: string
-	readonly questions: ReadonlyArray<{
-		readonly key: string
-		readonly question: string
-	}>
-}
+export type ContactEngineerInput =
+	import("../../../../../packages/contracts/tools").CallEngineerInput
+export type RequestApprovalInput =
+	import("../../../../../packages/contracts/tools").RequestApprovalInput
+export type ExecuteRecoveryInput =
+	import("../../../../../packages/contracts/tools").ExecuteRecoveryInput
+export type VerifyRecoveryInput =
+	import("../../../../../packages/contracts/tools").VerifyRecoveryInput
 
 export interface AssignTaskInput {
 	readonly title: string
@@ -49,29 +44,10 @@ export interface AssignTaskInput {
 	readonly serviceIdentifier: string
 }
 
-export interface RequestApprovalInput {
-	readonly actionSummary: string
-	readonly reason: string
-	readonly consequences: ReadonlyArray<string>
-	readonly serviceIdentifier: string
-	readonly capacityUnits: number
-}
-
-export interface ExecuteRecoveryInput {
-	readonly serviceIdentifier: string
-	readonly actionKind: RecoveryActionKind
-	readonly actionDescription: string
-	readonly capacityUnits: number
-	readonly resourceIdentifier: string
-	readonly approvalIdentifier: string
-}
-
-export interface VerifyRecoveryInput {
-	readonly serviceIdentifier: string
-	readonly recoveryActionIdentifier: string
-}
-
 export type ToolInvocation =
+	| import("../../../../../packages/contracts/tools").MvpToolInvocation<
+			Omit<import("@plans/types/plan.type").CreatePlanInput, "previous">
+	  >
 	| {
 			readonly name: "get_incident_state"
 			readonly input: Record<string, never>
@@ -89,15 +65,6 @@ export type ToolInvocation =
 			readonly input: ContactEngineerInput
 	  }
 	| { readonly name: "assign_task"; readonly input: AssignTaskInput }
-	| {
-			readonly name: "request_approval"
-			readonly input: RequestApprovalInput
-	  }
-	| {
-			readonly name: "execute_recovery"
-			readonly input: ExecuteRecoveryInput
-	  }
-	| { readonly name: "verify_recovery"; readonly input: VerifyRecoveryInput }
 
 export interface EngineerAnswer {
 	readonly key: string
@@ -106,6 +73,16 @@ export interface EngineerAnswer {
 }
 
 export type ToolOutput =
+	| import("../../../../../packages/contracts/tools").CommunicationReceipt
+	| {
+			readonly kind: "incident-context"
+			readonly incident: IncidentSnapshot
+			readonly plan: import("@plans/types/plan.type").PlanRecord | null
+	  }
+	| {
+			readonly kind: "recovery-plan"
+			readonly plan: import("@plans/types/plan.type").PlanRecord
+	  }
 	| { readonly kind: "incident-state"; readonly incident: IncidentSnapshot }
 	| {
 			readonly kind: "service-health"

@@ -41,20 +41,20 @@ export function IncidentCard() {
             {incident.localTime} · {t("incident.location")}
           </p>
         </div>
-        <h1 className="text-[28px] leading-8 font-semibold tracking-tight text-foreground">
+        <h1 className="text-[32px] leading-9 font-semibold tracking-tight text-foreground">
           {t("incident.title")}
         </h1>
-        <p className="mt-3 max-w-[36ch] text-[13px] leading-5 text-muted-foreground">
+        <p className="mt-3 max-w-[40ch] text-[13px] leading-5 text-muted-foreground">
           {t("incident.description")}
         </p>
       </div>
-      <dl className="mt-6 grid grid-cols-2 gap-x-4 gap-y-4">
+      <dl className="mt-5 grid grid-cols-4 gap-x-3">
         {kpis.map((kpi) => (
-          <div key={kpi.label}>
-            <dd className="text-[22px] leading-7 font-semibold tracking-tight text-foreground tabular-nums">
+          <div key={kpi.label} className="min-w-0">
+            <dd className="text-[20px] leading-6 font-semibold tracking-tight text-foreground tabular-nums">
               {kpi.value}
             </dd>
-            <dt className="mt-1 text-[11px] text-muted-foreground">{kpi.label}</dt>
+            <dt className="mt-1 text-[11px] leading-4 text-muted-foreground">{kpi.label}</dt>
           </div>
         ))}
       </dl>

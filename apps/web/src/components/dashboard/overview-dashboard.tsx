@@ -9,8 +9,8 @@ import { SpainMap } from "@/components/dashboard/spain-map";
 
 export function OverviewDashboard() {
   return (
-    <div className="flex min-h-0 flex-1 gap-3 p-3">
-      <div className="grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1.2fr)_minmax(0,1fr)_auto] gap-3">
+    <div className="grid h-full min-h-0 flex-1 grid-cols-[minmax(0,1.45fr)_minmax(420px,0.9fr)] gap-3 p-3">
+      <div className="grid min-h-0 grid-rows-[minmax(0,1.2fr)_minmax(0,1fr)_auto] gap-3">
         <div className="grid min-h-0 grid-cols-[minmax(280px,0.92fr)_minmax(0,1.15fr)] gap-3">
           <IncidentCard />
           <SpainMap />
@@ -21,9 +21,7 @@ export function OverviewDashboard() {
         </div>
         <InfrastructureCard />
       </div>
-      <div className="flex min-h-0 w-[440px] shrink-0 flex-col">
-        <AgentPanel />
-      </div>
+      <AgentPanel />
     </div>
   );
 }

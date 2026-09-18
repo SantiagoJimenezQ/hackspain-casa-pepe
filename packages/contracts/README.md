@@ -1,29 +1,16 @@
-# Contratos compartidos
+# Shared API contracts
 
-Responsabilidad compartida entre UI, backend y agente. Coordinar los cambios con los consumidores antes de integrarlos.
+The dummy API contract is implemented and ready for UI/agent consumers:
 
-Esta carpeta contendrá los esquemas, tipos y ejemplos de intercambio. Los nombres siguientes son una propuesta pendiente de concretar, no una API implementada.
+- `status.d.ts`: complete snapshot and legacy service commands.
+- `dashboard.d.ts`: regions, companies, migration state and commands.
+- `simulation.d.ts`: scenario config, clock state, concurrency guards.
+- `openapi.json`: OpenAPI 3.1 document, served by `GET /api/openapi.json`.
+- `generate-openapi.mjs`: maintained schema source; run `npm run docs:generate` after edits.
+- `status.example.json`, `status.incident.example.json`, `status.randomized.example.json`: complete response fixtures.
 
-## Entidades iniciales
+Read [the API integration guide](../../apps/server/API.md) for endpoints, errors, state transitions, replay semantics and client examples. All POST payloads accept the optional `CommandGuard` fields. Successful commands return a complete `StatusSnapshot`.
 
-| Entidad | Contenido |
-|---|---|
-| `Incident` | Estado e impacto del incidente |
-| `Service` | Salud y dependencias |
-| `Resource` | Capacidad disponible y asignada |
-| `PlanStep` | Acción, prioridad, responsable y estado |
-| `ActivityEvent` | Identificador, fecha, tipo, origen y contenido |
-| `ToolCall` | Parámetros, estado, resultado y error |
-| `Approval` | Acción concreta, versión del plan y decisión del operador |
+Contracts contain no credentials or UI/provider dependencies. Keep examples, declarations, schema and runtime behavior aligned when changing an endpoint. `npm test` includes reference/example checks and response-shape smoke tests.
 
-## Acuerdos que debemos cerrar primero
-
-- Identificador de ejecución y correlación entre eventos y acciones.
-- Formato del estado inicial y de las actualizaciones.
-- Estados de herramientas: `pending`, `running`, `succeeded`, `failed` y, si se necesita, `cancelled`.
-- Ciclo de una aprobación, incluida su invalidación cuando cambia el plan.
-- Formato de errores y comportamiento ante mensajes duplicados.
-- Interfaz para iniciar, introducir eventos y reiniciar el escenario.
-- Ejemplos de un recorrido completo para desarrollar cada componente de forma independiente.
-
-No introducir dependencias de UI, del harness ni de proveedores externos. Primera entrega: contrato mínimo revisado por los tres frentes y ejemplos coherentes con él.
+Agent-owned plans, tool calls and operator approvals are not implemented in this contract yet. Static company priorities and the simulated activity indicator must not be presented as real agent decisions.

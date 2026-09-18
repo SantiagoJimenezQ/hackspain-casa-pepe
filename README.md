@@ -43,3 +43,7 @@ Next.js cubre la interfaz. El proceso que espera llamadas, aprobaciones y nuevos
 4. Coordinar los cambios de configuración raíz y mantener un único gestor de paquetes y su archivo de bloqueo cuando se inicialice el proyecto.
 5. Integrar pronto el recorrido: evento, UI, propuesta, aprobación, acción y comprobación del resultado.
 6. Documentar en cada carpeta sus comandos reales cuando exista implementación. Mantener las credenciales fuera del repositorio.
+
+## API simulada para UI y agente
+
+[Guía de integración](apps/server/API.md) · [OpenAPI](packages/contracts/openapi.json) · [Cliente ejecutable](apps/server/demo-client.mjs). La simulación admite modo manual y modo aleatorio reproducible por semilla, con controles de pausa, avance y reanudación.

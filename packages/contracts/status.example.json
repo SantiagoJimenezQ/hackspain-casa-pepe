@@ -1,0 +1,197 @@
+{
+  "simulated": true,
+  "runId": "911bc08b-8b8a-45aa-a041-60dd712d1c17",
+  "revision": 1,
+  "region": "eu-west-1",
+  "status": "healthy",
+  "incident": null,
+  "services": [
+    {
+      "id": "route-assignment",
+      "status": "healthy",
+      "recoveryCapacityRequired": 1
+    },
+    {
+      "id": "package-tracking",
+      "status": "healthy",
+      "recoveryCapacityRequired": 1
+    }
+  ],
+  "backup": {
+    "region": "eu-west-2",
+    "capacity": 2
+  },
+  "regions": [
+    {
+      "id": "eu-west-1",
+      "name": "Europe · Ireland",
+      "latitude": 53.35,
+      "longitude": -6.26,
+      "role": "primary",
+      "capacity": 6,
+      "status": "healthy",
+      "allocated": 3,
+      "available": 3
+    },
+    {
+      "id": "eu-west-2",
+      "name": "Europe · London",
+      "latitude": 51.51,
+      "longitude": -0.13,
+      "role": "backup",
+      "capacity": 2,
+      "status": "healthy",
+      "allocated": 0,
+      "available": 2
+    },
+    {
+      "id": "us-east-1",
+      "name": "North America · Virginia",
+      "latitude": 38.13,
+      "longitude": -78.45,
+      "role": "backup",
+      "capacity": 3,
+      "status": "healthy",
+      "allocated": 1,
+      "available": 2
+    },
+    {
+      "id": "ap-southeast-1",
+      "name": "Asia · Singapore",
+      "latitude": 1.35,
+      "longitude": 103.82,
+      "role": "backup",
+      "capacity": 2,
+      "status": "healthy",
+      "allocated": 1,
+      "available": 1
+    },
+    {
+      "id": "sa-east-1",
+      "name": "South America · São Paulo",
+      "latitude": -23.55,
+      "longitude": -46.63,
+      "role": "backup",
+      "capacity": 2,
+      "status": "healthy",
+      "allocated": 1,
+      "available": 1
+    }
+  ],
+  "companies": [
+    {
+      "id": "alphatech",
+      "name": "Alphatech",
+      "users": 2340,
+      "regionId": "eu-west-1",
+      "homeRegionId": "eu-west-1",
+      "priority": 1,
+      "priorityReason": "Critical route dispatch operations",
+      "status": "healthy",
+      "migrationId": null
+    },
+    {
+      "id": "globex",
+      "name": "Globex",
+      "users": 1890,
+      "regionId": "eu-west-1",
+      "homeRegionId": "eu-west-1",
+      "priority": 2,
+      "priorityReason": "Time-sensitive delivery coordination",
+      "status": "healthy",
+      "migrationId": null
+    },
+    {
+      "id": "initech",
+      "name": "Initech",
+      "users": 1230,
+      "regionId": "eu-west-1",
+      "homeRegionId": "eu-west-1",
+      "priority": 3,
+      "priorityReason": "Package tracking can tolerate a short delay",
+      "status": "healthy",
+      "migrationId": null
+    },
+    {
+      "id": "umbrella",
+      "name": "Umbrella",
+      "users": 980,
+      "regionId": "us-east-1",
+      "homeRegionId": "us-east-1",
+      "priority": 4,
+      "priorityReason": "Regional operations currently available",
+      "status": "healthy",
+      "migrationId": null
+    },
+    {
+      "id": "soylent",
+      "name": "Soylent",
+      "users": 1120,
+      "regionId": "ap-southeast-1",
+      "homeRegionId": "ap-southeast-1",
+      "priority": 5,
+      "priorityReason": "Regional operations currently available",
+      "status": "healthy",
+      "migrationId": null
+    },
+    {
+      "id": "stark-industries",
+      "name": "Stark Industries",
+      "users": 920,
+      "regionId": "sa-east-1",
+      "homeRegionId": "sa-east-1",
+      "priority": 6,
+      "priorityReason": "Regional operations currently available",
+      "status": "healthy",
+      "migrationId": null
+    }
+  ],
+  "migrations": [],
+  "events": [
+    {
+      "id": "33c7a9a8-ff0f-456e-b32e-9969ac57c7ba",
+      "runId": "911bc08b-8b8a-45aa-a041-60dd712d1c17",
+      "revision": 1,
+      "occurredAt": "2026-09-18T19:31:08.483Z",
+      "simulationMinute": 0,
+      "source": "simulation",
+      "type": "simulation.reset",
+      "detail": "Fresh demo initialized"
+    }
+  ],
+  "simulation": {
+    "mode": "manual",
+    "seed": 42,
+    "difficulty": "medium",
+    "automaticEvents": true,
+    "maxConcurrentDisruptions": 2,
+    "paused": true,
+    "elapsedMinutes": 0,
+    "generatedDisruptions": 0
+  },
+  "updatedAt": "2026-09-18T19:31:08.483Z",
+  "summary": {
+    "totalCompanies": 6,
+    "totalUsers": 8480,
+    "affectedCompanies": 0,
+    "affectedUsers": 0,
+    "online": 6,
+    "degraded": 0,
+    "offline": 0,
+    "companiesOnlinePercent": 100,
+    "migration": {
+      "total": 0,
+      "running": 0,
+      "succeeded": 0,
+      "failed": 0,
+      "cancelled": 0,
+      "progressPercent": 0
+    }
+  },
+  "agent": {
+    "simulated": true,
+    "status": "idle",
+    "currentAction": "Monitoring simulated infrastructure",
+    "lastEventId": "33c7a9a8-ff0f-456e-b32e-9969ac57c7ba"
+  }
+}

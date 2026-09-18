@@ -1,4 +1,7 @@
-import { SPANISH_SCENARIO_IDENTIFIER } from "@scenarios/constants/scenario.constant"
+import {
+	DEFAULT_SCENARIO_IDENTIFIER,
+	SPANISH_SCENARIO_IDENTIFIER,
+} from "@scenarios/constants/scenario.constant"
 import { ScenarioDefinition } from "@scenarios/types/scenario.type"
 
 export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
@@ -44,6 +47,7 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 		simulatedSummary:
 			"La ingeniera confirmó que el snapshot de la base de datos es reciente y que la asignación de rutas está lista para desplegar. La capacidad de respaldo sigue sin confirmar a la espera de una actualización.",
 	},
+	family: DEFAULT_SCENARIO_IDENTIFIER,
 	identifier: SPANISH_SCENARIO_IDENTIFIER,
 	initialFacts: [
 		{

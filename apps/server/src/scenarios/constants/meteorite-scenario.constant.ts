@@ -44,6 +44,7 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 		simulatedSummary:
 			"The engineer confirmed the database snapshot is recent and route assignment is ready to deploy. Backup capacity remains unconfirmed pending an update.",
 	},
+	family: DEFAULT_SCENARIO_IDENTIFIER,
 	identifier: DEFAULT_SCENARIO_IDENTIFIER,
 	initialFacts: [
 		{

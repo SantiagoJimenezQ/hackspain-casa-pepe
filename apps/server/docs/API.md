@@ -13,6 +13,8 @@ Every response is JSON. Identifiers carry a prefix: `run_`, `inc_`, `plan_`, `ap
 
 Without a valid credential: `401` with `{ "statusCode": 401, "message": "An API key is required" }`.
 
+Browser `EventSource` clients cannot set headers: `GET /activity/stream` also accepts the key as the `apiKey` query parameter.
+
 ## Error format
 
 ```json
@@ -57,13 +59,25 @@ Checks the Postgres (Supabase) connection and returns the integration modes.
 
 ---
 
+## Scenarios (`/scenarios`)
+
+### `GET /scenarios`
+
+`[{ identifier, language ("en" | "es"), title, company, region, backupRegion, serviceCount, reportedCapacity, capacityAfterTwist }]`. Two identifiers exist today: `meteorite-eu-west-1` (English, default) and `meteorite-eu-west-1-es` (Spanish). The scenario language drives every operator-facing text produced by the agent.
+
+### `GET /scenarios/:identifier`
+
+Full definition: services with dependencies and recovery actions, backup resource, initial facts, engineer briefing (questions and scripted answers) and the twist.
+
+---
+
 ## Demo controls (`/demo`)
 
 Separate from the operator controls. Each call returns the resulting `IncidentSnapshot` and emits activity events.
 
 ### `POST /demo/start`
 
-Optional body `{ "scenarioIdentifier": "meteorite-eu-west-1" }`. Deactivates the previous run (it ends in `reset` state) and creates a new one with every service healthy. Events: `incident.run-started`.
+Optional body `{ "scenarioIdentifier": "meteorite-eu-west-1" }` (or `meteorite-eu-west-1-es` for Spanish). Deactivates the previous run (it ends in `reset` state) and creates a new one with every service healthy. Events: `incident.run-started`.
 
 ### `POST /demo/impact`
 
@@ -187,7 +201,8 @@ A specific version.
 | `identifier`, `version`, `status` (`active` \| `superseded` \| `completed`), `previousPlanIdentifier` | Versioning |
 | `decisionIdentifier`, `reason`, `triggeredBy`, `summary` | Why this version exists and what it proposes |
 | `priorities[]` | `rank`, `serviceIdentifier`, `serviceName`, `score`, `businessImpact`, `capacityUnits`, `decision` (`recover-now` \| `postpone` \| `waiting-for-dependency` \| `already-healthy`), `reason`, `blockedBy[]` |
-| `capacity` | `resourceIdentifier`, `totalCapacity`, `plannedUnits`, `remainingUnits`, `postponedUnits`, `confirmed` |
+| `capacity` | `resourceIdentifier`, `totalCapacity` (reported), `assumedCapacity` (what the plan really counts on), `plannedUnits`, `remainingUnits`, `postponedUnits`, `confirmed` |
+| `assumptions[]` | Sentences explaining knowledge from previous runs applied to this plan, for example that the reported capacity was overstated before |
 | `steps[]` | See PlanStep |
 | `changesFromPrevious[]` | `kind` (`capacity-changed` \| `step-postponed` \| `step-added` \| `step-removed` \| `priority-changed` \| `step-reprioritized`), `description`, `serviceIdentifier`, `stepIdentifier` |
 
@@ -266,6 +281,16 @@ Event: `task.updated`.
 
 Response `{ items: ActivityRecord[], total, limit, offset }` ordered by ascending `sequence`.
 
+### `GET /activity/stream?runIdentifier=&types=&afterSequence=&limit=&apiKey=`
+
+Server-sent events (`text/event-stream`). First replays up to `limit` events after `afterSequence` for the run (active run when omitted), then pushes every new event live. Each message has `event: <type>`, `id: <sequence>` and `data: <ActivityRecord>`. Reconnect with the last `id` as `afterSequence` to resume without gaps.
+
+```js
+const source = new EventSource(`${base}/activity/stream?apiKey=${apiKey}&afterSequence=0`)
+source.addEventListener("plan.revised", (message) => render(JSON.parse(message.data)))
+source.onmessage = (message) => append(JSON.parse(message.data))
+```
+
 **ActivityRecord**
 
 | Field | Content |
@@ -326,6 +351,38 @@ Creates a new run with `runKind: "replay"`, deactivates the current one and re-e
 ### `GET /replays/status`
 
 `{ status: "idle" | "running" | "finished" | "cancelled", runIdentifier, sourceRunIdentifier, totalEvents, emittedEvents, speedFactor, startedAt, finishedAt }`.
+
+---
+
+## Learning (`/learning`)
+
+The agent learns across runs of the same scenario family (both languages share the knowledge).
+
+### `GET /learning/insights?scenarioIdentifier=`
+
+`LearningInsightRecord[]`: `identifier`, `scenarioIdentifier` (the family), `kind` (`capacity-overstated` \| `recovery-outcome`), `subject` (resource or service), `observations`, `lastRunIdentifier`, `data`, `summary`, `updatedAt`.
+
+- `capacity-overstated`: recorded when a `capacity-limited` event confirms less capacity than the dashboard reported. The next plan built while the capacity is unconfirmed uses the lowest confirmed value and explains it in `assumptions`.
+- `recovery-outcome`: count of `success`, `partial` and `failure` outcomes per service, shown in the report as lessons.
+
+### `DELETE /learning/insights`
+
+Forgets everything. Returns `{ removed }`. Use it before a demo that should start with no prior knowledge.
+
+### `GET /learning/reports/current`, `GET /learning/reports/:runIdentifier`
+
+Post-incident **RunReport**:
+
+| Field | Content |
+|---|---|
+| `runIdentifier`, `scenarioIdentifier`, `status`, `startedAt`, `impactedAt`, `resolvedAt` | Run identity and lifecycle |
+| `durations` | `impactToFirstPlanMilliseconds`, `impactToFirstApprovalRequestMilliseconds`, `approvalWaitMilliseconds`, `impactToFirstRecoveryMilliseconds`, `impactToResolutionMilliseconds` (null when not reached) |
+| `planVersions[]` | `version`, `triggeredBy`, `summary`, `createdAt`, `changeCount`, `assumptions` |
+| `approvals[]` | `identifier`, `actionSummary`, `status`, `decidedBy`, `waitMilliseconds` |
+| `services` | `recovered[]`, `degraded[]`, `down[]` service names |
+| `toolCalls` | `total`, `succeeded`, `failed`, `simulated` |
+| `eventCount`, `timeline[]` | Key events (`occurredAt`, `type`, `title`, `summary`, `simulated`) |
+| `lessons[]` | Insight summaries for the scenario family |
 
 ---
 

@@ -1,5 +1,6 @@
 import { ActivityService } from "@activity/services/activity.service"
 import { AGENT_TICK_INTERVAL_MILLISECONDS } from "@agent/constants/agent.constant"
+import { AGENT_MESSAGES } from "@agent/constants/agent-messages.constant"
 import { interpretAnswer } from "@agent/helpers/answer-interpretation.helper"
 import {
 	buildPlanDraft,
@@ -9,10 +10,12 @@ import { AgentCycleStateService } from "@agent/services/agent-cycle-state.servic
 import {
 	AgentStatus,
 	AgentTrigger,
+	CapacityAssumption,
 	CycleOutcome,
 	PlanBuildInput,
 	ServiceConstraint,
 } from "@agent/types/agent.type"
+import { AgentMessages } from "@agent/types/agent-messages.type"
 import { ApprovalsService } from "@approvals/services/approvals.service"
 import {
 	ApprovalDecidedEvent,
@@ -30,6 +33,7 @@ import {
 	IncidentEventAppliedEvent,
 	IncidentSnapshot,
 } from "@incidents/types/incident.type"
+import { LearningService } from "@learning/services/learning.service"
 import { Injectable, Logger } from "@nestjs/common"
 import { OnEvent } from "@nestjs/event-emitter"
 import { Interval } from "@nestjs/schedule"
@@ -37,6 +41,7 @@ import { diffPlans } from "@plans/helpers/plan-diff.helper"
 import { PlansService } from "@plans/services/plans.service"
 import { PlanRecord, PlanStep } from "@plans/types/plan.type"
 import { RecoveryService } from "@recovery/services/recovery.service"
+import { ScenarioDefinition } from "@scenarios/types/scenario.type"
 import { ToolsService } from "@tools/services/tools.service"
 import {
 	ToolCallFinishedEvent,
@@ -69,6 +74,7 @@ export class AgentService {
 		private readonly engineersService: EngineersService,
 		private readonly recoveryService: RecoveryService,
 		private readonly activityService: ActivityService,
+		private readonly learningService: LearningService,
 		private readonly configuration: ConfigurationService,
 		private readonly cycleState: AgentCycleStateService,
 	) {}
@@ -88,13 +94,22 @@ export class AgentService {
 					kind: "impact-detected",
 				})
 				return
-			case "capacity-limited":
+			case "capacity-limited": {
+				const scenario = this.scenarioOf(incident)
+				await this.learningService.recordCapacityObservation(
+					scenario.identifier,
+					scenario.resource.identifier,
+					scenario.resource.reportedCapacity,
+					applied.event.availableCapacity,
+					incident.runIdentifier,
+				)
 				await this.requestCycle(incident.runIdentifier, {
 					description: `Backup capacity confirmed at ${applied.event.availableCapacity} units: ${applied.event.reason}`,
 					harnessEventIdentifier: applied.identifier,
 					kind: "conditions-changed",
 				})
 				return
+			}
 			case "service-health-changed":
 				await this.requestCycle(incident.runIdentifier, {
 					description: `${applied.event.serviceIdentifier} changed to ${applied.event.status}: ${applied.event.reason}`,
@@ -241,6 +256,14 @@ export class AgentService {
 		}
 	}
 
+	private scenarioOf(incident: IncidentSnapshot): ScenarioDefinition {
+		return this.incidentsService.getScenario(incident.scenarioIdentifier)
+	}
+
+	private messagesFor(incident: IncidentSnapshot): AgentMessages {
+		return AGENT_MESSAGES[this.scenarioOf(incident).language]
+	}
+
 	private async executeCycle(
 		runIdentifier: string,
 		trigger: AgentTrigger,
@@ -268,6 +291,7 @@ export class AgentService {
 				reason: "No impact has been detected yet",
 			}
 		}
+		const messages = this.messagesFor(incident)
 		const cycles =
 			await this.incidentsService.incrementAgentCycles(runIdentifier)
 		if (cycles > this.configuration.agent.maximumCyclesPerRun) {
@@ -285,7 +309,7 @@ export class AgentService {
 				runIdentifier,
 				simulated: false,
 				source: "agent",
-				summary: `The agent stopped after ${cycles - 1} cycles to avoid running without progress. An operator can request a cycle manually`,
+				summary: messages.limitReached(cycles - 1),
 				title: "Agent limit reached",
 				type: "agent.limit-reached",
 			})
@@ -297,7 +321,7 @@ export class AgentService {
 			trigger: trigger.kind,
 		})
 
-		let plan = await this.ensurePlan(incident, trigger)
+		let plan = await this.ensurePlan(incident, trigger, messages)
 		let executed = 0
 		let progressed = plan.status === "active"
 		while (
@@ -311,7 +335,7 @@ export class AgentService {
 			}
 			const refreshedIncident =
 				await this.runsService.getByRunIdentifier(runIdentifier)
-			await this.executeStep(refreshedIncident, plan, step)
+			await this.executeStep(refreshedIncident, plan, step, messages)
 			executed += 1
 			progressed = true
 			const refreshed =
@@ -330,7 +354,7 @@ export class AgentService {
 					step.status === "awaiting-approval" ||
 					step.status === "running",
 			)
-			.map((step) => `${step.title} (${step.status})`)
+			.map((step) => messages.stepWaiting(step.title, step.status))
 		const openSteps = plan.steps.filter((step) =>
 			OPEN_STATUSES.includes(step.status),
 		)
@@ -343,6 +367,7 @@ export class AgentService {
 			executed,
 			waitingFor,
 			!openSteps.length,
+			messages,
 		)
 		this.logger.log(LOG_MESSAGES.AGENT.CYCLE_FINISHED, {
 			executed,
@@ -361,6 +386,7 @@ export class AgentService {
 	private async ensurePlan(
 		incident: IncidentSnapshot,
 		trigger: AgentTrigger,
+		messages: AgentMessages,
 	): Promise<PlanRecord> {
 		const latest = await this.plansService.findLatestPlan(
 			incident.runIdentifier,
@@ -370,7 +396,8 @@ export class AgentService {
 			return this.createPlanVersion(
 				incident,
 				null,
-				describeTrigger(trigger),
+				describeTrigger(trigger, messages),
+				messages,
 			)
 		}
 		if (latest.status === "completed") {
@@ -381,7 +408,8 @@ export class AgentService {
 				return this.createPlanVersion(
 					incident,
 					latest,
-					describeTrigger(trigger),
+					describeTrigger(trigger, messages),
+					messages,
 				)
 			}
 			return latest
@@ -390,7 +418,8 @@ export class AgentService {
 			return this.createPlanVersion(
 				incident,
 				latest,
-				describeTrigger(trigger),
+				describeTrigger(trigger, messages),
+				messages,
 			)
 		}
 		return latest
@@ -431,14 +460,13 @@ export class AgentService {
 		incident: IncidentSnapshot,
 		previous: PlanRecord | null,
 		triggeredBy: string,
+		messages: AgentMessages,
 	): Promise<PlanRecord> {
-		const scenario = this.incidentsService.getScenario(
-			incident.scenarioIdentifier,
-		)
+		const scenario = this.scenarioOf(incident)
 		if (previous) {
 			await this.approvalsService.supersedePending(
 				incident.runIdentifier,
-				`Plan revised: ${triggeredBy}`,
+				messages.planRevised(triggeredBy),
 			)
 		}
 		const rejectedApprovals = await this.approvalsService.list(
@@ -447,7 +475,10 @@ export class AgentService {
 		)
 		const rejectedServices: ReadonlyArray<ServiceConstraint> =
 			rejectedApprovals.map((approval) => ({
-				reason: `Rejected by ${approval.decidedBy}${approval.comment ? `: ${approval.comment}` : ""}. The agent respects the operator decision`,
+				reason: messages.rejectedConstraint(
+					approval.decidedBy,
+					approval.comment,
+				),
 				serviceIdentifier: approval.serviceIdentifier,
 			}))
 		const failedServices: ReadonlyArray<ServiceConstraint> = previous
@@ -460,12 +491,19 @@ export class AgentService {
 								this.configuration.agent.maximumStepAttempts,
 					)
 					.map((step) => ({
-						reason: `Recovery failed: ${step.statusReason}`,
+						reason: messages.recoveryFailedConstraint(
+							step.statusReason,
+						),
 						serviceIdentifier: step.serviceIdentifier,
 					}))
 			: []
+		const capacityAssumption = await this.resolveCapacityAssumption(
+			incident,
+			scenario,
+		)
 		const input: PlanBuildInput = {
 			briefing: scenario.engineerBriefing,
+			capacityAssumption,
 			engineer: {
 				name: this.configuration.demo.engineerName,
 				phone: this.configuration.demo.engineerPhone,
@@ -473,6 +511,7 @@ export class AgentService {
 			},
 			failedServices,
 			incident,
+			language: scenario.language,
 			maximumStepAttempts: this.configuration.agent.maximumStepAttempts,
 			previousPlan: previous,
 			rejectedServices,
@@ -489,6 +528,7 @@ export class AgentService {
 			: []
 		const decisionIdentifier = createPrefixedIdentifier("dec")
 		const plan = await this.plansService.createVersion({
+			assumptions: draft.assumptions,
 			capacity: draft.capacity,
 			changesFromPrevious: changes,
 			decisionIdentifier,
@@ -518,6 +558,7 @@ export class AgentService {
 			},
 			incidentIdentifier: incident.identifier,
 			payload: {
+				assumptions: plan.assumptions,
 				changes,
 				confirmedFacts: incident.facts
 					.filter((fact) => fact.status === "confirmed")
@@ -531,13 +572,38 @@ export class AgentService {
 			runIdentifier: incident.runIdentifier,
 			simulated: false,
 			source: "agent",
-			summary: explainDecision(plan, changes.length),
+			summary: explainDecision(plan, changes.length, messages),
 			title: previous
 				? "Decision: plan revised"
 				: "Decision: initial plan",
 			type: "decision.recorded",
 		})
 		return plan
+	}
+
+	private async resolveCapacityAssumption(
+		incident: IncidentSnapshot,
+		scenario: ScenarioDefinition,
+	): Promise<CapacityAssumption | null> {
+		const resource = incident.resources[0]
+		if (resource.confirmed) {
+			return null
+		}
+		const insight = await this.learningService.findCapacityInsight(
+			scenario.identifier,
+			resource.identifier,
+		)
+		if (!insight) {
+			return null
+		}
+		if (insight.confirmedCapacity >= resource.totalCapacity) {
+			return null
+		}
+		return {
+			assumedCapacity: insight.confirmedCapacity,
+			observations: insight.observations,
+			reportedCapacity: insight.reportedCapacity,
+		}
 	}
 
 	private nextRunnableStep(plan: PlanRecord): PlanStep | null {
@@ -561,13 +627,14 @@ export class AgentService {
 		incident: IncidentSnapshot,
 		plan: PlanRecord,
 		step: PlanStep,
+		messages: AgentMessages,
 	): Promise<void> {
 		if (
 			step.status === "proposed" &&
 			step.requiresApproval &&
 			!step.approvalIdentifier
 		) {
-			await this.requestApprovalFor(incident, plan, step)
+			await this.requestApprovalFor(incident, plan, step, messages)
 			return
 		}
 		const invocation = await this.resolveInvocation(plan, step)
@@ -591,7 +658,9 @@ export class AgentService {
 					{
 						attempts: attempt,
 						status: "running",
-						statusReason: `Waiting for ${step.invocation.name} to finish`,
+						statusReason: messages.waitingForTool(
+							step.invocation.name,
+						),
 						toolCallIdentifier: outcome.toolCall.identifier,
 					},
 				)
@@ -612,8 +681,7 @@ export class AgentService {
 						{
 							attempts: attempt,
 							status: "running",
-							statusReason:
-								"A previous call for this step is still running",
+							statusReason: messages.previousCallRunning,
 							toolCallIdentifier: outcome.toolCall.identifier,
 						},
 					)
@@ -633,6 +701,7 @@ export class AgentService {
 		incident: IncidentSnapshot,
 		plan: PlanRecord,
 		step: PlanStep,
+		messages: AgentMessages,
 	): Promise<void> {
 		const service = incident.services.find(
 			(candidate) => candidate.identifier === step.serviceIdentifier,
@@ -670,8 +739,7 @@ export class AgentService {
 				{
 					approvalIdentifier: toolCall.output.approvalIdentifier,
 					status: "awaiting-approval",
-					statusReason:
-						"Waiting for the operator to approve or reject the action",
+					statusReason: messages.waitingForOperator,
 					toolCallIdentifier: toolCall.identifier,
 				},
 			)
@@ -679,7 +747,7 @@ export class AgentService {
 		}
 		const message = toolCall.error
 			? toolCall.error.message
-			: "Could not request the approval"
+			: messages.couldNotRequestApproval
 		await this.plansService.updateStep(plan.identifier, step.identifier, {
 			status: "failed",
 			statusReason: message,
@@ -748,6 +816,7 @@ export class AgentService {
 		step: PlanStep,
 		toolCall: ToolCallRecord,
 	): Promise<void> {
+		const messages = this.messagesFor(incident)
 		if (toolCall.error) {
 			const canRetry =
 				toolCall.error.retryable &&
@@ -766,7 +835,10 @@ export class AgentService {
 					resultSummary: toolCall.error.message,
 					status: canRetry ? "proposed" : "failed",
 					statusReason: canRetry
-						? `Attempt ${step.attempts} failed (${toolCall.error.message}). Retrying`
+						? messages.attemptFailedRetrying(
+								step.attempts,
+								toolCall.error.message,
+							)
 						: toolCall.error.message,
 					toolCallIdentifier: toolCall.identifier,
 				},
@@ -781,7 +853,7 @@ export class AgentService {
 				{
 					attempts: step.attempts,
 					status: "failed",
-					statusReason: "The tool finished without a result",
+					statusReason: messages.toolWithoutResult,
 					toolCallIdentifier: toolCall.identifier,
 				},
 			)
@@ -801,7 +873,10 @@ export class AgentService {
 						attempts: step.attempts,
 						resultSummary: output.summary,
 						status: "completed",
-						statusReason: `${confirmed} facts confirmed by the engineer in ${output.mode} mode`,
+						statusReason: messages.factsConfirmed(
+							confirmed,
+							output.mode,
+						),
 						toolCallIdentifier: toolCall.identifier,
 					},
 				)
@@ -813,14 +888,23 @@ export class AgentService {
 					step.identifier,
 					{
 						attempts: step.attempts,
-						resultSummary: `Task ${output.taskIdentifier} created`,
+						resultSummary: messages.taskCreated(
+							output.taskIdentifier,
+						),
 						status: "completed",
-						statusReason: "Task registered with an owner",
+						statusReason: messages.taskRegistered,
 						toolCallIdentifier: toolCall.identifier,
 					},
 				)
 				return
 			case "recovery-execution":
+				await this.learningService.recordRecoveryOutcome(
+					incident.scenarioIdentifier,
+					step.serviceIdentifier,
+					output.outcome,
+					output.detail,
+					incident.runIdentifier,
+				)
 				await this.plansService.updateStep(
 					plan.identifier,
 					step.identifier,
@@ -836,8 +920,14 @@ export class AgentService {
 								: "completed",
 						statusReason:
 							output.outcome === "failure"
-								? `Recovery failed in ${output.mode} mode: ${output.detail}`
-								: `Recovery ${output.outcome} in ${output.mode} mode. Pending verification`,
+								? messages.recoveryFailed(
+										output.mode,
+										output.detail,
+									)
+								: messages.recoveryPendingVerification(
+										output.outcome,
+										output.mode,
+									),
 						toolCallIdentifier: toolCall.identifier,
 					},
 				)
@@ -851,6 +941,7 @@ export class AgentService {
 					output.status,
 					output.verified,
 					output.detail,
+					messages,
 				)
 				return
 			case "approval":
@@ -863,7 +954,7 @@ export class AgentService {
 					{
 						attempts: step.attempts,
 						status: "completed",
-						statusReason: "Information gathered",
+						statusReason: messages.informationGathered,
 						toolCallIdentifier: toolCall.identifier,
 					},
 				)
@@ -879,6 +970,7 @@ export class AgentService {
 		status: string,
 		verified: boolean,
 		detail: string,
+		messages: AgentMessages,
 	): Promise<void> {
 		if (verified) {
 			await this.plansService.updateStep(
@@ -888,8 +980,7 @@ export class AgentService {
 					attempts: step.attempts,
 					resultSummary: detail,
 					status: "completed",
-					statusReason:
-						"Recovered and verified with an independent check",
+					statusReason: messages.recoveredAndVerified,
 					toolCallIdentifier: toolCall.identifier,
 				},
 			)
@@ -903,8 +994,7 @@ export class AgentService {
 					attempts: step.attempts,
 					resultSummary: detail,
 					status: "completed",
-					statusReason:
-						"Partially recovered. A follow-up task was assigned to finish the recovery",
+					statusReason: messages.partiallyRecovered,
 					toolCallIdentifier: toolCall.identifier,
 				},
 			)
@@ -917,10 +1007,15 @@ export class AgentService {
 					input: {
 						assigneeName: this.configuration.demo.engineerName,
 						assigneeRole: this.configuration.demo.engineerRole,
-						description: `${step.serviceIdentifier} answers but is degraded: ${detail}. Finish the recovery and confirm when healthy.`,
+						description: messages.followUpTaskDescription(
+							step.serviceIdentifier,
+							detail,
+						),
 						priority: "high",
 						serviceIdentifier: step.serviceIdentifier,
-						title: `Finish partial recovery of ${step.serviceIdentifier}`,
+						title: messages.followUpTaskTitle(
+							step.serviceIdentifier,
+						),
 					},
 					name: "assign_task",
 				},
@@ -935,7 +1030,7 @@ export class AgentService {
 			attempts: this.configuration.agent.maximumStepAttempts,
 			resultSummary: detail,
 			status: "failed",
-			statusReason: `Verification failed, the service is still ${status}: ${detail}`,
+			statusReason: messages.verificationFailed(status, detail),
 			toolCallIdentifier: toolCall.identifier,
 		})
 	}
@@ -948,9 +1043,7 @@ export class AgentService {
 		}>,
 		mode: "simulated" | "live",
 	): Promise<number> {
-		const scenario = this.incidentsService.getScenario(
-			incident.scenarioIdentifier,
-		)
+		const scenario = this.scenarioOf(incident)
 		let confirmed = 0
 		for (const answer of answers) {
 			const question = scenario.engineerBriefing.questions.find(
@@ -964,7 +1057,7 @@ export class AgentService {
 				incident.runIdentifier,
 				question.confirmsFact,
 				status,
-				`${this.configuration.demo.engineerName} by phone (${mode})`,
+				`${this.configuration.demo.engineerName} (${mode})`,
 			)
 			if (status === "confirmed") {
 				confirmed += 1
@@ -999,6 +1092,10 @@ export class AgentService {
 		if (!step) {
 			return
 		}
+		const incident = await this.runsService.getByRunIdentifier(
+			approval.runIdentifier,
+		)
+		const messages = this.messagesFor(incident)
 		switch (approval.status) {
 			case "approved":
 				await this.plansService.updateStep(
@@ -1006,7 +1103,10 @@ export class AgentService {
 					step.identifier,
 					{
 						status: "approved",
-						statusReason: `Approved by ${approval.decidedBy}${approval.comment ? `: ${approval.comment}` : ""}`,
+						statusReason: messages.approvedBy(
+							approval.decidedBy,
+							approval.comment,
+						),
 					},
 				)
 				return
@@ -1016,7 +1116,10 @@ export class AgentService {
 					step.identifier,
 					{
 						status: "rejected",
-						statusReason: `Rejected by ${approval.decidedBy}${approval.comment ? `: ${approval.comment}` : ""}`,
+						statusReason: messages.rejectedBy(
+							approval.decidedBy,
+							approval.comment,
+						),
 					},
 				)
 				return
@@ -1027,8 +1130,7 @@ export class AgentService {
 					{
 						approvalIdentifier: "",
 						status: "proposed",
-						statusReason:
-							"The approval expired, it will be requested again",
+						statusReason: messages.approvalExpiredRequestAgain,
 					},
 				)
 				return
@@ -1044,6 +1146,7 @@ export class AgentService {
 		executed: number,
 		waitingFor: ReadonlyArray<string>,
 		planFinished: boolean,
+		messages: AgentMessages,
 	): Promise<void> {
 		const recovered = incident.services
 			.filter((service) => service.status === "healthy")
@@ -1053,12 +1156,12 @@ export class AgentService {
 			.map((service) => `${service.name} (${service.status})`)
 		const nextStep = this.nextRunnableStep(plan)
 		const nextDescription = waitingFor.length
-			? `Waiting for: ${waitingFor.join(", ")}`
+			? messages.waitingFor(waitingFor)
 			: nextStep
-				? `Next: ${nextStep.title}`
+				? messages.nextStep(nextStep.title)
 				: planFinished
-					? "Plan finished"
-					: "Nothing runnable right now"
+					? messages.planFinished
+					: messages.nothingRunnable
 		await this.activityService.record({
 			correlation: {
 				decisionIdentifier: plan.decisionIdentifier,
@@ -1076,52 +1179,64 @@ export class AgentService {
 			runIdentifier: incident.runIdentifier,
 			simulated: false,
 			source: "agent",
-			summary: `Recovered: ${recovered.length ? recovered.join(", ") : "nothing yet"}. Still failing: ${failing.length ? failing.join(", ") : "nothing"}. ${nextDescription}`,
+			summary: messages.cycleSummary(recovered, failing, nextDescription),
 			title: "Agent cycle finished",
 			type: "agent.cycle-finished",
 		})
 	}
 }
 
-function describeTrigger(trigger: AgentTrigger): string {
+function describeTrigger(
+	trigger: AgentTrigger,
+	messages: AgentMessages,
+): string {
 	switch (trigger.kind) {
 		case "impact-detected":
-			return "Impact detected in the primary region"
+			return messages.triggerImpact
 		case "conditions-changed":
 			return trigger.description
 		case "tool-call-finished":
-			return `Tool call ${trigger.toolCallIdentifier} finished`
+			return messages.triggerToolFinished(trigger.toolCallIdentifier)
 		case "approval-decided":
-			return `Operator decided on approval ${trigger.approvalIdentifier}`
+			return messages.triggerApprovalDecided(trigger.approvalIdentifier)
 		case "timeouts-expired":
 			return trigger.description
 		case "operator-requested":
-			return `Cycle requested by ${trigger.operatorName}`
+			return messages.triggerOperator(trigger.operatorName)
 		case "follow-up":
-			return "Follow-up after the previous cycle"
+			return messages.triggerFollowUp
 	}
 }
 
-function explainDecision(plan: PlanRecord, changeCount: number): string {
-	const recoverNow = plan.priorities.filter(
-		(priority) => priority.decision === "recover-now",
-	)
-	const postponed = plan.priorities.filter(
-		(priority) => priority.decision === "postpone",
-	)
+function explainDecision(
+	plan: PlanRecord,
+	changeCount: number,
+	messages: AgentMessages,
+): string {
 	const parts: string[] = []
-	for (const priority of recoverNow) {
+	for (const priority of plan.priorities.filter(
+		(candidate) => candidate.decision === "recover-now",
+	)) {
 		parts.push(
-			`${priority.rank}. ${priority.serviceName}: ${priority.reason}`,
+			messages.decisionRecoverNow(
+				priority.rank,
+				priority.serviceName,
+				priority.reason,
+			),
 		)
 	}
-	for (const priority of postponed) {
-		parts.push(`Postponed ${priority.serviceName}: ${priority.reason}`)
+	for (const priority of plan.priorities.filter(
+		(candidate) => candidate.decision === "postpone",
+	)) {
+		parts.push(
+			messages.decisionPostponed(priority.serviceName, priority.reason),
+		)
+	}
+	for (const assumption of plan.assumptions) {
+		parts.push(assumption)
 	}
 	if (changeCount > 0) {
-		parts.push(
-			`${changeCount} changes compared with version ${plan.version - 1}`,
-		)
+		parts.push(messages.decisionChanges(changeCount, plan.version - 1))
 	}
 	return parts.join(" | ")
 }

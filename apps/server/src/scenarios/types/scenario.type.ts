@@ -85,6 +85,7 @@ export interface ScenarioSupportContact {
 
 export interface ScenarioDefinition {
 	readonly identifier: string
+	readonly family: string
 	readonly language: ScenarioLanguage
 	readonly title: string
 	readonly company: string

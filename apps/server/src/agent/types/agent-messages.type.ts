@@ -23,8 +23,18 @@ export interface AgentMessages {
 	waitingForDependency(dependencies: ReadonlyArray<string>): string
 	dependsOnBlocked(dependencies: ReadonlyArray<string>): string
 	insufficientCapacity(details: InsufficientCapacityDetails): string
-	requiredByDependent(impact: BusinessImpactLevel, dependentName: string, units: number, unit: string): string
-	recoverNow(impact: BusinessImpactLevel, impactDescription: string, units: number, unit: string): string
+	requiredByDependent(
+		impact: BusinessImpactLevel,
+		dependentName: string,
+		units: number,
+		unit: string,
+	): string
+	recoverNow(
+		impact: BusinessImpactLevel,
+		impactDescription: string,
+		units: number,
+		unit: string,
+	): string
 	readonly contactEngineerTitle: string
 	prepareTaskTitle(serviceName: string, backupRegion: string): string
 	prepareTaskReason(serviceName: string, reason: string): string
@@ -37,10 +47,26 @@ export interface AgentMessages {
 	supportDescription(postponedNames: string): string
 	supportTaskTitle(postponedNames: string): string
 	postponedSummary(items: ReadonlyArray<PostponedItem>): string
-	summaryRecover(names: ReadonlyArray<string>, plannedUnits: number, totalUnits: number, unit: string, region: string, postponed: string): string
-	summaryNothingFits(totalUnits: number, unit: string, postponed: string): string
+	summaryRecover(
+		names: ReadonlyArray<string>,
+		plannedUnits: number,
+		totalUnits: number,
+		unit: string,
+		region: string,
+		postponed: string,
+	): string
+	summaryNothingFits(
+		totalUnits: number,
+		unit: string,
+		postponed: string,
+	): string
 	readonly summaryAllHealthy: string
-	historicalCapacityAssumption(reportedUnits: number, assumedUnits: number, unit: string, runs: number): string
+	historicalCapacityAssumption(
+		reportedUnits: number,
+		assumedUnits: number,
+		unit: string,
+		runs: number,
+	): string
 	retryingAfterFailure(reason: string): string
 	readonly approvalRequestedAgain: string
 	readonly proposedByAgent: string
@@ -72,13 +98,21 @@ export interface AgentMessages {
 	triggerApprovalDecided(approvalIdentifier: string): string
 	triggerOperator(operatorName: string): string
 	readonly triggerFollowUp: string
-	cycleSummary(recovered: ReadonlyArray<string>, failing: ReadonlyArray<string>, next: string): string
+	cycleSummary(
+		recovered: ReadonlyArray<string>,
+		failing: ReadonlyArray<string>,
+		next: string,
+	): string
 	waitingFor(items: ReadonlyArray<string>): string
 	nextStep(title: string): string
 	readonly planFinished: string
 	readonly nothingRunnable: string
 	stepWaiting(title: string, status: string): string
-	decisionRecoverNow(rank: number, serviceName: string, reason: string): string
+	decisionRecoverNow(
+		rank: number,
+		serviceName: string,
+		reason: string,
+	): string
 	decisionPostponed(serviceName: string, reason: string): string
 	decisionChanges(count: number, previousVersion: number): string
 	limitReached(cycles: number): string

@@ -6,7 +6,15 @@ import { RunsService } from "@incidents/services/runs.service"
 import { Controller, MessageEvent, Query, Sse } from "@nestjs/common"
 import { EventEmitter2 } from "@nestjs/event-emitter"
 import { ApiOperation, ApiSecurity, ApiTags } from "@nestjs/swagger"
-import { Observable, concat, filter, from, fromEvent, map, mergeMap } from "rxjs"
+import {
+	concat,
+	filter,
+	from,
+	fromEvent,
+	map,
+	mergeMap,
+	Observable,
+} from "rxjs"
 
 @ApiTags("Activity")
 @ApiSecurity("operator")
@@ -24,7 +32,9 @@ export class ActivityStreamController {
 			"Server-sent events with the activity of a run. Replays events after `afterSequence`, then pushes new ones live. Browsers can authenticate with ?apiKey=",
 	})
 	stream(@Query() query: ListActivityDTO): Observable<MessageEvent> {
-		const backlog = from(this.runsService.resolveRunIdentifier(query.runIdentifier)).pipe(
+		const backlog = from(
+			this.runsService.resolveRunIdentifier(query.runIdentifier),
+		).pipe(
 			mergeMap((runIdentifier) =>
 				from(
 					this.activityService.list({
@@ -40,12 +50,25 @@ export class ActivityStreamController {
 				),
 			),
 		)
-		const live = from(this.runsService.resolveRunIdentifier(query.runIdentifier)).pipe(
+		const live = from(
+			this.runsService.resolveRunIdentifier(query.runIdentifier),
+		).pipe(
 			mergeMap((runIdentifier) =>
-				fromEvent(this.eventEmitter, DOMAIN_EVENTS.ACTIVITY_RECORDED).pipe(
+				fromEvent(
+					this.eventEmitter,
+					DOMAIN_EVENTS.ACTIVITY_RECORDED,
+				).pipe(
 					map((event) => event as ActivityRecordedEvent),
-					filter((event) => event.record.runIdentifier === runIdentifier || query.runIdentifier === undefined),
-					filter((event) => !query.types.length || query.types.includes(event.record.type)),
+					filter(
+						(event) =>
+							event.record.runIdentifier === runIdentifier ||
+							query.runIdentifier === undefined,
+					),
+					filter(
+						(event) =>
+							!query.types.length ||
+							query.types.includes(event.record.type),
+					),
 					map((event) => ({ record: event.record, runIdentifier })),
 				),
 			),

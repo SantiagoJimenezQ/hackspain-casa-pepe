@@ -7,6 +7,7 @@ import { METEORITE_SCENARIO } from "@scenarios/constants/meteorite-scenario.cons
 function draftFor(totalCapacity: number) {
 	return buildPlanDraft({
 		briefing: METEORITE_SCENARIO.engineerBriefing,
+		capacityAssumption: null,
 		engineer: {
 			name: "Marta Ruiz",
 			phone: "+34600000000",
@@ -14,6 +15,7 @@ function draftFor(totalCapacity: number) {
 		},
 		failedServices: [],
 		incident: createImpactedIncident(totalCapacity),
+		language: "en",
 		maximumStepAttempts: 2,
 		previousPlan: null,
 		rejectedServices: [],
@@ -26,6 +28,7 @@ describe("diffPlans", () => {
 	it("explains what changed when the backup capacity shrinks", () => {
 		const first = draftFor(12)
 		const previous: PlanRecord = {
+			assumptions: first.assumptions,
 			capacity: first.capacity,
 			changesFromPrevious: [],
 			createdAt: "2026-09-18T10:06:00.000Z",

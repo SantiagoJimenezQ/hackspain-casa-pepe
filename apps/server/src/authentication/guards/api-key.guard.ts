@@ -26,7 +26,10 @@ interface AuthorizationHeader {
 }
 
 function readQueryAPIKey(request: Request): string {
-	return [request.query[API_KEY_QUERY_PARAMETER]].flat().map((value) => String(value)).join("")
+	return [request.query[API_KEY_QUERY_PARAMETER]]
+		.flat()
+		.map((value) => String(value))
+		.join("")
 }
 
 function parseAuthorizationHeader(rawHeader: string): AuthorizationHeader {
@@ -76,10 +79,16 @@ export class APIKeyGuard implements CanActivate {
 		return scope
 	}
 
-	private resolvePrincipal(rawHeader: string, queryAPIKey: string): Principal {
+	private resolvePrincipal(
+		rawHeader: string,
+		queryAPIKey: string,
+	): Principal {
 		const header = parseAuthorizationHeader(rawHeader)
 		const apiKey = this.configuration.authentication.apiKey
-		if (header.scheme === AUTHORIZATION_SCHEME && isSharedSecretValid(apiKey, header.credential)) {
+		if (
+			header.scheme === AUTHORIZATION_SCHEME &&
+			isSharedSecretValid(apiKey, header.credential)
+		) {
 			return { kind: "operator" }
 		}
 		if (queryAPIKey && isSharedSecretValid(apiKey, queryAPIKey)) {

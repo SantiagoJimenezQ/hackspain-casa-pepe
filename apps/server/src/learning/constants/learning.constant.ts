@@ -1,4 +1,7 @@
-export const INSIGHT_KINDS = ["capacity-overstated", "recovery-outcome"] as const
+export const INSIGHT_KINDS = [
+	"capacity-overstated",
+	"recovery-outcome",
+] as const
 
 export const LEARNING_INSIGHT_ENTITY_NAME = "Learning insight"
 

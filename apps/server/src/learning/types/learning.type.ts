@@ -4,8 +4,16 @@ import { INSIGHT_KINDS } from "@learning/constants/learning.constant"
 export type InsightKind = (typeof INSIGHT_KINDS)[number]
 
 export type InsightData =
-	| { readonly kind: "capacity-overstated"; readonly reportedCapacity: number; readonly confirmedCapacity: number }
-	| { readonly kind: "recovery-outcome"; readonly outcomes: Record<string, number>; readonly lastDetail: string }
+	| {
+			readonly kind: "capacity-overstated"
+			readonly reportedCapacity: number
+			readonly confirmedCapacity: number
+	  }
+	| {
+			readonly kind: "recovery-outcome"
+			readonly outcomes: Record<string, number>
+			readonly lastDetail: string
+	  }
 
 export interface LearningInsightRecord {
 	readonly identifier: string
@@ -69,8 +77,17 @@ export interface RunReport {
 	readonly durations: ReportDurations
 	readonly planVersions: ReadonlyArray<ReportPlanVersion>
 	readonly approvals: ReadonlyArray<ReportApproval>
-	readonly services: { readonly recovered: ReadonlyArray<string>; readonly degraded: ReadonlyArray<string>; readonly down: ReadonlyArray<string> }
-	readonly toolCalls: { readonly total: number; readonly succeeded: number; readonly failed: number; readonly simulated: number }
+	readonly services: {
+		readonly recovered: ReadonlyArray<string>
+		readonly degraded: ReadonlyArray<string>
+		readonly down: ReadonlyArray<string>
+	}
+	readonly toolCalls: {
+		readonly total: number
+		readonly succeeded: number
+		readonly failed: number
+		readonly simulated: number
+	}
 	readonly eventCount: number
 	readonly timeline: ReadonlyArray<ReportTimelineEntry>
 	readonly lessons: ReadonlyArray<string>

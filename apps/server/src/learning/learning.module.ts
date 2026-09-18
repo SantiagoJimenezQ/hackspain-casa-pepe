@@ -13,7 +13,14 @@ import { ToolsModule } from "@tools/tools.module"
 @Module({
 	controllers: [LearningController],
 	exports: [LearningService, RunReportService],
-	imports: [TypeOrmModule.forFeature([LearningInsightEntity]), RunsModule, ActivityModule, PlansModule, ApprovalsModule, ToolsModule],
+	imports: [
+		TypeOrmModule.forFeature([LearningInsightEntity]),
+		RunsModule,
+		ActivityModule,
+		PlansModule,
+		ApprovalsModule,
+		ToolsModule,
+	],
 	providers: [LearningService, RunReportService],
 })
 export class LearningModule {}

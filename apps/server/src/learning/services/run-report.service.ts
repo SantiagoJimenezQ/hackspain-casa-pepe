@@ -10,7 +10,10 @@ import { Injectable } from "@nestjs/common"
 import { PlansService } from "@plans/services/plans.service"
 import { ToolsService } from "@tools/services/tools.service"
 
-function firstOfType(events: ReadonlyArray<ActivityRecord>, type: string): ActivityRecord | null {
+function firstOfType(
+	events: ReadonlyArray<ActivityRecord>,
+	type: string,
+): ActivityRecord | null {
 	const found = events.find((event) => event.type === type)
 	if (!found) {
 		return null
@@ -18,7 +21,10 @@ function firstOfType(events: ReadonlyArray<ActivityRecord>, type: string): Activ
 	return found
 }
 
-function elapsedOrNull(from: string, event: ActivityRecord | null): number | null {
+function elapsedOrNull(
+	from: string,
+	event: ActivityRecord | null,
+): number | null {
 	if (!event) {
 		return null
 	}
@@ -40,31 +46,64 @@ export class RunReportService {
 	) {}
 
 	async build(runIdentifier: string): Promise<RunReport> {
-		const incident = await this.runsService.getByRunIdentifier(runIdentifier)
-		const [events, plans, approvals, toolCalls, insights] = await Promise.all([
-			this.activityService.listAllForRun(runIdentifier),
-			this.plansService.listForRun(runIdentifier),
-			this.approvalsService.list(runIdentifier),
-			this.toolsService.list(runIdentifier),
-			this.learningService.list(incident.scenarioIdentifier),
-		])
-		const firstRecovery = events.find((event) => event.type === "recovery.executed")
-		const reportApprovals: ReadonlyArray<ReportApproval> = approvals.map((approval) => ({
-			actionSummary: approval.actionSummary,
-			decidedBy: approval.decidedBy,
-			identifier: approval.identifier,
-			status: approval.status,
-			waitMilliseconds: approval.decidedAt ? elapsedMilliseconds(approval.requestedAt, approval.decidedAt) : null,
-		}))
-		const approvalWait = reportApprovals.reduce((total, approval) => total + (approval.waitMilliseconds === null ? 0 : approval.waitMilliseconds), 0)
+		const incident =
+			await this.runsService.getByRunIdentifier(runIdentifier)
+		const [events, plans, approvals, toolCalls, insights] =
+			await Promise.all([
+				this.activityService.listAllForRun(runIdentifier),
+				this.plansService.listForRun(runIdentifier),
+				this.approvalsService.list(runIdentifier),
+				this.toolsService.list(runIdentifier),
+				this.learningService.list(incident.scenarioIdentifier),
+			])
+		const firstRecovery = events.find(
+			(event) => event.type === "recovery.executed",
+		)
+		const reportApprovals: ReadonlyArray<ReportApproval> = approvals.map(
+			(approval) => ({
+				actionSummary: approval.actionSummary,
+				decidedBy: approval.decidedBy,
+				identifier: approval.identifier,
+				status: approval.status,
+				waitMilliseconds: approval.decidedAt
+					? elapsedMilliseconds(
+							approval.requestedAt,
+							approval.decidedAt,
+						)
+					: null,
+			}),
+		)
+		const approvalWait = reportApprovals.reduce(
+			(total, approval) =>
+				total +
+				(approval.waitMilliseconds === null
+					? 0
+					: approval.waitMilliseconds),
+			0,
+		)
 		return {
 			approvals: reportApprovals,
 			durations: {
 				approvalWaitMilliseconds: approvalWait,
-				impactToFirstApprovalRequestMilliseconds: elapsedOrNull(incident.impactedAt, firstOfType(events, "approval.requested")),
-				impactToFirstPlanMilliseconds: elapsedOrNull(incident.impactedAt, firstOfType(events, "plan.created")),
-				impactToFirstRecoveryMilliseconds: elapsedOrNull(incident.impactedAt, firstRecovery ? firstRecovery : null),
-				impactToResolutionMilliseconds: incident.resolvedAt && incident.impactedAt ? elapsedMilliseconds(incident.impactedAt, incident.resolvedAt) : null,
+				impactToFirstApprovalRequestMilliseconds: elapsedOrNull(
+					incident.impactedAt,
+					firstOfType(events, "approval.requested"),
+				),
+				impactToFirstPlanMilliseconds: elapsedOrNull(
+					incident.impactedAt,
+					firstOfType(events, "plan.created"),
+				),
+				impactToFirstRecoveryMilliseconds: elapsedOrNull(
+					incident.impactedAt,
+					firstRecovery ? firstRecovery : null,
+				),
+				impactToResolutionMilliseconds:
+					incident.resolvedAt && incident.impactedAt
+						? elapsedMilliseconds(
+								incident.impactedAt,
+								incident.resolvedAt,
+							)
+						: null,
 			},
 			eventCount: events.length,
 			impactedAt: incident.impactedAt,
@@ -81,19 +120,44 @@ export class RunReportService {
 			runIdentifier,
 			scenarioIdentifier: incident.scenarioIdentifier,
 			services: {
-				degraded: incident.services.filter((service) => service.status === "degraded").map((service) => service.name),
-				down: incident.services.filter((service) => service.status === "down" || service.status === "recovering").map((service) => service.name),
-				recovered: incident.services.filter((service) => service.status === "healthy").map((service) => service.name),
+				degraded: incident.services
+					.filter((service) => service.status === "degraded")
+					.map((service) => service.name),
+				down: incident.services
+					.filter(
+						(service) =>
+							service.status === "down" ||
+							service.status === "recovering",
+					)
+					.map((service) => service.name),
+				recovered: incident.services
+					.filter((service) => service.status === "healthy")
+					.map((service) => service.name),
 			},
 			startedAt: incident.startedAt,
 			status: incident.status,
 			timeline: events
-				.filter((event) => REPORT_TIMELINE_EVENT_TYPES.includes(event.type as (typeof REPORT_TIMELINE_EVENT_TYPES)[number]))
-				.map((event) => ({ occurredAt: event.occurredAt, simulated: event.simulated, summary: event.summary, title: event.title, type: event.type })),
+				.filter((event) =>
+					REPORT_TIMELINE_EVENT_TYPES.includes(
+						event.type as (typeof REPORT_TIMELINE_EVENT_TYPES)[number],
+					),
+				)
+				.map((event) => ({
+					occurredAt: event.occurredAt,
+					simulated: event.simulated,
+					summary: event.summary,
+					title: event.title,
+					type: event.type,
+				})),
 			toolCalls: {
-				failed: toolCalls.filter((toolCall) => toolCall.status === "failed").length,
-				simulated: toolCalls.filter((toolCall) => toolCall.simulated).length,
-				succeeded: toolCalls.filter((toolCall) => toolCall.status === "succeeded").length,
+				failed: toolCalls.filter(
+					(toolCall) => toolCall.status === "failed",
+				).length,
+				simulated: toolCalls.filter((toolCall) => toolCall.simulated)
+					.length,
+				succeeded: toolCalls.filter(
+					(toolCall) => toolCall.status === "succeeded",
+				).length,
 				total: toolCalls.length,
 			},
 		}

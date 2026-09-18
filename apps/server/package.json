@@ -38,7 +38,8 @@
 			"^@recovery/(.*)$": "<rootDir>/recovery/$1",
 			"^@tools/(.*)$": "<rootDir>/tools/$1",
 			"^@agent/(.*)$": "<rootDir>/agent/$1",
-			"^@replays/(.*)$": "<rootDir>/replays/$1"
+			"^@replays/(.*)$": "<rootDir>/replays/$1",
+			"^@learning/(.*)$": "<rootDir>/learning/$1"
 		},
 		"rootDir": "src",
 		"testEnvironment": "node",

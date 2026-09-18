@@ -1,5 +1,5 @@
-import { PlaceholderView } from "@/components/dashboard/placeholder-view";
+import { redirect } from "next/navigation";
 
 export default function MigracionPage() {
-  return <PlaceholderView titleKey="nav.migration" />;
+  redirect("/");
 }

@@ -1,27 +1,96 @@
 "use client";
 
-import { AgentPanel } from "@/components/dashboard/agent/agent-panel";
-import { CompaniesTable } from "@/components/dashboard/companies-table";
-import { IncidentCard } from "@/components/dashboard/incident-card";
-import { InfrastructureCard } from "@/components/dashboard/infrastructure-card";
-import { MigrationCard } from "@/components/dashboard/migration-card";
-import { SpainMap } from "@/components/dashboard/spain-map";
+import { useState, type ReactNode } from "react";
+import { AlertTriangle, Bot, CheckCircle2, ChevronRight, CircleDashed, Clock3, Database, Gauge, MapPin, PhoneCall, Play, Radio, RefreshCcw, ServerCrash, ShieldCheck, Wrench, XCircle } from "lucide-react";
+import { useDashboard } from "@/components/dashboard/dashboard-provider";
+import { Panel } from "@/components/dashboard/panel";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import type { ActivityRecord, Approval, PlanStepStatus } from "@/lib/casa-pepe-types";
+import { cn } from "@/lib/utils";
 
+const dateFormat = new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const stamp = (value?: string) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : dateFormat.format(date);
+};
+function statusClass(status: string) {
+  if (["healthy", "completed", "approved", "succeeded", "done", "recovered"].includes(status)) return "border-emerald-400/25 bg-emerald-400/10 text-emerald-300";
+  if (["down", "failed", "rejected", "expired"].includes(status)) return "border-red-400/25 bg-red-400/10 text-red-300";
+  if (["running", "recovering", "in-progress", "pending", "awaiting-approval", "proposed"].includes(status)) return "border-amber-400/25 bg-amber-400/10 text-amber-200";
+  return "border-sky-400/25 bg-sky-400/10 text-sky-200";
+}
+function StatusPill({ status }: { status: string }) {
+  return <Badge variant="outline" className={cn("border px-2 font-mono text-[10px] capitalize", statusClass(status))}>{status.replaceAll("-", " ")}</Badge>;
+}
+function SectionTitle({ icon, title, detail }: { icon: ReactNode; title: string; detail?: string }) {
+  return <div className="mb-3 flex items-start justify-between gap-3"><div className="flex items-center gap-2 text-[12px] font-semibold tracking-[0.12em] text-foreground uppercase"><span className="text-primary">{icon}</span>{title}</div>{detail ? <span className="text-[11px] text-muted-foreground">{detail}</span> : null}</div>;
+}
+
+function WaitingScreen() {
+  const { status, error, retry, startDemo, busyAction } = useDashboard();
+  const failed = status === "error";
+  return <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-8"><div className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-card p-8 shadow-2xl shadow-black/20"><div className="pointer-events-none absolute -top-32 -right-24 size-72 rounded-full bg-primary/15 blur-3xl" /><div className="relative"><div className="mb-8 flex size-12 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary">{failed ? <AlertTriangle className="size-6" /> : <Radio className="size-6" />}</div><p className="font-mono text-[11px] tracking-[0.16em] text-primary uppercase">Casa Pepe · Centro de mando</p><h1 className="mt-3 max-w-xl text-4xl font-semibold tracking-tight text-foreground">{failed ? "El centro de mando no puede alcanzar al coordinador." : "La simulación está preparada."}</h1><p className="mt-4 max-w-xl text-[15px] leading-6 text-muted-foreground">{failed ? error : "Inicia el escenario del meteorito para observar, priorizar, coordinar y adaptar la recuperación en tiempo real."}</p>{failed ? <p className="mt-3 font-mono text-[11px] text-muted-foreground">Revisa CASA_PEPE_API_BASE_URL y CASA_PEPE_API_KEY en el entorno del frontend.</p> : null}<div className="mt-8 flex flex-wrap gap-3">{failed ? <Button size="lg" onClick={() => void retry()}><RefreshCcw /> Reintentar conexión</Button> : <Button size="lg" onClick={() => void startDemo()} disabled={busyAction !== null}><Play />{busyAction === "start" ? "Iniciando…" : "Iniciar demo en español"}</Button>}</div></div></div></div>;
+}
+function Metric({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
+  return <div className="rounded-lg border border-border/80 bg-background/40 p-3"><div className="flex items-center gap-1.5 text-[10px] tracking-wide text-muted-foreground uppercase">{icon}{label}</div><p className="mt-1.5 truncate font-mono text-[14px] font-semibold text-foreground">{value}</p></div>;
+}
+function IncidentSummary() {
+  const { overview } = useDashboard(); if (!overview) return null;
+  const { incident } = overview; const affected = incident.services.filter((service) => service.status !== "healthy");
+  return <Panel className="relative overflow-hidden p-5"><div className="pointer-events-none absolute -top-12 right-0 size-40 rounded-full bg-red-500/10 blur-3xl" /><div className="relative"><div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-red-300 uppercase"><span className="size-2 animate-pulse rounded-full bg-red-400" />{incident.status}</div><h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{incident.title}</h1><p className="mt-2 max-w-2xl text-[13px] leading-5 text-muted-foreground">{incident.narrative}</p></div><StatusPill status={incident.active ? "activo" : "inactivo"} /></div><div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4"><Metric label="Región afectada" value={incident.region} icon={<MapPin />} /><Metric label="Respaldo" value={incident.backupRegion} icon={<ShieldCheck />} /><Metric label="Servicios afectados" value={`${affected.length}/${incident.services.length}`} icon={<ServerCrash />} /><Metric label="Inicio" value={stamp(incident.startedAt)} icon={<Clock3 />} /></div></div></Panel>;
+}
+function ServicesPanel() {
+  const { overview } = useDashboard(); if (!overview) return null;
+  return <Panel className="min-h-0 p-4"><SectionTitle icon={<ServerCrash className="size-4" />} title="Servicios y dependencias" detail={`${overview.incident.services.length} monitorizados`} /><div className="max-h-[336px] space-y-2 overflow-y-auto pr-1 [content-visibility:auto]">{overview.incident.services.map((service) => <div key={service.identifier} className="rounded-lg border border-border/80 bg-background/30 p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="text-[13px] font-medium text-foreground">{service.name}</p><StatusPill status={service.status} /><Badge variant="outline" className="border-border/80 text-[10px] capitalize">{service.businessImpact}</Badge></div><p className="mt-1 text-[11px] leading-4 text-muted-foreground">{service.statusReason || service.impactDescription}</p></div><span className="shrink-0 font-mono text-[11px] text-primary">{service.recoveryCapacityUnits} u.</span></div>{service.dependencies.length ? <p className="mt-2 border-t border-border/60 pt-2 text-[10px] text-muted-foreground">Depende de: <span className="font-mono text-foreground">{service.dependencies.join(" · ")}</span></p> : null}</div>)}</div></Panel>;
+}
+function PlanPanel() {
+  const { overview } = useDashboard(); if (!overview) return null;
+  if (overview.plan.kind === "none") return <Panel className="p-4"><SectionTitle icon={<Bot className="size-4" />} title="Plan del agente" /><p className="text-[13px] text-muted-foreground">A la espera de un impacto que requiera respuesta.</p></Panel>;
+  const { plan } = overview.plan; const capacity = plan.capacity; const percent = capacity.totalCapacity ? Math.round((capacity.plannedUnits / capacity.totalCapacity) * 100) : 0;
+  return <Panel className="min-h-0 p-4"><SectionTitle icon={<Bot className="size-4" />} title={`Plan de recuperación · v${plan.version}`} detail={plan.status} /><p className="text-[12px] leading-5 text-muted-foreground">{plan.summary}</p><div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3"><div className="flex items-center justify-between text-[11px]"><span className="text-muted-foreground">Capacidad planificada</span><span className="font-mono text-foreground">{capacity.plannedUnits}/{capacity.assumedCapacity} u.</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(percent, 100)}%` }} /></div><p className="mt-2 text-[10px] text-muted-foreground">{capacity.confirmed ? "Capacidad confirmada" : "Plan basado en capacidad asumida"} · {capacity.remainingUnits} u. libres · {capacity.postponedUnits} u. pospuestas</p></div>{plan.assumptions.length ? <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/5 p-2.5 text-[11px] leading-4 text-amber-100">{plan.assumptions.map((assumption) => <p key={assumption}>• {assumption}</p>)}</div> : null}<div className="mt-3 max-h-[250px] space-y-2 overflow-y-auto pr-1 [content-visibility:auto]">{plan.priorities.map((priority) => <div key={priority.serviceIdentifier} className="flex gap-3 rounded-lg border border-border/70 p-2.5"><span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted font-mono text-[11px] text-muted-foreground">{priority.rank}</span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate text-[12px] font-medium text-foreground">{priority.serviceName}</p><StatusPill status={priority.decision} /></div><p className="mt-1 text-[10px] leading-4 text-muted-foreground">{priority.reason}</p></div></div>)}</div>{plan.changesFromPrevious.length ? <div className="mt-3 border-t border-border/70 pt-3"><p className="mb-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">Cambio de plan</p>{plan.changesFromPrevious.map((change) => <p key={`${change.kind}-${change.description}`} className="text-[11px] leading-4 text-sky-200">↳ {change.description}</p>)}</div> : null}</Panel>;
+}
+function StepRow({ status, title, detail }: { status: PlanStepStatus; title: string; detail: string }) {
+  const Icon = status === "completed" ? CheckCircle2 : status === "failed" ? XCircle : status === "running" ? CircleDashed : ChevronRight;
+  return <div className="flex gap-2 rounded-md px-1 py-1.5"><Icon className="mt-0.5 size-3.5 shrink-0 text-primary" /><div className="min-w-0"><p className="text-[11px] text-foreground">{title}</p>{detail ? <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">{detail}</p> : null}</div></div>;
+}
+function AgentPanel() {
+  const { overview, busyAction, runAgentCycle } = useDashboard(); if (!overview) return null;
+  const plan = overview.plan.kind === "plan" ? overview.plan.plan : null;
+  return <Panel className="p-4"><SectionTitle icon={<Bot className="size-4" />} title="Agente de respuesta" detail={`ciclo ${overview.agent.cycles}/${overview.agent.maximumCycles}`} /><div className="rounded-lg border border-border/70 bg-background/30 p-3"><div className="flex items-center justify-between gap-3"><span className="text-[12px] text-muted-foreground">{overview.agent.cycleInProgress ? "Evaluando condiciones" : "Esperando intervención o evento"}</span><StatusPill status={overview.agent.cycleInProgress ? "running" : "listo"} /></div>{overview.agent.lastCycleOutcome ? <p className="mt-2 text-[11px] text-muted-foreground">Último resultado: <span className="text-foreground">{overview.agent.lastCycleOutcome.kind}</span></p> : null}<Button className="mt-3 w-full" onClick={() => void runAgentCycle()} disabled={busyAction !== null}><Play />{busyAction === "cycle" ? "Solicitando ciclo…" : "Pedir ciclo de decisión"}</Button></div>{plan ? <div className="mt-3 space-y-1.5">{plan.steps.map((step) => <StepRow key={step.identifier} status={step.status} title={step.title} detail={step.resultSummary || step.statusReason} />)}</div> : null}</Panel>;
+}
+function ApprovalCard({ approval }: { approval: Approval }) {
+  const { decideApproval, busyAction } = useDashboard(); const [comment, setComment] = useState("");
+  return <div className="rounded-lg border border-amber-400/25 bg-amber-400/5 p-3"><div className="flex items-start justify-between gap-2"><p className="text-[12px] font-medium text-foreground">{approval.actionSummary}</p><span className="font-mono text-[10px] text-amber-200">{approval.capacityUnits} u.</span></div><p className="mt-1 text-[11px] leading-4 text-muted-foreground">{approval.reason}</p><ul className="mt-2 list-disc pl-4 text-[10px] leading-4 text-muted-foreground">{approval.consequences.map((item) => <li key={item}>{item}</li>)}</ul><Textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Comentario para el agente (opcional)" className="mt-3 min-h-14 text-[11px]" /><div className="mt-2 flex gap-2"><Button size="sm" className="flex-1" disabled={busyAction !== null} onClick={() => void decideApproval(approval.identifier, "approve", comment)}><CheckCircle2 /> Aprobar</Button><Button size="sm" variant="destructive" className="flex-1" disabled={busyAction !== null} onClick={() => void decideApproval(approval.identifier, "reject", comment)}><XCircle /> Rechazar</Button></div></div>;
+}
+function ApprovalPanel() {
+  const { overview } = useDashboard(); if (!overview) return null;
+  if (!overview.pendingApprovals.length) return <Panel className="p-4"><SectionTitle icon={<ShieldCheck className="size-4" />} title="Aprobaciones" /><p className="text-[12px] text-muted-foreground">No hay acciones pendientes de autorización.</p></Panel>;
+  return <Panel className="p-4"><SectionTitle icon={<ShieldCheck className="size-4" />} title="Aprobaciones pendientes" detail={`${overview.pendingApprovals.length}`} /><div className="space-y-3">{overview.pendingApprovals.map((approval) => <ApprovalCard key={approval.identifier} approval={approval} />)}</div></Panel>;
+}
+function RecordGroup({ title, icon, empty, children }: { title: string; icon: ReactNode; empty: string; children: ReactNode[] }) {
+  return <div><p className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">{icon}{title}</p>{children.length ? <div className="space-y-2">{children}</div> : <p className="text-[11px] text-muted-foreground">{empty}</p>}</div>;
+}
+function OperationsPanel() {
+  const { overview } = useDashboard(); if (!overview) return null; const resource = overview.incident.resources[0];
+  return <Panel className="p-4"><SectionTitle icon={<Gauge className="size-4" />} title="Coordinación y recursos" />{resource ? <div className="mb-4 rounded-lg border border-border/70 p-3"><p className="text-[11px] font-medium text-foreground">{resource.name} · {resource.region}</p><p className="mt-1 font-mono text-lg text-primary">{resource.allocatedCapacity}/{resource.totalCapacity} {resource.unit}</p><p className="text-[10px] text-muted-foreground">{resource.confirmed ? "Capacidad confirmada" : "Pendiente de confirmar"} · {resource.note}</p></div> : null}<div className="space-y-3"><RecordGroup title="Llamadas al ingeniero" icon={<PhoneCall className="size-3.5" />} empty="Aún no se ha iniciado ninguna llamada.">{overview.engineerCalls.map((call) => <div key={call.identifier} className="rounded-md border border-border/70 p-2.5"><div className="flex items-center justify-between gap-2"><p className="text-[11px] text-foreground">{call.engineer.name} · {call.engineer.role}</p><StatusPill status={call.status} /></div><p className="mt-1 text-[10px] text-muted-foreground">{call.result?.summary || call.failureReason || call.purpose}</p></div>)}</RecordGroup><RecordGroup title="Tareas asignadas" icon={<Wrench className="size-3.5" />} empty="El agente aún no ha asignado tareas.">{overview.tasks.map((task) => <div key={task.identifier} className="flex items-start justify-between gap-2 rounded-md border border-border/70 p-2.5"><div><p className="text-[11px] text-foreground">{task.title}</p><p className="mt-1 text-[10px] text-muted-foreground">{task.assignee.name} · {task.statusNote || task.serviceIdentifier}</p></div><StatusPill status={task.status} /></div>)}</RecordGroup><RecordGroup title="Herramientas" icon={<Database className="size-3.5" />} empty="Sin ejecuciones todavía.">{overview.toolCalls.slice(-6).reverse().map((tool) => <div key={tool.identifier} className="flex items-center justify-between gap-2 border-b border-border/60 py-1.5 last:border-0"><code className="truncate text-[10px] text-foreground">{tool.name}</code><StatusPill status={tool.status} /></div>)}</RecordGroup></div></Panel>;
+}
+function ActivityRow({ event }: { event: ActivityRecord }) {
+  return <div className="relative border-l border-border pb-2 pl-3 last:pb-0"><span className="absolute -left-1 top-1 size-2 rounded-full bg-primary" /><div className="flex items-start justify-between gap-3"><p className="text-[11px] font-medium text-foreground">{event.title}</p><time className="shrink-0 font-mono text-[10px] text-muted-foreground">{stamp(event.occurredAt)}</time></div><p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">{event.summary}</p><p className="mt-1 font-mono text-[9px] text-muted-foreground/70">{event.type}{event.simulated ? " · simulado" : ""}</p></div>;
+}
+function ActivityPanel() {
+  const { activity } = useDashboard(); return <Panel className="min-h-0 p-4"><SectionTitle icon={<Radio className="size-4" />} title="Actividad en directo" detail={`${activity.length} eventos`} /><div className="max-h-[450px] space-y-2 overflow-y-auto pr-1 [content-visibility:auto]">{activity.length ? activity.slice().reverse().map((event) => <ActivityRow key={event.identifier} event={event} />) : <p className="text-[12px] text-muted-foreground">Esperando actividad del escenario.</p>}</div></Panel>;
+}
+function LearningPanel() {
+  const { overview, insights, report } = useDashboard(); if (!overview) return null;
+  return <Panel className="p-4"><SectionTitle icon={<Gauge className="size-4" />} title="Aprendizajes del ciclo" />{insights.length ? <div className="space-y-2">{insights.map((insight) => <div key={insight.identifier} className="rounded-md border border-border/70 p-2.5"><p className="text-[11px] font-medium text-foreground">{insight.summary}</p><p className="mt-1 font-mono text-[9px] text-muted-foreground">{insight.kind} · {insight.subject} · {insight.observations} observaciones</p></div>)}</div> : <p className="text-[11px] leading-4 text-muted-foreground">Todavía no hay aprendizajes persistentes para este escenario.</p>}{report ? <div className="mt-3 border-t border-border/70 pt-3"><p className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">Informe de ejecución</p><p className="mt-1 text-[11px] text-foreground">{report.services.recovered.length} recuperados · {report.services.down.length} caídos · {report.toolCalls.succeeded}/{report.toolCalls.total} herramientas correctas</p>{report.lessons.map((lesson) => <p key={lesson} className="mt-1 text-[10px] leading-4 text-muted-foreground">↳ {lesson}</p>)}</div> : null}</Panel>;
+}
 export function OverviewDashboard() {
-  return (
-    <div className="grid h-full min-h-0 flex-1 grid-cols-[minmax(0,1.45fr)_minmax(420px,0.9fr)] gap-3 p-3">
-      <div className="grid min-h-0 grid-rows-[minmax(0,1.2fr)_minmax(0,1fr)_auto] gap-3">
-        <div className="grid min-h-0 grid-cols-[minmax(280px,0.92fr)_minmax(0,1.15fr)] gap-3">
-          <IncidentCard />
-          <SpainMap />
-        </div>
-        <div className="grid min-h-0 grid-cols-[1.2fr_1fr] gap-3">
-          <CompaniesTable />
-          <MigrationCard />
-        </div>
-        <InfrastructureCard />
-      </div>
-      <AgentPanel />
-    </div>
-  );
+  const { status, overview, error } = useDashboard();
+  if (status === "loading" && !overview) return <div className="flex flex-1 items-center justify-center"><CircleDashed className="size-6 animate-spin text-primary" /><span className="ml-3 text-sm text-muted-foreground">Conectando con Casa Pepe…</span></div>;
+  if (status === "ready" || status === "error") return <WaitingScreen />;
+  if (!overview) return null;
+  return <div className="min-h-0 flex-1 overflow-auto p-3"><div className="mx-auto grid max-w-[1800px] gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)]"><div className="space-y-3"><IncidentSummary /><div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]"><ServicesPanel /><PlanPanel /></div><ActivityPanel /></div><aside className="space-y-3"><AgentPanel /><ApprovalPanel /><OperationsPanel /><LearningPanel /></aside></div>{error ? <div className="fixed right-4 bottom-4 max-w-md rounded-lg border border-red-400/30 bg-red-950/90 p-3 text-sm text-red-100 shadow-xl">{error}</div> : null}</div>;
 }

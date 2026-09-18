@@ -1,58 +1,25 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { useDashboard } from "@/components/dashboard/dashboard-provider";
-import { renderWithProviders } from "@/test/render";
+import { render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { DashboardProvider, useDashboard } from "@/components/dashboard/dashboard-provider";
 
 function Probe() {
-  const { snapshot, sendFollowUp, advanceAgent, cycleSiteStatus, reset } =
-    useDashboard();
-  return (
-    <div>
-      <p>{snapshot.incident.localTime}</p>
-      <p data-testid="madrid">{snapshot.sites.find((site) => site.id === "madrid")?.status}</p>
-      <p data-testid="activity">{snapshot.agent.activity.length}</p>
-      <p data-testid="completed">{snapshot.agent.completed}</p>
-      <button type="button" onClick={() => sendFollowUp("   ")}>
-        empty
-      </button>
-      <button type="button" onClick={() => sendFollowUp("Prioriza Valencia")}>
-        follow
-      </button>
-      <button type="button" onClick={advanceAgent}>
-        advance
-      </button>
-      <button type="button" onClick={() => cycleSiteStatus("madrid")}>
-        cycle
-      </button>
-      <button type="button" onClick={reset}>
-        reset
-      </button>
-    </div>
-  );
+  const { status, error } = useDashboard();
+  return <><p>{status}</p>{error ? <p>{error}</p> : null}</>;
 }
 
-describe("DashboardProvider", () => {
-  it("throws outside the provider", () => {
-    expect(() => render(<Probe />)).toThrow(/useDashboard must be used within DashboardProvider/);
-  });
+describe("live dashboard provider", () => {
+  it("shows a deliberate ready state when the backend has no active run", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/overview")) {
+        return new Response(JSON.stringify({ message: "No active run" }), { status: 404 });
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    });
 
-  it("ignores blank follow-ups and records real ones", async () => {
-    const { user } = renderWithProviders(<Probe />);
-    const initial = Number(screen.getByTestId("activity").textContent);
-    await user.click(screen.getByRole("button", { name: "empty" }));
-    expect(screen.getByTestId("activity")).toHaveTextContent(String(initial));
-    await user.click(screen.getByRole("button", { name: "follow" }));
-    expect(screen.getByTestId("activity")).toHaveTextContent(String(initial + 2));
-  });
+    render(<DashboardProvider><Probe /></DashboardProvider>);
 
-  it("advances the agent, cycles site health, and resets", async () => {
-    const { user } = renderWithProviders(<Probe />);
-    await user.click(screen.getByRole("button", { name: "advance" }));
-    expect(screen.getByTestId("madrid")).toHaveTextContent("down");
-    await user.click(screen.getByRole("button", { name: "cycle" }));
-    expect(screen.getByTestId("madrid")).toHaveTextContent("up");
-    await user.click(screen.getByRole("button", { name: "reset" }));
-    expect(screen.getByTestId("madrid")).toHaveTextContent("down");
-    expect(screen.getByTestId("completed")).toHaveTextContent("2");
+    await waitFor(() => expect(screen.getByText("ready")).toBeInTheDocument());
+    expect(screen.queryByText(/No active run/)).not.toBeInTheDocument();
   });
 });

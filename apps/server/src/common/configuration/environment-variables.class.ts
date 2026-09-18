@@ -1,6 +1,14 @@
 import { ENVIRONMENTS } from "@common/constants/application.constant"
 import { Type } from "class-transformer"
-import { IsIn, IsInt, IsString, IsUrl, Min, MinLength } from "class-validator"
+import {
+	IsIn,
+	IsInt,
+	IsString,
+	IsUrl,
+	Matches,
+	Min,
+	MinLength,
+} from "class-validator"
 
 export class EnvironmentVariables {
 	@IsIn(ENVIRONMENTS)
@@ -15,7 +23,10 @@ export class EnvironmentVariables {
 	PUBLIC_BASE_URL: string = "http://localhost:3000"
 
 	@IsString()
-	@MinLength(1)
+	@Matches(/^postgres(ql)?:\/\//, {
+		message:
+			"SUPABASE_DATABASE_URL must be the Postgres connection string (postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres), not the https Project URL. Copy it from Supabase > Connect > Session pooler > URI",
+	})
 	SUPABASE_DATABASE_URL: string =
 		"postgresql://casa_pepe:casa_pepe@localhost:5432/casa_pepe"
 

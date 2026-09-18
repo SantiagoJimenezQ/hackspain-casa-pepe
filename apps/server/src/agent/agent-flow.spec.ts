@@ -64,6 +64,8 @@ describe("agent flow (integration with in-memory repositories)", () => {
 
 	beforeAll(async () => {
 		process.env.API_KEY = "test-api-key"
+		process.env.SUPABASE_DATABASE_URL =
+			"postgresql://postgres:postgres@localhost:5432/test"
 		process.env.HAPPYROBOT_WEBHOOK_SECRET = "test-happyrobot-secret"
 		process.env.RECOVERY_WEBHOOK_SECRET = "test-recovery-secret"
 		process.env.SIMULATED_CALL_DELAY_MILLISECONDS = "0"

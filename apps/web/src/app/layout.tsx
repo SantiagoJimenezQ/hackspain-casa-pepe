@@ -37,7 +37,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
-      <body className="min-h-full overflow-x-auto bg-background text-foreground">
+      <body className="h-full overflow-x-auto overflow-y-hidden bg-background text-foreground">
         <TooltipProvider>
           <ThemeProvider>
             <LocaleProvider>

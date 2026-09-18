@@ -20,9 +20,9 @@ describe("theme", () => {
 
 describe("status", () => {
   it("maps every health state to a hex color", () => {
-    expect(STATUS_HEX.up).toMatch(/^#/);
-    expect(STATUS_HEX.degraded).toMatch(/^#/);
-    expect(STATUS_HEX.down).toMatch(/^#/);
+    expect(STATUS_HEX.up).toBe("var(--status-up)");
+    expect(STATUS_HEX.degraded).toBe("var(--status-degraded)");
+    expect(STATUS_HEX.down).toBe("var(--status-down)");
   });
 });
 

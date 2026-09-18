@@ -45,7 +45,6 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 			"The engineer confirmed the database snapshot is recent and route assignment is ready to deploy. Backup capacity remains unconfirmed pending an update.",
 	},
 	identifier: DEFAULT_SCENARIO_IDENTIFIER,
-	language: "en",
 	initialFacts: [
 		{
 			confirmed: true,
@@ -78,6 +77,7 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 				"Route assignment can run in eu-central-1 once the database is available",
 		},
 	],
+	language: "en",
 	narrative:
 		"A meteorite has destroyed the AWS eu-west-1 data centers that host the delivery platform. Backup capacity exists in eu-central-1 but it cannot host every service at once.",
 	region: "eu-west-1",

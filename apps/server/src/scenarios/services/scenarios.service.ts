@@ -2,13 +2,20 @@ import { EntityNotFoundException } from "@common/exceptions/domain.exception"
 import { Injectable } from "@nestjs/common"
 import { METEORITE_SCENARIO } from "@scenarios/constants/meteorite-scenario.constant"
 import { METEORITE_SCENARIO_ES } from "@scenarios/constants/meteorite-scenario.es.constant"
-import { ScenarioDefinition, ScenarioSummary } from "@scenarios/types/scenario.type"
+import {
+	ScenarioDefinition,
+	ScenarioSummary,
+} from "@scenarios/types/scenario.type"
 
 @Injectable()
 export class ScenariosService {
-	private readonly scenarios: ReadonlyMap<string, ScenarioDefinition> = new Map(
-		[METEORITE_SCENARIO, METEORITE_SCENARIO_ES].map((scenario) => [scenario.identifier, scenario]),
-	)
+	private readonly scenarios: ReadonlyMap<string, ScenarioDefinition> =
+		new Map(
+			[METEORITE_SCENARIO, METEORITE_SCENARIO_ES].map((scenario) => [
+				scenario.identifier,
+				scenario,
+			]),
+		)
 
 	list(): ReadonlyArray<ScenarioDefinition> {
 		return Array.from(this.scenarios.values())

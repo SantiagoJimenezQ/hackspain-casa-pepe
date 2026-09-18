@@ -7,3 +7,5 @@ verifyDepsBeforeRun: warn
 allowBuilds:
   unrs-resolver: true
   sharp: true
+  "@nestjs/core": true
+  "@scarf/scarf": false

@@ -38,7 +38,8 @@
 			"^@recovery/(.*)$": "<rootDir>/recovery/$1",
 			"^@tools/(.*)$": "<rootDir>/tools/$1",
 			"^@agent/(.*)$": "<rootDir>/agent/$1",
-			"^@replays/(.*)$": "<rootDir>/replays/$1"
+			"^@replays/(.*)$": "<rootDir>/replays/$1",
+			"^@learning/(.*)$": "<rootDir>/learning/$1"
 		},
 		"rootDir": "src",
 		"testEnvironment": "node",
@@ -72,6 +73,7 @@
 		"@biomejs/biome": "2.3.3",
 		"@nestjs/cli": "^10.0.0",
 		"@nestjs/schematics": "^10.0.0",
+		"@nestjs/testing": "^10.4.22",
 		"@types/express": "^5.0.0",
 		"@types/jest": "^29.5.14",
 		"@types/node": "^20.3.1",

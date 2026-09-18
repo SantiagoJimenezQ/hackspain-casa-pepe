@@ -1,16 +1,10 @@
 # Shared API contracts
 
-The dummy API contract is implemented and ready for UI/agent consumers:
+NestJS is the only backend. Its authenticated API is rooted at `/api`, and its generated OpenAPI document is available at `/documentation` while the server is running. The checked-in declarations here describe the shared incident and simulation payloads consumed by the UI and agent.
 
-- `status.d.ts`: complete snapshot and legacy service commands.
-- `dashboard.d.ts`: regions, companies, migration state and commands.
-- `simulation.d.ts`: scenario config, clock state, concurrency guards.
-- `openapi.json`: OpenAPI 3.1 document, served by `GET /api/openapi.json`.
-- `generate-openapi.mjs`: maintained schema source; run `npm run docs:generate` after edits.
-- `status.example.json`, `status.incident.example.json`, `status.randomized.example.json`: complete response fixtures.
+- `incident.d.ts` describes the incident snapshot, harness events and demo controls.
+- `simulation.d.ts` describes the seeded scenario configuration and stored clock state.
 
-Read [the API integration guide](../../apps/server/API.md) for endpoints, errors, state transitions, replay semantics and client examples. All POST payloads accept the optional `CommandGuard` fields. Successful commands return a complete `StatusSnapshot`.
+The canonical endpoint reference is [`apps/server/docs/API.md`](../../apps/server/docs/API.md). The server's DTOs validate requests at runtime; these declarations are for consumers and must be updated with the DTOs when the API changes.
 
-Contracts contain no credentials or UI/provider dependencies. Keep examples, declarations, schema and runtime behavior aligned when changing an endpoint. `npm test` includes reference/example checks and response-shape smoke tests.
-
-Agent-owned plans, tool calls and operator approvals are not implemented in this contract yet. Static company priorities and the simulated activity indicator must not be presented as real agent decisions.
+The former standalone HTTP server, old `/api/status` API, generated JSON OpenAPI copy, and duplicate in-memory harness have been removed. Seeded randomness now lives in `apps/server/src/scenarios/services/seeded-simulation.service.ts` and is persisted with each incident run.

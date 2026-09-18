@@ -1,3 +1,4 @@
+import { AGENT_MESSAGES } from "@agent/constants/agent-messages.constant"
 import { buildPlanDraft } from "@agent/helpers/plan-builder.helper"
 import { diffPlans } from "@plans/helpers/plan-diff.helper"
 import { PlanRecord } from "@plans/types/plan.type"
@@ -7,6 +8,7 @@ import { METEORITE_SCENARIO } from "@scenarios/constants/meteorite-scenario.cons
 function draftFor(totalCapacity: number) {
 	return buildPlanDraft({
 		briefing: METEORITE_SCENARIO.engineerBriefing,
+		capacityAssumption: null,
 		engineer: {
 			name: "Marta Ruiz",
 			phone: "+34600000000",
@@ -14,6 +16,7 @@ function draftFor(totalCapacity: number) {
 		},
 		failedServices: [],
 		incident: createImpactedIncident(totalCapacity),
+		language: "en",
 		maximumStepAttempts: 2,
 		previousPlan: null,
 		rejectedServices: [],
@@ -26,6 +29,7 @@ describe("diffPlans", () => {
 	it("explains what changed when the backup capacity shrinks", () => {
 		const first = draftFor(12)
 		const previous: PlanRecord = {
+			assumptions: first.assumptions,
 			capacity: first.capacity,
 			changesFromPrevious: [],
 			createdAt: "2026-09-18T10:06:00.000Z",
@@ -45,11 +49,15 @@ describe("diffPlans", () => {
 		}
 		const second = draftFor(7)
 
-		const changes = diffPlans(previous, {
-			priorities: second.priorities,
-			steps: second.steps,
-			totalCapacity: second.capacity.totalCapacity,
-		})
+		const changes = diffPlans(
+			previous,
+			{
+				priorities: second.priorities,
+				steps: second.steps,
+				totalCapacity: second.capacity.totalCapacity,
+			},
+			AGENT_MESSAGES.en,
+		)
 
 		expect(
 			changes.some((change) => change.kind === "capacity-changed"),

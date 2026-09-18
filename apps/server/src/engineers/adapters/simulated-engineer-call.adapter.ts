@@ -1,4 +1,5 @@
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
+import { describeError } from "@common/helpers/external-response.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { EngineerCallMode } from "@common/types/configuration.type"
 import {
@@ -39,7 +40,7 @@ export class SimulatedEngineerCallAdapter implements EngineerCallAdapter {
 					question: question.question,
 				}
 			})
-			void deliverResult(request.call.identifier, {
+			deliverResult(request.call.identifier, {
 				answers,
 				outcome: "completed",
 				summary: request.simulatedScript.summary,
@@ -49,6 +50,11 @@ export class SimulatedEngineerCallAdapter implements EngineerCallAdapter {
 							`Agent: ${answer.question}\nEngineer: ${answer.answer}`,
 					)
 					.join("\n"),
+			}).catch((error) => {
+				this.logger.warn(
+					LOG_MESSAGES.INCIDENTS.STALE_RESULT_IGNORED,
+					describeError(error),
+				)
 			})
 		}, delay)
 		return {

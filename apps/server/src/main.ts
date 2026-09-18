@@ -6,6 +6,7 @@ import {
 } from "@common/constants/application.constant"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
 import { HTTPExceptionFilter } from "@common/filters/http-exception.filter"
+import { describeError } from "@common/helpers/external-response.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { Logger, ValidationPipe } from "@nestjs/common"
 import { NestFactory } from "@nestjs/core"
@@ -16,6 +17,12 @@ async function bootstrap(): Promise<void> {
 	const application = await NestFactory.create(AppModule)
 	const configuration = application.get(ConfigurationService)
 	const logger = new Logger("Bootstrap")
+	process.on("unhandledRejection", (reason) => {
+		logger.error(
+			LOG_MESSAGES.APPLICATION.UNHANDLED_REJECTION,
+			describeError(reason),
+		)
+	})
 
 	application.setGlobalPrefix(API_PREFIX)
 	application.enableCors({ origin: true })

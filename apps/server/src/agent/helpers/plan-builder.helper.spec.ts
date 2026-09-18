@@ -13,6 +13,7 @@ function createInput(
 ): PlanBuildInput {
 	return {
 		briefing: METEORITE_SCENARIO.engineerBriefing,
+		capacityAssumption: null,
 		engineer: {
 			name: "Marta Ruiz",
 			phone: "+34600000000",
@@ -20,6 +21,7 @@ function createInput(
 		},
 		failedServices: [],
 		incident: createImpactedIncident(totalCapacity),
+		language: "en",
 		maximumStepAttempts: 2,
 		previousPlan,
 		rejectedServices: [],
@@ -54,6 +56,7 @@ function toPlanRecord(
 	version: number,
 ): PlanRecord {
 	return {
+		assumptions: draft.assumptions,
 		capacity: draft.capacity,
 		changesFromPrevious: [],
 		createdAt: "2026-09-18T10:06:00.000Z",
@@ -74,6 +77,55 @@ function toPlanRecord(
 }
 
 describe("buildPlanDraft", () => {
+	it("plans with the capacity confirmed in previous runs when the current report is unconfirmed", () => {
+		const draft = buildPlanDraft({
+			...createInput(12),
+			capacityAssumption: {
+				assumedCapacity: 7,
+				observations: 2,
+				reportedCapacity: 12,
+			},
+		})
+
+		expect(draft.capacity.totalCapacity).toBe(12)
+		expect(draft.capacity.assumedCapacity).toBe(7)
+		expect(decisionOf(draft, "package-tracking").decision).toBe("postpone")
+		expect(draft.assumptions).toHaveLength(1)
+		expect(draft.assumptions[0]).toContain("2 previous runs")
+	})
+
+	it("ignores historical capacity once the harness confirms the real value", () => {
+		const incident = createImpactedIncident(12)
+		const confirmedIncident = {
+			...incident,
+			resources: incident.resources.map((resource) => ({
+				...resource,
+				confirmed: true,
+			})),
+		}
+		const draft = buildPlanDraft({
+			...createInput(12),
+			capacityAssumption: {
+				assumedCapacity: 7,
+				observations: 1,
+				reportedCapacity: 12,
+			},
+			incident: confirmedIncident,
+		})
+
+		expect(draft.capacity.assumedCapacity).toBe(12)
+		expect(draft.assumptions).toHaveLength(0)
+	})
+
+	it("writes the plan in Spanish when the scenario is Spanish", () => {
+		const draft = buildPlanDraft({ ...createInput(7), language: "es" })
+
+		expect(draft.summary.startsWith("Recuperar")).toBe(true)
+		expect(decisionOf(draft, "package-tracking").reason).toContain(
+			"solo quedan",
+		)
+	})
+
 	it("recovers every failing service when the reported capacity is enough", () => {
 		const draft = buildPlanDraft(createInput(12))
 

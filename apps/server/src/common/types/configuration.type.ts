@@ -14,7 +14,6 @@ export interface RuntimeConfiguration {
 
 export interface DatabaseConfiguration {
 	readonly url: string
-	readonly ssl: boolean
 }
 
 export interface AuthenticationConfiguration {

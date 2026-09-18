@@ -1,3 +1,4 @@
+import { requiresTLS } from "@common/helpers/database-url.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { Module } from "@nestjs/common"
 import { TypeOrmModule } from "@nestjs/typeorm"
@@ -8,7 +9,7 @@ import { TypeOrmModule } from "@nestjs/typeorm"
 			inject: [ConfigurationService],
 			useFactory: (configuration: ConfigurationService) => ({
 				autoLoadEntities: true,
-				ssl: configuration.database.ssl
+				ssl: requiresTLS(configuration.database.url)
 					? { rejectUnauthorized: false }
 					: false,
 				synchronize: true,

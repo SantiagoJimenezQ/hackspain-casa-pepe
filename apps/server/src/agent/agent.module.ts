@@ -6,6 +6,7 @@ import { AgentCycleStateService } from "@agent/services/agent-cycle-state.servic
 import { ApprovalsModule } from "@approvals/approvals.module"
 import { EngineersModule } from "@engineers/engineers.module"
 import { IncidentsModule } from "@incidents/incidents.module"
+import { LearningModule } from "@learning/learning.module"
 import { Module } from "@nestjs/common"
 import { PlansModule } from "@plans/plans.module"
 import { RecoveryModule } from "@recovery/recovery.module"
@@ -24,6 +25,7 @@ import { ToolsModule } from "@tools/tools.module"
 		EngineersModule,
 		RecoveryModule,
 		ActivityModule,
+		LearningModule,
 	],
 	providers: [AgentCycleStateService, AgentService],
 })

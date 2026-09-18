@@ -113,14 +113,20 @@ export class RecoveryService {
 			mode: saved.mode,
 			serviceIdentifier: saved.serviceIdentifier,
 		})
+		const simulatedScript =
+			await this.incidentsService.sampleRecoveryScript(
+				command.runIdentifier,
+				command.serviceIdentifier,
+				{
+					detail: service.simulatedOutcomeDetail,
+					outcome: service.simulatedOutcome,
+				},
+			)
 		const outcome = await this.adapter.execute(
 			{
 				action: toRecoveryActionRecord(saved),
 				callbackURL: `${this.configuration.runtime.publicBaseURL}/${RECOVERY_CALLBACK_PATH}`,
-				simulatedScript: {
-					detail: service.simulatedOutcomeDetail,
-					outcome: service.simulatedOutcome,
-				},
+				simulatedScript,
 			},
 			(actionIdentifier, result) =>
 				this.complete(actionIdentifier, result),

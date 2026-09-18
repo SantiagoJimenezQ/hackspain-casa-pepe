@@ -35,7 +35,8 @@
 			"@recovery/*": ["src/recovery/*"],
 			"@tools/*": ["src/tools/*"],
 			"@agent/*": ["src/agent/*"],
-			"@replays/*": ["src/replays/*"]
+			"@replays/*": ["src/replays/*"],
+			"@learning/*": ["src/learning/*"]
 		}
 	}
 }

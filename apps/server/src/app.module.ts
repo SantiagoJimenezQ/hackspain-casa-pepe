@@ -7,6 +7,7 @@ import { DatabaseModule } from "@common/database/database.module"
 import { EngineersModule } from "@engineers/engineers.module"
 import { HealthModule } from "@health/health.module"
 import { IncidentsModule } from "@incidents/incidents.module"
+import { LearningModule } from "@learning/learning.module"
 import { Module } from "@nestjs/common"
 import { EventEmitterModule } from "@nestjs/event-emitter"
 import { ScheduleModule } from "@nestjs/schedule"
@@ -35,6 +36,7 @@ import { WebhooksModule } from "@webhooks/webhooks.module"
 		EngineersModule,
 		RecoveryModule,
 		ToolsModule,
+		LearningModule,
 		AgentModule,
 		WebhooksModule,
 		ReplaysModule,

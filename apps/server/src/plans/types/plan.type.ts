@@ -31,6 +31,7 @@ export interface ServicePriority {
 export interface CapacityAllocationPlan {
 	readonly resourceIdentifier: string
 	readonly totalCapacity: number
+	readonly assumedCapacity: number
 	readonly plannedUnits: number
 	readonly remainingUnits: number
 	readonly confirmed: boolean
@@ -78,6 +79,7 @@ export interface PlanRecord {
 	readonly capacity: CapacityAllocationPlan
 	readonly steps: ReadonlyArray<PlanStep>
 	readonly changesFromPrevious: ReadonlyArray<PlanChange>
+	readonly assumptions: ReadonlyArray<string>
 	readonly previousPlanIdentifier: string
 	readonly createdAt: string
 	readonly updatedAt: string
@@ -103,6 +105,7 @@ export interface CreatePlanInput {
 	readonly capacity: CapacityAllocationPlan
 	readonly steps: ReadonlyArray<PlanStep>
 	readonly changesFromPrevious: ReadonlyArray<PlanChange>
+	readonly assumptions: ReadonlyArray<string>
 	readonly previous: PlanRecord | null
 }
 

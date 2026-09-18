@@ -1,8 +1,11 @@
 import { Module } from "@nestjs/common"
+import { ScenariosController } from "@scenarios/controllers/scenarios.controller"
 import { ScenariosService } from "@scenarios/services/scenarios.service"
+import { SeededSimulationService } from "@scenarios/services/seeded-simulation.service"
 
 @Module({
-	exports: [ScenariosService],
-	providers: [ScenariosService],
+	controllers: [ScenariosController],
+	exports: [ScenariosService, SeededSimulationService],
+	providers: [ScenariosService, SeededSimulationService],
 })
 export class ScenariosModule {}

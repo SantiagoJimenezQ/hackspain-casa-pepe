@@ -261,8 +261,9 @@ export class ToolsService {
 			runIdentifier: request.runIdentifier,
 			toolCallIdentifier: entity.identifier,
 		}
+		let timer: NodeJS.Timeout | undefined
 		const timeout = new Promise<ToolExecutionResult>((resolve) => {
-			setTimeout(
+			timer = setTimeout(
 				() => resolve({ error: TIMEOUT_ERROR, status: "failed" }),
 				this.configuration.agent.toolTimeoutMilliseconds,
 			)
@@ -281,6 +282,8 @@ export class ToolsService {
 				},
 				status: "failed",
 			}
+		} finally {
+			clearTimeout(timer)
 		}
 	}
 

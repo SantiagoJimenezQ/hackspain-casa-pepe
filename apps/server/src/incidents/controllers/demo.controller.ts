@@ -1,3 +1,4 @@
+import { AdvanceSimulationDTO } from "@incidents/dtos/advance-simulation.dto"
 import {
 	InjectHarnessEventDTO,
 	toHarnessEvent,
@@ -17,7 +18,42 @@ export class DemoController {
 	@Post("start")
 	@ApiOperation({ summary: "Start a new run with every service healthy" })
 	start(@Body() body: StartRunDTO): Promise<IncidentSnapshot> {
-		return this.incidentsService.startRun(body.scenarioIdentifier)
+		return this.incidentsService.startRun(body.scenarioIdentifier, body)
+	}
+
+	@Post("pause")
+	@HttpCode(HttpStatus.OK)
+	@ApiOperation({ summary: "Pause the randomized simulation clock" })
+	async pause(): Promise<IncidentSnapshot> {
+		return this.incidentsService.setSimulationPaused(
+			await this.incidentsService.getActiveRunIdentifier(),
+			true,
+		)
+	}
+
+	@Post("resume")
+	@HttpCode(HttpStatus.OK)
+	@ApiOperation({ summary: "Resume the randomized simulation clock" })
+	async resume(): Promise<IncidentSnapshot> {
+		return this.incidentsService.setSimulationPaused(
+			await this.incidentsService.getActiveRunIdentifier(),
+			false,
+		)
+	}
+
+	@Post("advance")
+	@HttpCode(HttpStatus.OK)
+	@ApiOperation({
+		summary: "Advance the randomized simulation by explicit minutes",
+	})
+	async advance(
+		@Body() body: AdvanceSimulationDTO,
+	): Promise<IncidentSnapshot> {
+		const minutes = body.minutes ?? 1
+		return this.incidentsService.advanceSimulation(
+			await this.incidentsService.getActiveRunIdentifier(),
+			minutes,
+		)
 	}
 
 	@Post("impact")

@@ -6,6 +6,7 @@ import {
 	RunKind,
 	ServiceState,
 } from "@incidents/types/incident.type"
+import { SimulationState } from "@scenarios/types/simulation.type"
 import { Column, Entity, Index, PrimaryColumn } from "typeorm"
 
 @Entity({ name: "incidents" })
@@ -71,6 +72,9 @@ export class IncidentEntity {
 
 	@Column({ type: "jsonb" })
 	harnessEvents: AppliedHarnessEvent[]
+
+	@Column({ nullable: true, type: "jsonb" })
+	simulation: SimulationState | null
 
 	@Column({ type: "integer" })
 	agentCycles: number

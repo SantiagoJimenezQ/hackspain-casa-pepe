@@ -13,6 +13,8 @@ Every response is JSON. Identifiers carry a prefix: `run_`, `inc_`, `plan_`, `ap
 
 Without a valid credential: `401` with `{ "statusCode": 401, "message": "An API key is required" }`.
 
+Browser `EventSource` clients cannot set headers: `GET /activity/stream` also accepts the key as the `apiKey` query parameter.
+
 ## Error format
 
 ```json
@@ -57,13 +59,25 @@ Checks the Postgres (Supabase) connection and returns the integration modes.
 
 ---
 
+## Scenarios (`/scenarios`)
+
+### `GET /scenarios`
+
+`[{ identifier, language ("en" | "es"), title, company, region, backupRegion, serviceCount, reportedCapacity, capacityAfterTwist }]`. Two identifiers exist today: `meteorite-eu-west-1` (English, default) and `meteorite-eu-west-1-es` (Spanish). The scenario language drives every operator-facing text produced by the agent.
+
+### `GET /scenarios/:identifier`
+
+Full definition: services with dependencies and recovery actions, backup resource, initial facts, engineer briefing (questions and scripted answers) and the twist.
+
+---
+
 ## Demo controls (`/demo`)
 
 Separate from the operator controls. Each call returns the resulting `IncidentSnapshot` and emits activity events.
 
 ### `POST /demo/start`
 
-Optional body `{ "scenarioIdentifier": "meteorite-eu-west-1" }`. Deactivates the previous run (it ends in `reset` state) and creates a new one with every service healthy. Events: `incident.run-started`.
+Optional body `{ "scenarioIdentifier": "meteorite-eu-west-1" }` (or `meteorite-eu-west-1-es` for Spanish). Deactivates the previous run (it ends in `reset` state) and creates a new one with every service healthy. Events: `incident.run-started`.
 
 ### `POST /demo/impact`
 
@@ -90,6 +104,58 @@ Arbitrary harness event.
 
 Marks the current run as `reset` and creates a new one from the same scenario. Late results from the previous run (calls, recoveries) are rejected with `409 Stale Run`. Events: `incident.run-reset`, `incident.run-started`.
 
+### `POST /demo/pause`
+
+Pauses the automatic clock for a randomized run. It is idempotent. Manual controls, recovery actions and harness event injection remain available while paused. The incident must already be active (apply `/demo/impact` first). Returns `400` for a manual run or a run that has not entered an incident.
+
+### `POST /demo/resume`
+
+Resumes the automatic clock for a randomized run. The server advances approximately one simulated minute per second while an incident is active. The clock is paused when a run starts, so a demo must apply `/demo/impact` and explicitly resume it.
+
+### `POST /demo/advance`
+
+Advances a randomized run synchronously, even while paused. The incident must be active before the clock can advance.
+
+```json
+{ "minutes": 3 }
+```
+
+`minutes` is optional and must be an integer from 1 to 60. This endpoint is the preferred control for deterministic tests and recorded demos. It records `simulation.advanced` activity and may inject seeded secondary `service-health-changed` events, up to the configured disruption cap.
+
+## Seeded simulation
+
+Randomness belongs to the environment, never to the agent's decision policy. A run stores its complete simulation state in the incident row, including seed and draw counters, so reads do not change the next outcome. The same implementation version, start configuration and accepted action/clock sequence reproduce the same environment trajectory; UUIDs and wall-clock timestamps still differ.
+
+`mode: "manual"` preserves the original fixed scenario. `mode: "randomized"` samples the initial backup capacity, recovery outcomes and a possible secondary disruption. Difficulties use these rules:
+
+| Difficulty | Spare capacity | Recovery failure | Secondary disruption |
+|---|---:|---:|---:|
+| `easy` | 0–3 units | 0.2% base per recovery | 15% per eligible minute |
+| `medium` | 0–2 units | 0.8% base per recovery | 30% per eligible minute |
+| `hard` | 0–1 unit | 1.5% base per recovery | 50% per eligible minute |
+
+The backup capacity never falls below one unit. Recovery failure probability increases with allocated capacity, up to three times the base rate at full utilization. A failed simulated recovery releases its allocation and records a failure reason; the agent can reassess and request a new cycle. Generated secondary disruptions only target currently healthy services, stop when the configured cap is reached, and respect the maximum number of concurrent unhealthy services. Manual `/demo/events` injections are independent of this budget.
+
+The response's `simulation` object is:
+
+```json
+{
+  "mode": "randomized",
+  "seed": 42,
+  "difficulty": "medium",
+  "automaticEvents": true,
+  "maxConcurrentDisruptions": 2,
+  "paused": true,
+  "elapsedMinutes": 0,
+  "generatedDisruptions": 0,
+  "initialDraws": 1,
+  "recoveryDraws": 0,
+  "disruptionDraws": 0
+}
+```
+
+`automaticEvents` controls only the generated secondary fault. `pause` and `resume` control the clock. A manual `advance` call can generate the seeded fault while paused. Polling `GET /api/overview` or any other read endpoint never consumes random draws.
+
 ---
 
 ## Incident (`/incidents`)
@@ -104,6 +170,7 @@ Marks the current run as `reset` and creates a new one from the same scenario. L
 | `status` | `normal` \| `detected` \| `responding` \| `partially-recovered` \| `recovered` \| `reset` |
 | `active`, `startedAt`, `impactedAt`, `resolvedAt` | Lifecycle |
 | `title`, `company`, `narrative`, `region`, `backupRegion`, `businessImpactSummary` | Context for the incident summary |
+| `simulation` | Seed, mode, difficulty, pause state, elapsed minutes and persisted random draw counters |
 | `services[]` | `identifier`, `name`, `status`, `statusReason`, `businessImpact`, `impactDescription`, `dependencies[]`, `recoveryCapacityUnits`, `recoveryActionKind`, `recoveryActionDescription`, `recoveryRequiresApproval`, `recoveryConsequences[]`, `lastChangedAt` |
 | `resources[]` | `identifier`, `name`, `region`, `unit`, `totalCapacity`, `allocatedCapacity`, `confirmed`, `note` |
 | `facts[]` | `statement`, `status` (`confirmed` \| `pending` \| `refuted`), `source`, `recordedAt` |
@@ -187,7 +254,8 @@ A specific version.
 | `identifier`, `version`, `status` (`active` \| `superseded` \| `completed`), `previousPlanIdentifier` | Versioning |
 | `decisionIdentifier`, `reason`, `triggeredBy`, `summary` | Why this version exists and what it proposes |
 | `priorities[]` | `rank`, `serviceIdentifier`, `serviceName`, `score`, `businessImpact`, `capacityUnits`, `decision` (`recover-now` \| `postpone` \| `waiting-for-dependency` \| `already-healthy`), `reason`, `blockedBy[]` |
-| `capacity` | `resourceIdentifier`, `totalCapacity`, `plannedUnits`, `remainingUnits`, `postponedUnits`, `confirmed` |
+| `capacity` | `resourceIdentifier`, `totalCapacity` (reported), `assumedCapacity` (what the plan really counts on), `plannedUnits`, `remainingUnits`, `postponedUnits`, `confirmed` |
+| `assumptions[]` | Sentences explaining knowledge from previous runs applied to this plan, for example that the reported capacity was overstated before |
 | `steps[]` | See PlanStep |
 | `changesFromPrevious[]` | `kind` (`capacity-changed` \| `step-postponed` \| `step-added` \| `step-removed` \| `priority-changed` \| `step-reprioritized`), `description`, `serviceIdentifier`, `stepIdentifier` |
 
@@ -266,6 +334,16 @@ Event: `task.updated`.
 
 Response `{ items: ActivityRecord[], total, limit, offset }` ordered by ascending `sequence`.
 
+### `GET /activity/stream?runIdentifier=&types=&afterSequence=&limit=&apiKey=`
+
+Server-sent events (`text/event-stream`). First replays up to `limit` events after `afterSequence` for the run (active run when omitted), then pushes every new event live. Each message has `event: <type>`, `id: <sequence>` and `data: <ActivityRecord>`. Reconnect with the last `id` as `afterSequence` to resume without gaps.
+
+```js
+const source = new EventSource(`${base}/activity/stream?apiKey=${apiKey}&afterSequence=0`)
+source.addEventListener("plan.revised", (message) => render(JSON.parse(message.data)))
+source.onmessage = (message) => append(JSON.parse(message.data))
+```
+
 **ActivityRecord**
 
 | Field | Content |
@@ -326,6 +404,38 @@ Creates a new run with `runKind: "replay"`, deactivates the current one and re-e
 ### `GET /replays/status`
 
 `{ status: "idle" | "running" | "finished" | "cancelled", runIdentifier, sourceRunIdentifier, totalEvents, emittedEvents, speedFactor, startedAt, finishedAt }`.
+
+---
+
+## Learning (`/learning`)
+
+The agent learns across runs of the same scenario family (both languages share the knowledge).
+
+### `GET /learning/insights?scenarioIdentifier=`
+
+`LearningInsightRecord[]`: `identifier`, `scenarioIdentifier` (the family), `kind` (`capacity-overstated` \| `recovery-outcome`), `subject` (resource or service), `observations`, `lastRunIdentifier`, `data`, `summary`, `updatedAt`.
+
+- `capacity-overstated`: recorded when a `capacity-limited` event confirms less capacity than the dashboard reported. The next plan built while the capacity is unconfirmed uses the lowest confirmed value and explains it in `assumptions`.
+- `recovery-outcome`: count of `success`, `partial` and `failure` outcomes per service, shown in the report as lessons.
+
+### `DELETE /learning/insights`
+
+Forgets everything. Returns `{ removed }`. Use it before a demo that should start with no prior knowledge.
+
+### `GET /learning/reports/current`, `GET /learning/reports/:runIdentifier`
+
+Post-incident **RunReport**:
+
+| Field | Content |
+|---|---|
+| `runIdentifier`, `scenarioIdentifier`, `status`, `startedAt`, `impactedAt`, `resolvedAt` | Run identity and lifecycle |
+| `durations` | `impactToFirstPlanMilliseconds`, `impactToFirstApprovalRequestMilliseconds`, `approvalWaitMilliseconds`, `impactToFirstRecoveryMilliseconds`, `impactToResolutionMilliseconds` (null when not reached) |
+| `planVersions[]` | `version`, `triggeredBy`, `summary`, `createdAt`, `changeCount`, `assumptions` |
+| `approvals[]` | `identifier`, `actionSummary`, `status`, `decidedBy`, `waitMilliseconds` |
+| `services` | `recovered[]`, `degraded[]`, `down[]` service names |
+| `toolCalls` | `total`, `succeeded`, `failed`, `simulated` |
+| `eventCount`, `timeline[]` | Key events (`occurredAt`, `type`, `title`, `summary`, `simulated`) |
+| `lessons[]` | Insight summaries for the scenario family |
 
 ---
 
@@ -427,6 +537,7 @@ Header `x-recovery-signature: <RECOVERY_WEBHOOK_SECRET>`.
 | `incident.event-applied` | harness | Any harness event |
 | `incident.status-changed` | system | `detected` → `responding` → `partially-recovered` → `recovered` |
 | `incident.run-reset` | harness | Reset |
+| `simulation.advanced` | harness | Simulation clock advanced manually or automatically |
 | `service.health-changed` | harness / integration | Service health change |
 | `resource.capacity-changed` | harness | Total or allocated capacity changes |
 | `fact.recorded` | agent | Fact confirmed or left pending after the call |

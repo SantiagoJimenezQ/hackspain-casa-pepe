@@ -6,12 +6,12 @@ Our project for the HackSpain hackathon.
 
 [MASTER.md](MASTER.md) recoge el alcance y el reparto del trabajo. [AGENTS.md](AGENTS.md) contiene la guía del reto para los asistentes de desarrollo.
 
-Usaremos una estructura de monorepo, con Next.js como propuesta para la interfaz. Cada frente tiene su carpeta y comparte los contratos de integración. Ya existe una API simulada sin dependencias externas: `npm run dev:server` (Node.js 22+). Ejecutar `npm test` para validar el harness y la API. La UI y el agente siguen pendientes. Consulta `apps/server/README.md` para integrar los controles.
+Usaremos una estructura de monorepo, con Next.js como propuesta para la interfaz. Cada frente tiene su carpeta y comparte los contratos de integración. El backend está implementado en `apps/server/` (ver su README para arrancarlo). El resto de frentes conserva por ahora la estructura documental.
 
 ```text
 apps/
   web/                 Interfaz de operaciones (Next.js previsto)
-  server/              API, eventos y proceso de ejecución
+  server/              API, eventos y proceso de ejecución (NestJS, implementado)
 packages/
   contracts/           Contratos compartidos y ejemplos de mensajes
   harness/             Simulación, escenarios y reinicio

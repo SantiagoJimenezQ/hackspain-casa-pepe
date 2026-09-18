@@ -1,0 +1,77 @@
+export const LOG_MESSAGES = {
+	AGENT: {
+		APPROVAL_EXPIRED: "Approval expired without an operator decision",
+		CYCLE_FAILED: "Failed to complete the agent cycle",
+		CYCLE_FINISHED: "Agent cycle finished",
+		CYCLE_LIMIT_REACHED:
+			"Agent cycle limit reached for this run, stopping automatic execution",
+		CYCLE_SKIPPED_INACTIVE_RUN:
+			"Agent cycle skipped because the run is no longer active",
+		CYCLE_SKIPPED_REPLAY: "Agent cycle skipped because the run is a replay",
+		CYCLE_STARTED: "Agent cycle started",
+		PLAN_CREATED: "Initial response plan created",
+		PLAN_REVISED: "Response plan revised after a change in conditions",
+		STEP_EXECUTION_FAILED: "Failed to execute a plan step",
+		STEP_WAITING_FOR_APPROVAL: "Plan step is waiting for operator approval",
+		TRIGGER_RECEIVED: "Agent trigger received",
+	},
+	APPLICATION: {
+		STARTED: "Casa Pepe service started",
+		UNHANDLED_EXCEPTION: "Unhandled exception while processing the request",
+	},
+	APPROVALS: {
+		DECIDED: "Operator decided on an approval",
+		REQUESTED: "Approval requested from the operator",
+		SUPERSEDED: "Pending approvals superseded by a new plan version",
+	},
+	DATABASE: {
+		CONNECTION_FAILED: "Failed to connect to the database",
+	},
+	ENGINEERS: {
+		CALL_FINISHED: "Engineer call finished",
+		CALL_RESULT_IGNORED:
+			"Engineer call result ignored because it does not belong to the active run",
+		CALL_STARTED: "Engineer call started",
+		HAPPYROBOT_REQUEST_FAILED: "Failed to trigger the HappyRobot call",
+		SIMULATED_CALL_SCHEDULED: "Simulated engineer call scheduled",
+	},
+	INCIDENTS: {
+		EVENT_APPLIED: "Harness event applied to the incident",
+		RUN_RESET: "Incident run reset",
+		RUN_STARTED: "Incident run started",
+		STALE_RESULT_IGNORED:
+			"Late result ignored because it belongs to a previous run",
+	},
+	RECOVERY: {
+		ACTION_FINISHED: "Recovery action finished",
+		ACTION_STARTED: "Recovery action started",
+		ENVIRONMENT_REQUEST_FAILED: "Failed to reach the recovery environment",
+		VERIFICATION_FINISHED: "Recovery verification finished",
+	},
+	REPLAYS: {
+		FINISHED: "Replay finished",
+		STARTED: "Replay started",
+	},
+	TASKS: {
+		ASSIGNED: "Task assigned",
+		UPDATED: "Task updated",
+	},
+	TOOLS: {
+		CALL_COMPLETED: "Tool call completed",
+		CALL_DUPLICATE_SKIPPED: "Duplicate tool call skipped",
+		CALL_FAILED: "Tool call failed",
+		CALL_STARTED: "Tool call started",
+		CALL_TIMED_OUT: "Tool call timed out",
+	},
+	WEBHOOKS: {
+		DELIVERY_EXHAUSTED:
+			"Webhook delivery abandoned after reaching the maximum attempts",
+		DELIVERY_FAILED: "Failed to deliver webhook, retry scheduled",
+		DELIVERY_SUCCEEDED: "Webhook delivered",
+		INBOUND_RECEIVED: "Inbound webhook received",
+		INBOUND_REJECTED:
+			"Inbound webhook rejected because the signature is invalid",
+		SUBSCRIPTION_CREATED: "Webhook subscription created",
+		SUBSCRIPTION_REMOVED: "Webhook subscription removed",
+	},
+} as const

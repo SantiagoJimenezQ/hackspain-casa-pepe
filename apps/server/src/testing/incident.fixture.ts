@@ -1,0 +1,59 @@
+import {
+	applyImpact,
+	buildBaselineResources,
+	buildBaselineServices,
+} from "@incidents/helpers/incident-state.helper"
+import { IncidentSnapshot } from "@incidents/types/incident.type"
+import { METEORITE_SCENARIO } from "@scenarios/constants/meteorite-scenario.constant"
+
+export const FIXTURE_TIMESTAMP = "2026-09-18T10:00:00.000Z"
+
+export const FIXTURE_IMPACT_TIMESTAMP = "2026-09-18T10:05:00.000Z"
+
+export function createImpactedIncident(
+	totalCapacity: number,
+): IncidentSnapshot {
+	const baseline = buildBaselineServices(
+		METEORITE_SCENARIO,
+		FIXTURE_TIMESTAMP,
+	)
+	const resources = buildBaselineResources(
+		METEORITE_SCENARIO,
+		FIXTURE_TIMESTAMP,
+	).map((resource) => ({ ...resource, totalCapacity }))
+	return {
+		active: true,
+		agentCycles: 0,
+		backupRegion: METEORITE_SCENARIO.backupRegion,
+		businessImpactSummary: METEORITE_SCENARIO.businessImpactSummary,
+		company: METEORITE_SCENARIO.company,
+		createdAt: FIXTURE_TIMESTAMP,
+		facts: METEORITE_SCENARIO.initialFacts.map((fact, index) => ({
+			identifier: `fact_${index}`,
+			recordedAt: FIXTURE_IMPACT_TIMESTAMP,
+			source: fact.source,
+			statement: fact.statement,
+			status: fact.confirmed ? "confirmed" : "pending",
+		})),
+		harnessEvents: [],
+		identifier: "inc_fixture",
+		impactedAt: FIXTURE_IMPACT_TIMESTAMP,
+		narrative: METEORITE_SCENARIO.narrative,
+		region: METEORITE_SCENARIO.region,
+		resolvedAt: "",
+		resources,
+		runIdentifier: "run_fixture",
+		runKind: "live",
+		scenarioIdentifier: METEORITE_SCENARIO.identifier,
+		services: applyImpact(
+			baseline,
+			METEORITE_SCENARIO,
+			FIXTURE_IMPACT_TIMESTAMP,
+		),
+		sourceRunIdentifier: "",
+		startedAt: FIXTURE_TIMESTAMP,
+		status: "detected",
+		title: METEORITE_SCENARIO.title,
+		updatedAt: FIXTURE_IMPACT_TIMESTAMP,
+	}
+}

@@ -10,6 +10,7 @@ import {
 	ServiceHealthStatus,
 	SimulatedOutcome,
 } from "@scenarios/types/scenario.type"
+import { SimulationState } from "@scenarios/types/simulation.type"
 
 export type IncidentStatus = (typeof INCIDENT_STATUSES)[number]
 
@@ -103,6 +104,7 @@ export interface IncidentSnapshot {
 	readonly resolvedAt: string
 	readonly businessImpactSummary: string
 	readonly services: ReadonlyArray<ServiceState>
+	readonly simulation: SimulationState
 	readonly resources: ReadonlyArray<ResourceState>
 	readonly facts: ReadonlyArray<Fact>
 	readonly harnessEvents: ReadonlyArray<AppliedHarnessEvent>

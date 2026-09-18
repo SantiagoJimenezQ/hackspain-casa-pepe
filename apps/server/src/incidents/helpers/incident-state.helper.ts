@@ -11,6 +11,7 @@ import {
 	ScenarioDefinition,
 	ServiceHealthStatus,
 } from "@scenarios/types/scenario.type"
+import { SimulationState } from "@scenarios/types/simulation.type"
 
 export function buildBaselineServices(
 	scenario: ScenarioDefinition,
@@ -176,6 +177,21 @@ export function toIncidentSnapshot(entity: IncidentEntity): IncidentSnapshot {
 		runKind: entity.runKind,
 		scenarioIdentifier: entity.scenarioIdentifier,
 		services: entity.services,
+		simulation:
+			entity.simulation ??
+			({
+				automaticEvents: true,
+				difficulty: "medium",
+				disruptionDraws: 0,
+				elapsedMinutes: 0,
+				generatedDisruptions: 0,
+				initialDraws: 0,
+				maxConcurrentDisruptions: 2,
+				mode: "manual",
+				paused: true,
+				recoveryDraws: 0,
+				seed: 42,
+			} satisfies SimulationState),
 		sourceRunIdentifier: entity.sourceRunIdentifier,
 		startedAt: entity.startedAt,
 		status: entity.status,

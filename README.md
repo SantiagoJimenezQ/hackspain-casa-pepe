@@ -13,8 +13,8 @@ apps/
   web/                 Interfaz de operaciones (Next.js previsto)
   server/              API, eventos y proceso de ejecución (NestJS, implementado)
 packages/
-  contracts/           Contratos compartidos y ejemplos de mensajes
-  harness/             Simulación, escenarios y reinicio
+  contracts/           Contratos compartidos de la API y la simulación
+  harness/             Límite documental para la simulación reutilizable
   agent/               Decisiones, planificación y adaptación
   tools/               HappyRobot y adaptadores de ejecución
 demo/                  Guion, ensayos y presentación
@@ -29,7 +29,7 @@ demo/                  Guion, ensayos y presentación
 
 ## Cómo encajan las piezas
 
-La UI consume la API y sus eventos. El servidor conecta el harness, el agente y las herramientas. El harness mantiene el estado de la simulación. El agente decide a partir de ese estado y de los resultados de las herramientas. Los adaptadores ejecutan las acciones y devuelven resultados al servidor.
+La UI consume la API y sus eventos. El servidor conecta la simulación, el agente y las herramientas, y mantiene el estado persistido de cada ejecución. El agente decide a partir de ese estado y de los resultados de las herramientas. Los adaptadores ejecutan las acciones y devuelven resultados al servidor.
 
 La UI no importa implementaciones del agente, del harness ni de las herramientas. Todos utilizan los contratos acordados en `packages/contracts/`. Las credenciales y las integraciones externas permanecen en el servidor.
 
@@ -46,4 +46,4 @@ Next.js cubre la interfaz. El proceso que espera llamadas, aprobaciones y nuevos
 
 ## API simulada para UI y agente
 
-[Guía de integración](apps/server/API.md) · [OpenAPI](packages/contracts/openapi.json) · [Cliente ejecutable](apps/server/demo-client.mjs). La simulación admite modo manual y modo aleatorio reproducible por semilla, con controles de pausa, avance y reanudación.
+La API canónica es NestJS: `apps/server/` expone el contrato en `/documentation` y la referencia está en [`apps/server/docs/API.md`](apps/server/docs/API.md). `POST /api/demo/start` admite escenarios manuales y aleatorios reproducibles por semilla; `/api/demo/pause`, `/api/demo/resume` y `/api/demo/advance` controlan el reloj. Los tipos compartidos están en [`packages/contracts/`](packages/contracts/).

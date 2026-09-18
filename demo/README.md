@@ -2,7 +2,7 @@
 
 Responsable: frente de integración y demo, con una persona encargada del recorrido completo.
 
-Aquí guardaremos el guion, las instrucciones de ensayo, la presentación y los materiales de apoyo. Los datos ejecutables del escenario pertenecen a `packages/harness/`.
+Aquí guardaremos el guion, las instrucciones de ensayo, la presentación y los materiales de apoyo. El escenario ejecutable y sus controles pertenecen a `apps/server/` y están documentados en `apps/server/docs/API.md`.
 
 ## Primera demo integrada
 

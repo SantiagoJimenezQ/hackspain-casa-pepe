@@ -15,7 +15,7 @@ Built with NestJS and TypeScript, persisted in **Supabase (Postgres)** through T
 - Keep the relation between run, event, decision, tool call and approval.
 - Handle timeouts, cancellation and errors.
 
-Exchange contracts are agreed in `packages/contracts/`. Until they are extracted there, the types of this service (`src/*/types`) are the current reference.
+Shared consumer contracts live in `packages/contracts/`. Server-internal types in `src/*/types` may be richer, but the declarations in that package are the reference for UI and integration consumers.
 
 ## Getting started
 
@@ -78,13 +78,13 @@ curl $BASE/learning/reports/current -H "$AUTH" # post-incident report: durations
 curl -X POST $BASE/demo/reset  -H "$AUTH"      # new run; late results from the previous one are ignored
 ```
 
-With 12 reported units the initial plan recovers the four failing services. After the twist (7 confirmed units) the agent recovers the orders database and route assignment, postpones package tracking and the events stream, explains why, and assigns a task to customer support to communicate the delay.
+With 12 reported units the initial plan recovers the four failing services. After the twist (7 confirmed units) the agent recovers the orders database and route assignment, postpones package tracking and the events stream, explains why, and assigns a task to customer support to communicate the delay. A randomized run can be started with `mode`, `seed`, `difficulty`, `automaticEvents` and `maxConcurrentDisruptions`; use `/demo/advance` for deterministic stepping or `/demo/resume` for a live clock.
 
 ## Endpoints
 
 | Group | Routes | Description |
 |---|---|---|
-| Demo | `POST /demo/start`, `/demo/impact`, `/demo/twist`, `/demo/events`, `/demo/reset` | Harness controls, separate from the operator controls |
+| Demo | `POST /demo/start`, `/demo/impact`, `/demo/twist`, `/demo/events`, `/demo/reset`, `/demo/pause`, `/demo/resume`, `/demo/advance` | Harness controls, separate from the operator controls |
 | Incident | `GET /incidents/current`, `/incidents/runs`, `/incidents/runs/:run` | State, services, dependencies, capacity and facts |
 | Overview | `GET /overview` | Full initial state for the UI in one call |
 | Plans | `GET /plans/current`, `/plans`, `/plans/:identifier` | Plan versions with priorities, steps, owners and changes |
@@ -104,6 +104,8 @@ With 12 reported units the initial plan recovers the four failing services. Afte
 | Health | `GET /health` | Postgres and integration modes |
 
 The full reference of every endpoint, body, response and the event catalog is in [docs/API.md](docs/API.md). Interactive OpenAPI documentation is served at `/documentation`.
+
+The simulation configuration and state are shared in [`packages/contracts/simulation.d.ts`](../../packages/contracts/simulation.d.ts). The incident snapshot contract is [`packages/contracts/incident.d.ts`](../../packages/contracts/incident.d.ts). These files describe the consumer-facing payload; NestJS DTOs remain the runtime validators.
 
 ## Outbound webhooks
 

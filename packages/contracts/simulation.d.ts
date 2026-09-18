@@ -1,19 +1,39 @@
-/** Optional concurrency guards supported by every POST endpoint. */
-export interface CommandGuard { expectedRunId?: string; expectedRevision?: number }
-export interface ResetCommand extends CommandGuard {
-  /** Omitted mode preserves the original manual fixture. */
-  mode?: 'manual' | 'randomized';
-  /** Unsigned 32-bit integer. Defaults to 42. */
-  seed?: number;
-  difficulty?: 'easy' | 'medium' | 'hard';
-  /** Secondary faults only; does not disable migration progress/failure. */
-  automaticEvents?: boolean;
-  /** 1–3 unhealthy regions, including the primary; manual injections bypass this cap. */
-  maxConcurrentDisruptions?: number;
+export type SimulationMode = "manual" | "randomized"
+export type SimulationDifficulty = "easy" | "medium" | "hard"
+
+export interface SimulationConfigInput {
+	mode?: SimulationMode
+	seed?: number
+	difficulty?: SimulationDifficulty
+	automaticEvents?: boolean
+	maxConcurrentDisruptions?: number
 }
+
 export interface SimulationState {
-  mode: 'manual' | 'randomized'; seed: number; difficulty: 'easy' | 'medium' | 'hard';
-  automaticEvents: boolean; maxConcurrentDisruptions: number;
-  paused: boolean; elapsedMinutes: number; generatedDisruptions: number;
+	mode: SimulationMode
+	seed: number
+	difficulty: SimulationDifficulty
+	automaticEvents: boolean
+	maxConcurrentDisruptions: number
+	paused: boolean
+	elapsedMinutes: number
+	generatedDisruptions: number
+	initialDraws: number
+	recoveryDraws: number
+	disruptionDraws: number
 }
-export interface AdvanceCommand extends CommandGuard { minutes?: number }
+
+export interface SimulationRecoveryScript {
+	outcome: "success" | "partial" | "failure"
+	detail: string
+}
+
+export interface SimulationDisruption {
+	serviceIdentifier: string
+	status: "healthy" | "degraded" | "down" | "recovering"
+	reason: string
+}
+
+export interface AdvanceSimulationRequest {
+	minutes?: number
+}

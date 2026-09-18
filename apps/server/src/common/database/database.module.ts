@@ -9,6 +9,9 @@ import { TypeOrmModule } from "@nestjs/typeorm"
 			inject: [ConfigurationService],
 			useFactory: (configuration: ConfigurationService) => ({
 				autoLoadEntities: true,
+				logging: configuration.database.queryLogging
+					? ["query"]
+					: false,
 				ssl: requiresTLS(configuration.database.url)
 					? { rejectUnauthorized: false }
 					: false,

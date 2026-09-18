@@ -1,22 +1,20 @@
-# API y proceso de ejecución
+# Casa Pepe dummy AWS API
 
-Responsable: frente de harness y backend, en coordinación con agente e integraciones.
+Run from the repository root with Node.js 22+:
 
-Aquí irá el proceso que conecta la interfaz, el harness, el agente y las herramientas. No hay servidor implementado todavía.
+```sh
+npm run dev:server
+npm test
+```
 
-## Alcance
+The API listens on `http://127.0.0.1:4000`. No dependencies or AWS credentials are required. It provides company/region health, migration state, impact totals and an event history for the UI.
 
-- Exponer el estado del incidente y las actualizaciones para la UI.
-- Recibir controles de demo y decisiones del operador.
-- Ejecutar el ciclo del agente y procesar resultados de herramientas.
-- Recibir las respuestas asíncronas de integraciones como HappyRobot.
-- Mantener la relación entre ejecución, evento, decisión, herramienta y aprobación.
-- Gestionar tiempos de espera, cancelación y errores.
+**For implementation, start with [API.md](API.md).** It documents every endpoint, request/response schema, state transition, error, concurrency rule, randomization rule and a complete workflow.
 
-## Integración
+- [OpenAPI specification](../../packages/contracts/openapi.json), also at `/api/openapi.json`.
+- [Shared TypeScript contracts](../../packages/contracts/status.d.ts).
+- [Runnable client](demo-client.mjs): `npm run demo:api` against a running server. This resets the demo.
 
-Los contratos se acuerdan en `packages/contracts/`. La lógica de simulación pertenece a `packages/harness/`, la de decisión a `packages/agent/` y las integraciones a `packages/tools/`.
+Default startup and `reset {}` preserve the manual fixture. Reset with `{"mode":"randomized","seed":42}` to vary capacity and migration outcomes. The clock starts paused; use advance for reproducible tests or resume for live simulation. The harness models the environment; the agent owns recovery decisions.
 
-Al reiniciar una demo, los resultados tardíos de la ejecución anterior no deben modificar la nueva. Una aprobación debe corresponder a una acción y a una versión concreta del plan.
-
-Primera entrega: iniciar una ejecución, consultar su estado, emitir un evento y recibir una aprobación desde la UI. Elegir el transporte de eventos y la persistencia al cerrar el contrato inicial.
+The server is local and in memory, with simulated data only. `PORT` changes its port; `UI_ORIGIN` changes the allowed browser origin (default `http://localhost:3000`).

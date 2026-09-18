@@ -1,0 +1,15 @@
+{
+  "name": "casa-pepe",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:server": "node --watch apps/server/index.mjs",
+    "start:server": "node apps/server/index.mjs",
+    "test": "node --test",
+    "docs:generate": "node packages/contracts/generate-openapi.mjs",
+    "demo:api": "node apps/server/demo-client.mjs"
+  }
+}

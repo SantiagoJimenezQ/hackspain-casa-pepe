@@ -4,6 +4,8 @@
 
 - [Official HackSpain 2026 challenge brief](https://hackspain2026.happyrobot.ai/)
 - [Casa Pepe GitHub repository](https://github.com/SantiagoJimenezQ/hackspain-casa-pepe)
+- [Master project plan](MASTER.md)
+- [Repository structure and contribution workflow](README.md)
 
 The official challenge brief is the source of truth if this file and the brief ever disagree.
 
@@ -42,6 +44,9 @@ The three main evaluation areas have equal weight:
 Learning from earlier executions earns extra credit. The pitch and demo should make the system’s decisions, actions, and adaptation easy to see.
 
 ## Development expectations
+
+- Read the target folder's README before implementing. `apps/web` owns the UI, `apps/server` owns runtime integration, and `packages` separates contracts, simulation, decisions, and tool adapters.
+- Agree on shared contracts in `packages/contracts` before connecting components. Keep server credentials and external integrations out of browser code.
 
 - Keep the scenario state, incoming events, decisions, planned actions, completed actions, and human overrides auditable.
 - Make the reason for each priority, notification, assignment, and plan change visible in the operator interface.

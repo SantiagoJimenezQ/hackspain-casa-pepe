@@ -5,17 +5,20 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DemoDrawer } from "@/components/dashboard/demo-drawer";
-import { useDashboard } from "@/components/dashboard/dashboard-provider";
-import { formatEsDate, formatEsTime } from "@/lib/format";
+import { LanguageSwitcher } from "@/components/dashboard/language-switcher";
+import { ThemeSwitcher } from "@/components/dashboard/theme-switcher";
+import { useI18n } from "@/components/i18n/locale-provider";
+import { formatDate, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { MessageKey } from "@/lib/i18n";
 
-const NAV = [
-  { href: "/", label: "Visión general" },
-  { href: "/incidentes", label: "Incidentes" },
-  { href: "/migracion", label: "Migración" },
-  { href: "/empresas", label: "Empresas" },
-  { href: "/infraestructura", label: "Infraestructura" },
-  { href: "/logs", label: "Logs" },
+const NAV: { href: string; labelKey: MessageKey }[] = [
+  { href: "/", labelKey: "nav.overview" },
+  { href: "/incidentes", labelKey: "nav.incidents" },
+  { href: "/migracion", labelKey: "nav.migration" },
+  { href: "/empresas", labelKey: "nav.companies" },
+  { href: "/infraestructura", labelKey: "nav.infrastructure" },
+  { href: "/logs", labelKey: "nav.logs" },
 ];
 
 function CasaPepeMark() {
@@ -30,7 +33,7 @@ function CasaPepeMark() {
           />
         </svg>
       </span>
-      <span className="text-[15px] font-semibold tracking-tight text-white">
+      <span className="text-[15px] font-semibold tracking-tight text-foreground">
         Casa Pepe
       </span>
     </Link>
@@ -39,7 +42,7 @@ function CasaPepeMark() {
 
 export function TopBar() {
   const pathname = usePathname();
-  const { snapshot } = useDashboard();
+  const { locale, t } = useI18n();
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -50,7 +53,7 @@ export function TopBar() {
   }, []);
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-6 border-b border-white/8 px-4">
+    <header className="flex h-14 shrink-0 items-center gap-6 border-b border-border px-4">
       <CasaPepeMark />
       <nav className="flex min-w-0 flex-1 items-center gap-1">
         {NAV.map((item) => {
@@ -65,41 +68,43 @@ export function TopBar() {
               className={cn(
                 "relative rounded-md px-3 py-1.5 text-[13px] transition-colors",
                 active
-                  ? "text-white"
-                  : "text-muted-foreground hover:text-white",
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {item.label}
+              {t(item.labelKey)}
               {active ? (
-                <span className="absolute inset-x-3 -bottom-[13px] h-px bg-white" />
+                <span className="absolute inset-x-3 -bottom-[13px] h-px bg-foreground" />
               ) : null}
             </Link>
           );
         })}
       </nav>
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/8 px-3 py-1">
-          <span className="size-1.5 rounded-full bg-status-up shadow-[0_0_8px_#3ee08f]" />
+        <div className="flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/8 px-3 py-1">
+          <span className="size-1.5 rounded-full bg-status-up shadow-[0_0_8px_var(--status-up)]" />
           <div className="leading-tight">
-            <p className="text-[11px] font-medium text-emerald-200">
-              Agente IA activo
+            <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-200">
+              {t("agent.online")}
             </p>
             <p className="text-[10px] text-muted-foreground">
-              {snapshot.agent.statusLabel}
+              {t("agent.resolving")}
             </p>
           </div>
         </div>
         <div className="text-right leading-tight">
           <p className="text-[11px] text-muted-foreground">
-            {now ? formatEsDate(now) : "—"}
+            {now ? formatDate(now, locale) : "—"}
           </p>
-          <p className="font-mono text-[13px] tabular-nums text-white">
-            {now ? formatEsTime(now) : "--:--:--"}
+          <p className="font-mono text-[13px] tabular-nums text-foreground">
+            {now ? formatTime(now, locale) : "--:--:--"}
           </p>
         </div>
+        <ThemeSwitcher />
+        <LanguageSwitcher />
         <DemoDrawer />
-        <Avatar className="size-8 ring-1 ring-white/10">
-          <AvatarFallback className="bg-[#1b2538] text-[11px] font-semibold text-white">
+        <Avatar className="size-8 ring-1 ring-border">
+          <AvatarFallback className="bg-muted text-[11px] font-semibold text-foreground">
             N
           </AvatarFallback>
         </Avatar>

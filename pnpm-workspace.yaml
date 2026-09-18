@@ -1,7 +1,11 @@
 packages:
   - "apps/*"
   - "packages/*"
+strictDepBuilds: true
+engineStrict: true
+verifyDepsBeforeRun: warn
 allowBuilds:
-  '@nestjs/core': set this to true or false
-  '@scarf/scarf': set this to true or false
-  unrs-resolver: set this to true or false
+  unrs-resolver: true
+  sharp: true
+  "@nestjs/core": true
+  "@scarf/scarf": false

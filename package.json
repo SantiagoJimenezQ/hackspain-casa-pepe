@@ -4,7 +4,15 @@
   "scripts": {
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
-    "lint": "pnpm --filter web lint"
+    "lint": "pnpm --filter web lint && pnpm --filter @casa-pepe/server lint",
+    "typecheck": "pnpm --filter web typecheck && pnpm --filter @casa-pepe/server typecheck",
+    "test": "pnpm --filter web test && pnpm --filter @casa-pepe/server test",
+    "ci": "pnpm --filter web run check && pnpm --filter @casa-pepe/server lint && pnpm --filter @casa-pepe/server typecheck && pnpm --filter @casa-pepe/server test",
+    "check:web": "pnpm --filter web run check",
+    "check:server": "pnpm --filter @casa-pepe/server lint && pnpm --filter @casa-pepe/server typecheck && pnpm --filter @casa-pepe/server test"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "packageManager": "pnpm@11.7.0"
 }

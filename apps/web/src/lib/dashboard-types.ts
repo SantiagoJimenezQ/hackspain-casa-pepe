@@ -11,14 +11,32 @@ export type SiteId =
   | "zaragoza"
   | "canarias";
 
+export type SectorId =
+  | "energy"
+  | "banking"
+  | "retail"
+  | "telecom"
+  | "transport";
+
+export type AgentPhaseId =
+  | "analyze"
+  | "plan"
+  | "launch_subagents"
+  | "restore"
+  | "validate"
+  | "close";
+
+export type AgentStepStatus = "done" | "running" | "pending";
+
+export type ToolCallStatus = "pending" | "running" | "done" | "failed";
+
 export type Site = {
   id: SiteId;
-  name: string;
-  role?: string;
   lat: number;
   lng: number;
   status: HealthStatus;
   inset?: "canarias";
+  role?: "primary";
 };
 
 export type SiteLink = {
@@ -34,7 +52,7 @@ export type Company = {
   id: string;
   name: string;
   shortName: string;
-  sector: string;
+  sector: SectorId;
   users: number;
   status: HealthStatus;
   action: CompanyAction;
@@ -43,18 +61,56 @@ export type Company = {
   accent: string;
 };
 
-export type AgentStepStatus = "done" | "running" | "pending";
-
-export type AgentStep = {
+export type AgentToolCall = {
   id: string;
-  label: string;
+  name: string;
+  status: ToolCallStatus;
+  summaryKey?: string;
+  detailKey?: string;
+  time?: string;
+};
+
+export type AgentSubagent = {
+  id: string;
+  name: string;
+  companyId?: string;
+  status: AgentStepStatus;
+  headlineKey: string;
+  reasoningKey?: string;
+  tools: AgentToolCall[];
+};
+
+export type AgentPhase = {
+  id: AgentPhaseId;
   status: AgentStepStatus;
   time?: string;
+  tools?: AgentToolCall[];
+  subagents?: AgentSubagent[];
+};
+
+export type AgentActivity =
+  | { id: string; type: "reasoning"; textKey: string; time: string }
+  | { id: string; type: "phase"; phaseId: AgentPhaseId }
+  | {
+      id: string;
+      type: "message";
+      role: "operator" | "agent";
+      text?: string;
+      textKey?: string;
+      time: string;
+    };
+
+export type AgentState = {
+  online: boolean;
+  completed: number;
+  total: number;
+  currentReasoningKey: string;
+  phases: AgentPhase[];
+  activity: AgentActivity[];
 };
 
 export type InfraNode = {
   id: SiteId;
-  name: string;
   status: HealthStatus;
   capacity: number;
 };
@@ -62,10 +118,8 @@ export type InfraNode = {
 export type DashboardSnapshot = {
   incident: {
     severity: "critical";
-    title: string;
-    description: string;
     localTime: string;
-    elapsedLabel: string;
+    elapsedMinutes: number;
     impactSiteId: SiteId;
   };
   global: {
@@ -85,17 +139,8 @@ export type DashboardSnapshot = {
   sites: Site[];
   links: SiteLink[];
   companies: Company[];
-  agent: {
-    online: boolean;
-    statusLabel: string;
-    progressLabel: string;
-    completed: number;
-    total: number;
-    quote: string;
-    steps: AgentStep[];
-  };
+  agent: AgentState;
   camera: {
-    title: string;
     timestamp: string;
   };
   migrationOverallPercent: number;

@@ -1,3 +1,4 @@
+import { insertEntity, updateEntity } from "@common/database/persistence.helper"
 import { nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
 import { LearningInsightEntity } from "@learning/entities/learning-insight.entity"
@@ -58,7 +59,12 @@ export class LearningService {
 		}
 		entity.summary = `The dashboard reported ${reportedCapacity} units but only ${lowestConfirmed} were really available (${entity.observations} observations)`
 		entity.updatedAt = timestamp
-		return toInsightRecord(await this.repository.save(entity))
+		return toInsightRecord(
+			await (existing ? updateEntity : insertEntity)(
+				this.repository,
+				entity,
+			),
+		)
 	}
 
 	async recordRecoveryOutcome(
@@ -101,7 +107,12 @@ export class LearningService {
 			.map(([name, count]) => `${name} ×${count}`)
 			.join(", ")}`
 		entity.updatedAt = timestamp
-		return toInsightRecord(await this.repository.save(entity))
+		return toInsightRecord(
+			await (existing ? updateEntity : insertEntity)(
+				this.repository,
+				entity,
+			),
+		)
 	}
 
 	async findCapacityInsight(

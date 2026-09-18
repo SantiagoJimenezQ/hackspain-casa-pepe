@@ -1,6 +1,7 @@
 import { ActivityService } from "@activity/services/activity.service"
 import { DOMAIN_EVENTS } from "@common/constants/domain-events.constant"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
+import { insertEntity, updateEntity } from "@common/database/persistence.helper"
 import { EntityNotFoundException } from "@common/exceptions/domain.exception"
 import { nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
@@ -48,7 +49,7 @@ export class TasksService {
 			toolCallIdentifier: command.toolCallIdentifier,
 			updatedAt: timestamp,
 		})
-		const record = toTaskRecord(await this.repository.save(entity))
+		const record = toTaskRecord(await insertEntity(this.repository, entity))
 		this.logger.log(LOG_MESSAGES.TASKS.ASSIGNED, {
 			assignee: record.assignee.name,
 			taskIdentifier: record.identifier,
@@ -86,7 +87,7 @@ export class TasksService {
 		entity.status = status
 		entity.statusNote = note
 		entity.updatedAt = nowISO()
-		const record = toTaskRecord(await this.repository.save(entity))
+		const record = toTaskRecord(await updateEntity(this.repository, entity))
 		this.logger.log(LOG_MESSAGES.TASKS.UPDATED, {
 			status: record.status,
 			taskIdentifier: record.identifier,

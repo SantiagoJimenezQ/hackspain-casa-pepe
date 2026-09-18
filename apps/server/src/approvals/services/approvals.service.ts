@@ -10,6 +10,7 @@ import {
 } from "@approvals/types/approval.type"
 import { DOMAIN_EVENTS } from "@common/constants/domain-events.constant"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
+import { insertEntity, updateEntity } from "@common/database/persistence.helper"
 import {
 	EntityNotFoundException,
 	InvalidStateTransitionException,
@@ -58,7 +59,9 @@ export class ApprovalsService {
 			status: "pending",
 			toolCallIdentifier: command.toolCallIdentifier,
 		})
-		const record = toApprovalRecord(await this.repository.save(entity))
+		const record = toApprovalRecord(
+			await insertEntity(this.repository, entity),
+		)
 		this.logger.log(LOG_MESSAGES.APPROVALS.REQUESTED, {
 			approvalIdentifier: record.identifier,
 			runIdentifier: record.runIdentifier,
@@ -109,7 +112,9 @@ export class ApprovalsService {
 		entity.decidedAt = timestamp
 		entity.decidedBy = command.operatorName
 		entity.comment = command.comment
-		const record = toApprovalRecord(await this.repository.save(entity))
+		const record = toApprovalRecord(
+			await updateEntity(this.repository, entity),
+		)
 		this.logger.log(LOG_MESSAGES.APPROVALS.DECIDED, {
 			approvalIdentifier: record.identifier,
 			decision: record.status,
@@ -215,7 +220,9 @@ export class ApprovalsService {
 		entity.status = status
 		entity.invalidationReason = reason
 		entity.decidedAt = nowISO()
-		const record = toApprovalRecord(await this.repository.save(entity))
+		const record = toApprovalRecord(
+			await updateEntity(this.repository, entity),
+		)
 		await this.activityService.record({
 			correlation: this.correlationOf(record),
 			incidentIdentifier: record.incidentIdentifier,

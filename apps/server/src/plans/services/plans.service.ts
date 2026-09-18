@@ -1,4 +1,5 @@
 import { ActivityService } from "@activity/services/activity.service"
+import { insertEntity, updateEntity } from "@common/database/persistence.helper"
 import { EntityNotFoundException } from "@common/exceptions/domain.exception"
 import { nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
@@ -68,7 +69,7 @@ export class PlansService {
 			const previousEntity = await this.getEntity(previous.identifier)
 			previousEntity.status = "superseded"
 			previousEntity.updatedAt = timestamp
-			await this.repository.save(previousEntity)
+			await updateEntity(this.repository, previousEntity)
 		}
 		const entity = this.repository.create({
 			assumptions: [...input.assumptions],
@@ -89,7 +90,7 @@ export class PlansService {
 			updatedAt: timestamp,
 			version: previous ? previous.version + 1 : 1,
 		})
-		const saved = await this.repository.save(entity)
+		const saved = await insertEntity(this.repository, entity)
 		const record = toPlanRecord(saved)
 		await this.activityService.record({
 			correlation: {
@@ -147,7 +148,7 @@ export class PlansService {
 			step.identifier === stepIdentifier ? updated : step,
 		)
 		entity.updatedAt = timestamp
-		const saved = await this.repository.save(entity)
+		const saved = await updateEntity(this.repository, entity)
 		const record = toPlanRecord(saved)
 		await this.activityService.record({
 			correlation: {
@@ -174,7 +175,7 @@ export class PlansService {
 		const entity = await this.getEntity(planIdentifier)
 		entity.status = "completed"
 		entity.updatedAt = nowISO()
-		return toPlanRecord(await this.repository.save(entity))
+		return toPlanRecord(await updateEntity(this.repository, entity))
 	}
 
 	private async getEntity(identifier: string): Promise<PlanEntity> {

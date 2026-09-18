@@ -1,6 +1,7 @@
 import { ActivityService } from "@activity/services/activity.service"
 import { DOMAIN_EVENTS } from "@common/constants/domain-events.constant"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
+import { insertEntity, updateEntity } from "@common/database/persistence.helper"
 import { EntityNotFoundException } from "@common/exceptions/domain.exception"
 import { elapsedMilliseconds, nowISO } from "@common/helpers/clock.helper"
 import { toRecord } from "@common/helpers/collection.helper"
@@ -83,7 +84,7 @@ export class ToolsService {
 			status: "running",
 			updatedAt: timestamp,
 		})
-		const saved = await this.repository.save(entity)
+		const saved = await insertEntity(this.repository, entity)
 		this.logger.log(LOG_MESSAGES.TOOLS.CALL_STARTED, {
 			name: saved.name,
 			toolCallIdentifier: saved.identifier,
@@ -112,7 +113,7 @@ export class ToolsService {
 				return {
 					kind: "in-progress",
 					toolCall: toToolCallRecord(
-						await this.repository.save(saved),
+						await updateEntity(this.repository, saved),
 					),
 				}
 		}
@@ -146,7 +147,7 @@ export class ToolsService {
 			}
 			entity.finishedAt = nowISO()
 			entity.updatedAt = entity.finishedAt
-			await this.repository.save(entity)
+			await updateEntity(this.repository, entity)
 		}
 		return running.length
 	}
@@ -298,7 +299,7 @@ export class ToolsService {
 		entity.error = error
 		entity.finishedAt = nowISO()
 		entity.updatedAt = entity.finishedAt
-		const saved = await this.repository.save(entity)
+		const saved = await updateEntity(this.repository, entity)
 		if (error) {
 			this.logger.warn(LOG_MESSAGES.TOOLS.CALL_FAILED, {
 				code: error.code,

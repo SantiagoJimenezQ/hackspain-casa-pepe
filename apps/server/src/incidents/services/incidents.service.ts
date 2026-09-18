@@ -1,6 +1,7 @@
 import { ActivityService } from "@activity/services/activity.service"
 import { DOMAIN_EVENTS } from "@common/constants/domain-events.constant"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
+import { insertEntity, updateEntity } from "@common/database/persistence.helper"
 import { StaleRunException } from "@common/exceptions/domain.exception"
 import { nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
@@ -72,7 +73,8 @@ export class IncidentsService {
 			simulation,
 		)
 		await this.deactivateCurrentRun("A new run was started")
-		const entity = await this.repository.save(
+		const entity = await insertEntity(
+			this.repository,
 			this.buildBaselineEntity(runtimeScenario, "live", "", simulation),
 		)
 		const snapshot = toIncidentSnapshot(entity)
@@ -114,7 +116,8 @@ export class IncidentsService {
 			replayCapacityState,
 		)
 		await this.deactivateCurrentRun("A replay was started")
-		const entity = await this.repository.save(
+		const entity = await insertEntity(
+			this.repository,
 			this.buildBaselineEntity(
 				runtimeScenario,
 				"replay",
@@ -176,7 +179,7 @@ export class IncidentsService {
 		}
 		entity.simulation = { ...entity.simulation, paused }
 		entity.updatedAt = nowISO()
-		return toIncidentSnapshot(await this.repository.save(entity))
+		return toIncidentSnapshot(await updateEntity(this.repository, entity))
 	}
 
 	async advanceSimulation(
@@ -224,7 +227,7 @@ export class IncidentsService {
 		}
 		entity.simulation = simulation
 		entity.updatedAt = nowISO()
-		await this.repository.save(entity)
+		await updateEntity(this.repository, entity)
 		for (const disruption of disruptions) {
 			await this.applyHarnessEvent(
 				{
@@ -283,7 +286,7 @@ export class IncidentsService {
 			resource?.totalCapacity ?? service.recoveryCapacityUnits,
 		)
 		entity.updatedAt = nowISO()
-		await this.repository.save(entity)
+		await updateEntity(this.repository, entity)
 		return script
 	}
 
@@ -341,7 +344,7 @@ export class IncidentsService {
 			entity.impactedAt,
 		)
 		entity.updatedAt = timestamp
-		const saved = await this.repository.save(entity)
+		const saved = await updateEntity(this.repository, entity)
 		const snapshot = toIncidentSnapshot(saved)
 		await this.activityService.record({
 			correlation: { harnessEventIdentifier: applied.identifier },
@@ -420,7 +423,7 @@ export class IncidentsService {
 			}
 		})
 		entity.updatedAt = timestamp
-		await this.repository.save(entity)
+		await updateEntity(this.repository, entity)
 		await this.activityService.record({
 			correlation: { serviceIdentifier: request.serviceIdentifier },
 			incidentIdentifier: entity.identifier,
@@ -461,7 +464,7 @@ export class IncidentsService {
 			}
 		})
 		entity.updatedAt = timestamp
-		await this.repository.save(entity)
+		await updateEntity(this.repository, entity)
 	}
 
 	async setServiceStatus(
@@ -494,7 +497,7 @@ export class IncidentsService {
 			entity.resolvedAt = timestamp
 		}
 		entity.updatedAt = timestamp
-		const saved = await this.repository.save(entity)
+		const saved = await updateEntity(this.repository, entity)
 		const snapshot = toIncidentSnapshot(saved)
 		await this.activityService.record({
 			correlation: { serviceIdentifier },
@@ -540,7 +543,7 @@ export class IncidentsService {
 				)
 			: [...entity.facts, fact]
 		entity.updatedAt = timestamp
-		await this.repository.save(entity)
+		await updateEntity(this.repository, entity)
 		await this.activityService.record({
 			correlation: {},
 			incidentIdentifier: entity.identifier,
@@ -571,7 +574,7 @@ export class IncidentsService {
 			return { ...resource, confirmed, lastChangedAt: timestamp, note }
 		})
 		entity.updatedAt = timestamp
-		await this.repository.save(entity)
+		await updateEntity(this.repository, entity)
 	}
 
 	async markResponding(runIdentifier: string): Promise<IncidentSnapshot> {
@@ -583,7 +586,9 @@ export class IncidentsService {
 		const previousStatus = entity.status
 		entity.status = "responding"
 		entity.updatedAt = nowISO()
-		const snapshot = toIncidentSnapshot(await this.repository.save(entity))
+		const snapshot = toIncidentSnapshot(
+			await updateEntity(this.repository, entity),
+		)
 		await this.recordStatusChange(snapshot, previousStatus)
 		return snapshot
 	}
@@ -593,7 +598,7 @@ export class IncidentsService {
 			await this.runsService.getEntityByRunIdentifier(runIdentifier)
 		entity.agentCycles = entity.agentCycles + 1
 		entity.updatedAt = nowISO()
-		await this.repository.save(entity)
+		await updateEntity(this.repository, entity)
 		return entity.agentCycles
 	}
 
@@ -754,7 +759,7 @@ export class IncidentsService {
 				source: "Harness",
 			},
 		]
-		await this.repository.save(current)
+		await updateEntity(this.repository, current)
 	}
 
 	private buildBaselineEntity(

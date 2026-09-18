@@ -1,4 +1,5 @@
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
+import { insertEntity, updateEntity } from "@common/database/persistence.helper"
 import { EntityNotFoundException } from "@common/exceptions/domain.exception"
 import { nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
@@ -37,7 +38,7 @@ export class WebhookSubscriptionsService {
 			targetURL: command.targetURL,
 			updatedAt: timestamp,
 		})
-		const saved = await this.repository.save(entity)
+		const saved = await insertEntity(this.repository, entity)
 		this.logger.log(LOG_MESSAGES.WEBHOOKS.SUBSCRIPTION_CREATED, {
 			subscriptionIdentifier: saved.identifier,
 			targetURL: saved.targetURL,
@@ -74,7 +75,7 @@ export class WebhookSubscriptionsService {
 		const entity = await this.getEntity(identifier)
 		entity.active = false
 		entity.updatedAt = nowISO()
-		await this.repository.save(entity)
+		await updateEntity(this.repository, entity)
 		this.logger.log(LOG_MESSAGES.WEBHOOKS.SUBSCRIPTION_REMOVED, {
 			subscriptionIdentifier: identifier,
 		})

@@ -45,6 +45,21 @@ export class InMemoryRepository<Entity extends { identifier: string }> {
 		return { ...partial } as Entity
 	}
 
+	async insert(entity: Entity): Promise<void> {
+		this.rows.set(entity.identifier, { ...entity })
+	}
+
+	async update(
+		criteria: { identifier: string },
+		changes: Partial<Entity>,
+	): Promise<void> {
+		const existing = this.rows.get(criteria.identifier)
+		if (!existing) {
+			return
+		}
+		this.rows.set(criteria.identifier, { ...existing, ...changes })
+	}
+
 	async save(entity: Entity): Promise<Entity> {
 		const stored = { ...entity }
 		this.rows.set(entity.identifier, stored)

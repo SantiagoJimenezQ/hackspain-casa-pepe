@@ -14,6 +14,7 @@ export interface RuntimeConfiguration {
 
 export interface DatabaseConfiguration {
 	readonly url: string
+	readonly queryLogging: boolean
 }
 
 export interface AuthenticationConfiguration {

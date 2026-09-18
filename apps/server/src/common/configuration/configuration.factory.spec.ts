@@ -1,3 +1,4 @@
+import "reflect-metadata"
 import { validateEnvironmentVariables } from "@common/configuration/configuration.factory"
 
 const VALID = {

@@ -10,6 +10,9 @@ import {
 	MinLength,
 } from "class-validator"
 
+const DATABASE_URL_MESSAGE =
+	"SUPABASE_DATABASE_URL must be the Postgres connection string (postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres), not the https Project URL. Copy it from Supabase > Connect > Session pooler > URI"
+
 export class EnvironmentVariables {
 	@IsIn(["simulated", "live"])
 	INCIDENT_EMAIL_MODE: string = "simulated"
@@ -31,10 +34,12 @@ export class EnvironmentVariables {
 	@IsString()
 	PUBLIC_BASE_URL: string = "http://localhost:3000"
 
+	@IsIn(["true", "false"])
+	DATABASE_QUERY_LOGGING: string = "false"
+
 	@IsString()
 	@Matches(/^postgres(ql)?:\/\//, {
-		message:
-			"SUPABASE_DATABASE_URL must be the Postgres connection string (postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres), not the https Project URL. Copy it from Supabase > Connect > Session pooler > URI",
+		message: DATABASE_URL_MESSAGE,
 	})
 	SUPABASE_DATABASE_URL: string =
 		"postgresql://casa_pepe:casa_pepe@localhost:5432/casa_pepe"

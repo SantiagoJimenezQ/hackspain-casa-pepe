@@ -44,6 +44,7 @@ export function createApplicationConfiguration(
 			apiKey: variables.API_KEY,
 		},
 		database: {
+			queryLogging: variables.DATABASE_QUERY_LOGGING === "true",
 			url: variables.SUPABASE_DATABASE_URL,
 		},
 		demo: {

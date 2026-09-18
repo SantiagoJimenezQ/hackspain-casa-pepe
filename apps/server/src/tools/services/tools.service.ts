@@ -281,7 +281,8 @@ export class ToolsService {
 					retryable: true,
 				},
 				status: "failed",
-			} finally 
+			}
+		} finally {
 			clearTimeout(timer)
 		}
 	}

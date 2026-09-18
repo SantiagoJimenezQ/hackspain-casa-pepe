@@ -1,6 +1,7 @@
 import {
 	BUSINESS_IMPACT_LEVELS,
 	RECOVERY_ACTION_KINDS,
+	SCENARIO_LANGUAGES,
 	SERVICE_HEALTH_STATUSES,
 	SIMULATED_OUTCOMES,
 } from "@scenarios/constants/scenario.constant"
@@ -12,6 +13,8 @@ export type BusinessImpactLevel = (typeof BUSINESS_IMPACT_LEVELS)[number]
 export type RecoveryActionKind = (typeof RECOVERY_ACTION_KINDS)[number]
 
 export type SimulatedOutcome = (typeof SIMULATED_OUTCOMES)[number]
+
+export type ScenarioLanguage = (typeof SCENARIO_LANGUAGES)[number]
 
 export interface ScenarioRecoveryAction {
 	readonly kind: RecoveryActionKind
@@ -82,6 +85,7 @@ export interface ScenarioSupportContact {
 
 export interface ScenarioDefinition {
 	readonly identifier: string
+	readonly language: ScenarioLanguage
 	readonly title: string
 	readonly company: string
 	readonly region: string
@@ -94,4 +98,16 @@ export interface ScenarioDefinition {
 	readonly engineerBriefing: ScenarioEngineerBriefing
 	readonly twist: ScenarioTwist
 	readonly supportContact: ScenarioSupportContact
+}
+
+export interface ScenarioSummary {
+	readonly identifier: string
+	readonly language: ScenarioLanguage
+	readonly title: string
+	readonly company: string
+	readonly region: string
+	readonly backupRegion: string
+	readonly serviceCount: number
+	readonly reportedCapacity: number
+	readonly capacityAfterTwist: number
 }

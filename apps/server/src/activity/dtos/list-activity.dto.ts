@@ -63,4 +63,9 @@ export class ListActivityDTO {
 	@IsInt()
 	@Min(0)
 	offset: number = 0
+
+	@ApiPropertyOptional({ description: "API key for browser EventSource clients that cannot send headers" })
+	@IsOptional()
+	@IsString()
+	apiKey?: string
 }

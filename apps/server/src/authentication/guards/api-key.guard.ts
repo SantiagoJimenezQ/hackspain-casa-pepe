@@ -1,4 +1,5 @@
 import {
+	API_KEY_QUERY_PARAMETER,
 	AUTHORIZATION_SCHEME,
 	AUTHORIZATION_SCOPE_METADATA_KEY,
 } from "@authentication/constants/authentication.constant"
@@ -24,6 +25,10 @@ interface AuthorizationHeader {
 	readonly credential: string
 }
 
+function readQueryAPIKey(request: Request): string {
+	return [request.query[API_KEY_QUERY_PARAMETER]].flat().map((value) => String(value)).join("")
+}
+
 function parseAuthorizationHeader(rawHeader: string): AuthorizationHeader {
 	const [scheme = "", credential = ""] = rawHeader.trim().split(/\s+/, 2)
 	return { credential, scheme: scheme.toUpperCase() }
@@ -43,6 +48,7 @@ export class APIKeyGuard implements CanActivate {
 			.getRequest<Request & { principal: Principal }>()
 		const principal = this.resolvePrincipal(
 			readHeader(request, HTTP_HEADERS.AUTHORIZATION),
+			readQueryAPIKey(request),
 		)
 		request.principal = principal
 
@@ -70,15 +76,13 @@ export class APIKeyGuard implements CanActivate {
 		return scope
 	}
 
-	private resolvePrincipal(rawHeader: string): Principal {
+	private resolvePrincipal(rawHeader: string, queryAPIKey: string): Principal {
 		const header = parseAuthorizationHeader(rawHeader)
-		if (
-			header.scheme === AUTHORIZATION_SCHEME &&
-			isSharedSecretValid(
-				this.configuration.authentication.apiKey,
-				header.credential,
-			)
-		) {
+		const apiKey = this.configuration.authentication.apiKey
+		if (header.scheme === AUTHORIZATION_SCHEME && isSharedSecretValid(apiKey, header.credential)) {
+			return { kind: "operator" }
+		}
+		if (queryAPIKey && isSharedSecretValid(apiKey, queryAPIKey)) {
 			return { kind: "operator" }
 		}
 		return { kind: "anonymous" }

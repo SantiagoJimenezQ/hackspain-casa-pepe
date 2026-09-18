@@ -2,9 +2,13 @@ import { proxyJSON } from "@/lib/casa-pepe-server";
 
 const ACTIONS = new Set(["start", "impact", "twist", "reset"]);
 
+type DemoRouteContext = {
+  params: Promise<{ action: string }>;
+};
+
 export async function POST(
   request: Request,
-  context: RouteContext<"/api/casa-pepe/demo/[action]">,
+  context: DemoRouteContext,
 ) {
   const { action } = await context.params;
   if (!ACTIONS.has(action)) {

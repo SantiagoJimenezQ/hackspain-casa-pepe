@@ -1,8 +1,12 @@
 import { proxyJSON } from "@/lib/casa-pepe-server";
 
+type ApprovalDecisionRouteContext = {
+  params: Promise<{ identifier: string }>;
+};
+
 export async function POST(
   request: Request,
-  context: RouteContext<"/api/casa-pepe/approvals/[identifier]/decision">,
+  context: ApprovalDecisionRouteContext,
 ) {
   const { identifier } = await context.params;
   return proxyJSON(`/approvals/${encodeURIComponent(identifier)}/decision`, {

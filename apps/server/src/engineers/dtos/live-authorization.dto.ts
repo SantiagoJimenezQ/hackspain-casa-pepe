@@ -10,7 +10,8 @@ import { LiveAuthorizationReport } from "../../../../../packages/contracts/outbo
 
 export class LiveAuthorizationDTO implements LiveAuthorizationReport {
 	@ApiProperty({
-		description: "Identifier Casa Pepe sent to the provider when the call started",
+		description:
+			"Identifier Casa Pepe sent to the provider when the call started",
 	})
 	@IsString()
 	@MinLength(1)
@@ -29,7 +30,8 @@ export class LiveAuthorizationDTO implements LiveAuthorizationReport {
 
 	@ApiPropertyOptional({
 		default: "",
-		description: "What the contact said, so an operator can audit the claim",
+		description:
+			"What the contact said, so an operator can audit the claim",
 	})
 	@IsOptional()
 	@IsString()

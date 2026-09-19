@@ -225,10 +225,13 @@ export class EngineersService {
 		// A finished call already has provider-analysed permissions; a late live report
 		// must never overwrite them.
 		if (entity.status !== "in-progress") {
-			this.logger.warn(LOG_MESSAGES.ENGINEERS.CALL_AUTHORIZATION_IGNORED, {
-				callIdentifier: report.callIdentifier,
-				status: entity.status,
-			})
+			this.logger.warn(
+				LOG_MESSAGES.ENGINEERS.CALL_AUTHORIZATION_IGNORED,
+				{
+					callIdentifier: report.callIdentifier,
+					status: entity.status,
+				},
+			)
 			throw new InvalidStateTransitionException(
 				ENGINEER_CALL_ENTITY_NAME,
 				entity.status,
@@ -479,7 +482,9 @@ function summariseAuthorizations(
 ): string {
 	const granted = [
 		report.notifyAllClients ? "notify every client" : "",
-		report.trafficFailoverAuthorized ? "fail traffic over to the backup" : "",
+		report.trafficFailoverAuthorized
+			? "fail traffic over to the backup"
+			: "",
 	].filter(Boolean)
 	const verdict =
 		granted.length > 0

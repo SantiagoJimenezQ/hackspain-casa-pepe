@@ -1,4 +1,5 @@
 import "reflect-metadata"
+import { AGENT_MESSAGES } from "@agent/constants/agent-messages.constant"
 import { AgentTrigger } from "@agent/types/agent.type"
 import { AgentService } from "./agent.service"
 import { AgentCycleStateService } from "./agent-cycle-state.service"
@@ -172,5 +173,99 @@ describe("human task follow-up", () => {
 		})
 		expect(after.evidence.tasks).toEqual([updated])
 		expect(tasks.list).toHaveBeenCalledWith("run")
+	})
+})
+
+describe("engineer call authorizations", () => {
+	function setup() {
+		const incidents = {
+			confirmResourceCapacity: jest.fn().mockResolvedValue(undefined),
+			recordFact: jest.fn().mockResolvedValue(undefined),
+		}
+		const service = new AgentService(
+			{} as never,
+			incidents as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{ demo: { engineerName: "Guillermo" } } as never,
+			new AgentCycleStateService(),
+			{} as never,
+			{} as never,
+			{} as never,
+		)
+		const record = (
+			service as unknown as {
+				recordAuthorizationsFromCall: (
+					incident: unknown,
+					authorizations: unknown,
+					mode: string,
+					messages: unknown,
+				) => Promise<number>
+			}
+		).recordAuthorizationsFromCall.bind(service)
+		return { incidents, record }
+	}
+
+	const incident = {
+		resources: [{ identifier: "backup-oman" }],
+		runIdentifier: "run",
+	}
+
+	it("records a granted authorization and confirms the backup capacity it covers", async () => {
+		const { incidents, record } = setup()
+
+		const recorded = await record(
+			incident,
+			{
+				notifyAllClients: { rationale: "said yes", value: true },
+				trafficFailoverAuthorized: {
+					rationale: "said yes",
+					value: true,
+				},
+			},
+			"live",
+			AGENT_MESSAGES.en,
+		)
+
+		expect(recorded).toBe(2)
+		expect(incidents.recordFact).toHaveBeenCalledTimes(2)
+		expect(incidents.recordFact).toHaveBeenCalledWith(
+			"run",
+			AGENT_MESSAGES.en.authorizedTrafficFailover,
+			"confirmed",
+			"Guillermo (live)",
+		)
+		expect(incidents.confirmResourceCapacity).toHaveBeenCalledWith(
+			"run",
+			"backup-oman",
+			true,
+			expect.stringContaining("Guillermo"),
+		)
+	})
+
+	it("records nothing when the engineer refused or stayed unclear", async () => {
+		const { incidents, record } = setup()
+
+		const recorded = await record(
+			incident,
+			{
+				notifyAllClients: { rationale: "no answer", value: null },
+				trafficFailoverAuthorized: {
+					rationale: "refused",
+					value: false,
+				},
+			},
+			"live",
+			AGENT_MESSAGES.en,
+		)
+
+		expect(recorded).toBe(0)
+		expect(incidents.recordFact).not.toHaveBeenCalled()
+		expect(incidents.confirmResourceCapacity).not.toHaveBeenCalled()
 	})
 })

@@ -62,6 +62,12 @@ const ENGLISH: AgentMessages = {
 	approvedBy: (name, comment) => withComment(`Approved by ${name}`, comment),
 	attemptFailedRetrying: (attempt, message) =>
 		`Attempt ${attempt} failed (${message}). Retrying`,
+	authorizationsRecorded: (count, mode) =>
+		`${count} ${count === 1 ? "authorization" : "authorizations"} granted by the on-call engineer in ${mode} mode`,
+	authorizedNotifyAllClients:
+		"The on-call engineer authorized notifying every client about the incident",
+	authorizedTrafficFailover:
+		"The on-call engineer authorized diverting traffic to the backup region",
 	awaitingEngineerCall:
 		"Waiting for the on-call engineer to confirm the pending facts before committing capacity",
 	capacityConfirmed: (units, reason) =>
@@ -213,6 +219,12 @@ const SPANISH: AgentMessages = {
 	approvedBy: (name, comment) => withComment(`Aprobado por ${name}`, comment),
 	attemptFailedRetrying: (attempt, message) =>
 		`El intento ${attempt} falló (${message}). Reintentando`,
+	authorizationsRecorded: (count, mode) =>
+		`${count} ${count === 1 ? "autorización concedida" : "autorizaciones concedidas"} por la ingeniera de guardia en modo ${labelOr(MODE_LABELS_ES, mode)}`,
+	authorizedNotifyAllClients:
+		"La ingeniera de guardia autorizó avisar del incidente a todos los clientes",
+	authorizedTrafficFailover:
+		"La ingeniera de guardia autorizó desviar el tráfico a la región de respaldo",
 	awaitingEngineerCall:
 		"A la espera de que la ingeniera de guardia confirme los hechos pendientes antes de comprometer capacidad",
 	capacityConfirmed: (units, reason) =>

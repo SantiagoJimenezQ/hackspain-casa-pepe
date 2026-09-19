@@ -279,6 +279,7 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 					body.analysis,
 					"completed",
 					call.questions,
+					call.liveAuthorizations,
 				)
 			}
 			if (!IN_FLIGHT_STATUSES.has(status)) {
@@ -287,7 +288,13 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 					stage: "conversation",
 					status,
 				})
-				return buildResult(body, null, "failed", call.questions)
+				return buildResult(
+					body,
+					null,
+					"failed",
+					call.questions,
+					call.liveAuthorizations,
+				)
 			}
 			return null
 		} catch (error) {

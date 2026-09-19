@@ -193,7 +193,9 @@ describe("EngineersService live authorizations", () => {
 		expect(state.events.emit).toHaveBeenCalledWith(
 			"domain.engineer-call.authorized",
 			expect.objectContaining({
-				call: expect.objectContaining({ identifier: started.identifier }),
+				call: expect.objectContaining({
+					identifier: started.identifier,
+				}),
 			}),
 		)
 	})

@@ -85,6 +85,17 @@ export function repairLlmPlanDraft(
 	if (!isRecord(value) || !Array.isArray(value.steps)) {
 		return value
 	}
+	// Executed history belongs to the runtime, not the model. Restore matching
+	// IDs before either repair pass so cosmetic rewrites cannot block replanning
+	// or reset attempts, approvals, results and asynchronous dependencies.
+	const carried = new Map(
+		(input.previousPlan?.steps ?? [])
+			.filter(
+				(step) =>
+					step.status === "running" || step.status === "completed",
+			)
+			.map((step) => [step.identifier, step]),
+	)
 	const servicesByIdentifier = new Map(
 		input.incident.services.map((service) => [service.identifier, service]),
 	)
@@ -118,6 +129,8 @@ export function repairLlmPlanDraft(
 			]),
 	)
 	const steps = repairedSteps.map((step) => {
+		if (isRecord(step) && carried.has(textOf(step, "identifier")))
+			return step
 		if (!isRecord(step) || !Array.isArray(step.dependsOn)) {
 			return step
 		}
@@ -315,7 +328,11 @@ function repairStep(
 		toolCallIdentifier: "",
 		updatedAt: input.incident.updatedAt,
 	}
-	const base: UnknownRecord = { ...defaults, ...step }
+	const base: UnknownRecord = {
+		...defaults,
+		...step,
+		updatedAt: input.incident.updatedAt,
+	}
 
 	if (READ_STEP_NAMES.has(name) || COMMUNICATION_STEP_NAMES.has(name)) {
 		return {

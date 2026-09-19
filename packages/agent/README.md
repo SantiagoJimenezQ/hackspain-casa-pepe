@@ -2,7 +2,7 @@
 
 Responsable: frente de agente e integraciones.
 
-Esta carpeta contendrá la lógica de decisión, las instrucciones del agente, la planificación y la adaptación.
+La implementación runtime vive en `apps/server/src/agent`. Esta carpeta conserva el límite de responsabilidad y la documentación del frente de agente; no inicia un segundo agente ni otro backend.
 
 ## Alcance
 
@@ -18,4 +18,4 @@ Esta carpeta contendrá la lógica de decisión, las instrucciones del agente, l
 
 Consumir los contratos compartidos y las interfaces de herramientas. Mantener los detalles de HappyRobot y de otros proveedores en `packages/tools/`. El servidor gestiona el transporte y la continuidad de la ejecución.
 
-Primera entrega: un ciclo de decisión completo y una prueba donde dos condiciones distintas produzcan acciones diferentes. Definir límites de pasos, tiempos de espera y tratamiento de errores.
+La implementación actual incluye un ciclo de decisión completo, planificación determinista basada en impacto/dependencias/capacidad, límites de ciclos y pasos, timeouts, reintentos, aprobaciones y replanning ante cambios de condiciones. Las integraciones concretas permanecen detrás de los adaptadores del servidor.

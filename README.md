@@ -28,14 +28,42 @@ This is a hackathon prototype under active development.
 
 | Component | Status |
 |---|---|
-| Operations dashboard | Implemented with local mock data and demo controls |
+| Operations dashboard | Live Next.js dashboard backed by `/api/overview` and the activity SSE stream |
 | Backend | NestJS API with incident state, simulation controls, recovery planning, approvals, and activity records |
-| Simulation | Manual incident flow in NestJS; reproducible randomized runs in the earlier standalone harness |
-| Engineer contact | Simulated mode and a HappyRobot adapter |
+| Simulation | Manual and seeded randomized runs in NestJS, with the seed and draw state persisted per run |
+| Engineer contact | Simulated mode, HappyRobot adapter, and operator-confirmed incoming reports |
 | Recovery | Simulated mode and an HTTP adapter for a test environment |
-| Dashboard–backend integration | Pending |
+| Learning | Persisted capacity and recovery-outcome insights, plus per-run reports |
+| Dashboard–backend integration | Implemented through authenticated Next.js server-side proxy routes |
 
 The backend currently uses rule-based recovery prioritization. Engineer calls and recovery actions default to simulated mode; live integrations require configuration and end-to-end validation.
+
+## Architecture
+
+Casa Pepe is a pnpm monorepo. `apps/server` is the only runtime backend: it owns the NestJS API, incident harness, agent cycle, persistence, authorization, tool execution, and integration callbacks. `apps/web` is the Next.js operator dashboard. Its server-side routes add the backend API key and proxy JSON requests and the activity stream, so the key is never sent to the browser.
+
+The runtime response path is:
+
+```text
+harness event or provider callback
+        -> persisted incident state
+        -> domain event
+        -> AgentService decision cycle
+        -> versioned plan and tool calls
+        -> approval, communication, engineer call, or recovery adapter
+        -> activity log and updated state
+        -> SSE stream and signed webhooks
+        -> operations dashboard
+```
+
+The main backend boundaries are:
+
+- `scenarios` and `incidents`: scenario definitions, live runs, manual controls, and seeded randomized simulation.
+- `agent`, `plans`, `approvals`, and `tasks`: rule-based prioritization, plan versions, human gates, ownership, and replanning.
+- `tools`, `engineers`, and `recovery`: the tool registry, idempotent tool-call records, simulated/live adapters, asynchronous callbacks, and independent verification.
+- `activity`, `webhooks`, `learning`, and `replays`: audit history, live delivery, cross-run insights, reports, and reproducible replays.
+
+PostgreSQL/Supabase is accessed through TypeORM. The incident snapshot and simulation state are persisted with each run; plans, approvals, tasks, tool calls, activities, calls, recoveries, insights, and webhook deliveries have their own entities. The current hackathon setup uses TypeORM schema synchronization rather than migrations. The declarations in `packages/contracts` describe consumer-facing payloads. `packages/tools` contains server-only HTTP/email adapters, while `packages/agent` and `packages/harness` document ownership boundaries rather than starting separate runtimes.
 
 ## Run locally
 
@@ -45,12 +73,13 @@ From the repository root:
 
 ```bash
 pnpm install
+cp apps/web/.env.example apps/web/.env.local
 pnpm --filter web dev --port 3001
 ```
 
 Open http://localhost:3001.
 
-The dashboard runs independently with mock data. Use the **Demo** button or press **D** to open its controls.
+Set `CASA_PEPE_API_BASE_URL` and `CASA_PEPE_API_KEY` in `apps/web/.env.local`. The dashboard has no mock-data fallback: if the API is not configured or reachable, it shows a connection state. Use the **Demo** button or press **D** to open its controls.
 
 ### Backend
 
@@ -62,10 +91,9 @@ pnpm install
 cp .env.example .env.local
 ```
 
-Configure the local environment, then start Postgres and the API:
+Configure `API_KEY` and `SUPABASE_DATABASE_URL` in `.env.local`, then start the API:
 
 ```bash
-docker compose up -d
 pnpm develop
 ```
 
@@ -104,7 +132,7 @@ demo/           Demo planning and presentation materials
 
 The incident coordination runtime lives in `apps/server`, including the persisted simulation state and seeded environment behavior. `packages/harness` documents the reusable simulation boundary; it does not start a second server. The agent and tools package folders document the intended separation of responsibilities.
 
-The dashboard is intended to integrate through the API and shared contracts. Credentials and external integrations belong on the server.
+The dashboard integrates through Next.js server routes, the authenticated NestJS API, and its SSE activity stream. Credentials and external integrations belong on the server.
 
 ## Development
 

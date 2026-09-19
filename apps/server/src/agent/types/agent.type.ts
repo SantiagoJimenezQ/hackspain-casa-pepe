@@ -54,6 +54,7 @@ export interface CapacityAssumption {
 	readonly assumedCapacity: number
 	readonly reportedCapacity: number
 	readonly observations: number
+	readonly resourceIdentifier?: string
 }
 
 export interface PlanBuildInput {

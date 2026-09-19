@@ -74,13 +74,18 @@ export class SeededSimulationService {
 			simulation,
 			rules.maximumCapacitySpare + 1,
 		)
+		const primary = scenario.resources[0]
 		const totalCapacity = Math.max(
 			rules.minimumCapacitySpare + 1,
-			scenario.resource.reportedCapacity - 3 + spare,
+			primary.reportedCapacity - 3 + spare,
 		)
 		return {
 			...scenario,
-			resource: { ...scenario.resource, reportedCapacity: totalCapacity },
+			resources: scenario.resources.map((resource, index) =>
+				index === 0
+					? { ...resource, reportedCapacity: totalCapacity }
+					: resource,
+			),
 		}
 	}
 

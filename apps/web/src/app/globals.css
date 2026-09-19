@@ -180,3 +180,19 @@
   transform-origin: center;
   animation: pulse-ring 2.4s ease-out infinite;
 }
+
+.scroll-fade,
+.scroll-fade-b {
+  mask-image: linear-gradient(to bottom, transparent, black 14px, black calc(100% - 18px), transparent);
+}
+
+.scroll-fade-x {
+  mask-image: linear-gradient(to right, transparent, black 14px, black calc(100% - 18px), transparent);
+}
+
+@keyframes dashboard-shimmer {
+  0%, 100% { opacity: .65; }
+  50% { opacity: 1; }
+}
+
+.shimmer { animation: dashboard-shimmer 1.7s ease-in-out infinite; }

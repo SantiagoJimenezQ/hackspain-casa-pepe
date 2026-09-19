@@ -1,31 +1,39 @@
+import {
+	IMPACT_REGION,
+	meteoriteCustomers,
+	meteoriteResources,
+	meteoriteTopology,
+	OMAN_REGION,
+} from "@scenarios/constants/meteorite-map.constant"
 import { DEFAULT_SCENARIO_IDENTIFIER } from "@scenarios/constants/scenario.constant"
 import { ScenarioDefinition } from "@scenarios/types/scenario.type"
 
 export const METEORITE_SCENARIO: ScenarioDefinition = {
-	backupRegion: "eu-central-1",
+	backupRegion: OMAN_REGION,
 	businessImpactSummary:
 		"Drivers cannot receive routes and customers cannot track parcels. Every hour without route assignment stops roughly 4,000 deliveries and floods customer support.",
-	company: "Reparto Rápido, a last-mile delivery company",
+	company: "Gulf Relay, a regional last-mile delivery company",
+	customers: meteoriteCustomers("en"),
 	engineerBriefing: {
 		purpose:
 			"Confirm the state of the backup region and the database snapshot before committing recovery capacity",
 		questions: [
 			{
 				confirmsFact:
-					"The orders database snapshot in eu-central-1 is recent enough to fail over",
+					"The orders database snapshot in muscat-lz is recent enough to fail over",
 				key: "database-snapshot",
 				question:
-					"How old is the latest orders database snapshot replicated to eu-central-1?",
+					"How old is the latest orders database snapshot replicated to the Oman Local Zone?",
 				simulatedAnswer:
 					"The snapshot is about twelve minutes old, we can fail over with minimal order loss.",
 				simulatedConfirms: true,
 			},
 			{
 				confirmsFact:
-					"Route assignment can run in eu-central-1 once the database is available",
+					"Route assignment can run in the active backup region once the database is available",
 				key: "route-assignment-readiness",
 				question:
-					"Is the route assignment service ready to be redeployed in eu-central-1?",
+					"Is the route assignment service ready to be redeployed in the Oman Local Zone?",
 				simulatedAnswer:
 					"Yes, the deployment templates are in place, it only needs the database endpoint.",
 				simulatedConfirms: true,
@@ -35,7 +43,7 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 					"The backup region capacity reported by the dashboard is accurate",
 				key: "backup-capacity",
 				question:
-					"Can we count on the twelve compute units reported for the backup region?",
+					"Can we count on the four compute units reported for the Oman Local Zone?",
 				simulatedAnswer:
 					"I am not sure, another team has been reserving capacity there. Let me check and I will send an update.",
 				simulatedConfirms: false,
@@ -51,7 +59,7 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 			confirmed: true,
 			source: "Monitoring",
 			statement:
-				"A meteorite impact has taken the whole eu-west-1 region offline",
+				"A meteorite impact has taken the whole Dubai me-central-1 region offline",
 		},
 		{
 			confirmed: true,
@@ -69,27 +77,20 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 			confirmed: false,
 			source: "Runbook",
 			statement:
-				"The orders database snapshot in eu-central-1 is recent enough to fail over",
+				"The orders database snapshot in muscat-lz is recent enough to fail over",
 		},
 		{
 			confirmed: false,
 			source: "Runbook",
 			statement:
-				"Route assignment can run in eu-central-1 once the database is available",
+				"Route assignment can run in the active backup region once the database is available",
 		},
 	],
 	language: "en",
 	narrative:
-		"A meteorite has destroyed the AWS eu-west-1 data centers that host the delivery platform. Backup capacity exists in eu-central-1 but it cannot host every service at once.",
-	region: "eu-west-1",
-	resource: {
-		identifier: "backup-compute",
-		name: "Backup compute capacity",
-		note: "Capacity reported by the dashboard, pending confirmation from the platform team",
-		region: "eu-central-1",
-		reportedCapacity: 12,
-		unit: "compute units",
-	},
+		"A meteorite has destroyed the AWS Dubai (me-central-1) data centers that host the delivery platform. The closest constrained backup is Oman Local Zone, then Bahrain and Riyadh.",
+	region: IMPACT_REGION,
+	resources: meteoriteResources("en"),
 	services: [
 		{
 			businessImpact: "critical",
@@ -107,13 +108,13 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 					"The primary region cannot be re-attached without a manual reconciliation",
 				],
 				description:
-					"Promote the eu-central-1 replica to primary and repoint the platform to it",
+					"Promote the replica in the active backup region to primary and repoint the platform to it",
 				kind: "failover-database",
 				requiresApproval: true,
 			},
 			recoveryCapacityUnits: 4,
 			simulatedRecovery: {
-				detail: "Replica promoted, writes accepted in eu-central-1",
+				detail: "Replica promoted, writes accepted in the active backup region",
 				outcome: "success",
 			},
 			statusAfterImpact: "down",
@@ -133,7 +134,7 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 					"Drivers receive routes computed from the failover database",
 				],
 				description:
-					"Redeploy the route assignment service in eu-central-1 against the failover database",
+					"Redeploy the route assignment service in the active backup region against the failover database",
 				kind: "redeploy-service",
 				requiresApproval: false,
 			},
@@ -159,7 +160,7 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 					"Tracking history from the outage window will be incomplete",
 				],
 				description:
-					"Redeploy the package tracking service in eu-central-1",
+					"Redeploy the package tracking service in the active backup region",
 				kind: "redeploy-service",
 				requiresApproval: false,
 			},
@@ -184,7 +185,8 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 					"Consumes two of the backup compute units",
 					"Events produced during the outage are lost",
 				],
-				description: "Start a reduced Kafka cluster in eu-central-1",
+				description:
+					"Start a reduced Kafka cluster in the active backup region",
 				kind: "restart-stream",
 				requiresApproval: false,
 			},
@@ -206,7 +208,7 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 			recoveryAction: {
 				consequences: ["Consumes one of the backup compute units"],
 				description:
-					"Redeploy the notification workers in eu-central-1",
+					"Redeploy the notification workers in the active backup region",
 				kind: "redeploy-service",
 				requiresApproval: false,
 			},
@@ -225,7 +227,8 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 			name: "Driver mobile API",
 			recoveryAction: {
 				consequences: ["Consumes one of the backup compute units"],
-				description: "Redeploy the driver API in eu-central-1",
+				description:
+					"Redeploy the driver API in the active backup region",
 				kind: "redeploy-service",
 				requiresApproval: false,
 			},
@@ -238,11 +241,12 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 		name: "Carlos Vega",
 		role: "Customer support lead",
 	},
-	title: "Meteorite impact on eu-west-1",
+	title: "Meteorite impact on Dubai",
+	topology: meteoriteTopology("en"),
 	twist: {
-		capacityAfterTwist: 7,
+		capacityAfterTwist: 1,
 		description:
-			"The platform team confirms that another business unit already reserved part of the backup region. Only seven compute units are available instead of twelve.",
+			"The platform team confirms that another business unit already reserved most of the Oman Local Zone. Only one compute unit remains there instead of four.",
 		identifier: "backup-capacity-limited",
 		title: "Backup capacity is insufficient for the initial plan",
 	},

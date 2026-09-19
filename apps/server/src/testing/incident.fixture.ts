@@ -21,7 +21,9 @@ export function createImpactedIncident(
 	const resources = buildBaselineResources(
 		METEORITE_SCENARIO,
 		FIXTURE_TIMESTAMP,
-	).map((resource) => ({ ...resource, totalCapacity }))
+	).map((resource, index) =>
+		index === 0 ? { ...resource, totalCapacity } : resource,
+	)
 	return {
 		active: true,
 		agentCycles: 0,
@@ -29,6 +31,7 @@ export function createImpactedIncident(
 		businessImpactSummary: METEORITE_SCENARIO.businessImpactSummary,
 		company: METEORITE_SCENARIO.company,
 		createdAt: FIXTURE_TIMESTAMP,
+		customers: METEORITE_SCENARIO.customers,
 		facts: METEORITE_SCENARIO.initialFacts.map((fact, index) => ({
 			identifier: `fact_${index}`,
 			recordedAt: FIXTURE_IMPACT_TIMESTAMP,
@@ -68,6 +71,7 @@ export function createImpactedIncident(
 		startedAt: FIXTURE_TIMESTAMP,
 		status: "detected",
 		title: METEORITE_SCENARIO.title,
+		topology: METEORITE_SCENARIO.topology,
 		updatedAt: FIXTURE_IMPACT_TIMESTAMP,
 	}
 }

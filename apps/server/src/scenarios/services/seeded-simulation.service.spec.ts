@@ -24,22 +24,22 @@ describe("SeededSimulationService", () => {
 			secondState,
 		)
 
-		expect(firstScenario.resource.reportedCapacity).toBe(
-			secondScenario.resource.reportedCapacity,
+		expect(firstScenario.resources[0].reportedCapacity).toBe(
+			secondScenario.resources[0].reportedCapacity,
 		)
 		expect(
 			service.sampleRecovery(
 				firstState,
 				METEORITE_SCENARIO.services[0],
 				4,
-				firstScenario.resource.reportedCapacity,
+				firstScenario.resources[0].reportedCapacity,
 			),
 		).toEqual(
 			service.sampleRecovery(
 				secondState,
 				METEORITE_SCENARIO.services[0],
 				4,
-				secondScenario.resource.reportedCapacity,
+				secondScenario.resources[0].reportedCapacity,
 			),
 		)
 	})

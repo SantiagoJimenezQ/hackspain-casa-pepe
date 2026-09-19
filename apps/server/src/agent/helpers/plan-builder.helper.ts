@@ -15,6 +15,7 @@ import {
 import { AgentMessages } from "@agent/types/agent-messages.type"
 import { sumBy, uniqueValues } from "@common/helpers/collection.helper"
 import { Actor } from "@common/types/identity.type"
+import { selectBackupResource } from "@incidents/helpers/incident-state.helper"
 import {
 	IncidentSnapshot,
 	ResourceState,
@@ -61,7 +62,11 @@ export function effectiveCapacity(
 	if (resource.confirmed) {
 		return resource.totalCapacity
 	}
-	if (!input.capacityAssumption) {
+	if (
+		!input.capacityAssumption ||
+		(input.capacityAssumption.resourceIdentifier &&
+			input.capacityAssumption.resourceIdentifier !== resource.identifier)
+	) {
 		return resource.totalCapacity
 	}
 	return Math.min(
@@ -95,7 +100,11 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 			],
 		),
 	])
-	const resource = incident.resources[0]
+	const resource = selectBackupResource(
+		incident,
+		(candidate) =>
+			effectiveCapacity(candidate, input) - candidate.allocatedCapacity,
+	)
 	const assumedCapacity = effectiveCapacity(resource, input)
 	const assumptions: string[] = []
 	if (assumedCapacity < resource.totalCapacity && input.capacityAssumption) {
@@ -393,7 +402,10 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 		steps.push(
 			refreshDependencies(
 				carryOrCreate(
-					previousSteps.get(executeIdentifier),
+					previousExecuteFor(
+						previousSteps.get(executeIdentifier),
+						resource.identifier,
+					),
 					input.maximumStepAttempts,
 					timestamp,
 					messages,
@@ -606,6 +618,25 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 			messages,
 		),
 	)
+	const verifyIdentifiers = steps
+		.filter((s) => s.invocation.name === "verify_recovery")
+		.map((s) => s.identifier)
+	const checkIdentifier = `step-check-v${version}`
+	steps.push(
+		createStep(
+			checkIdentifier,
+			"Check the status of every service",
+			"Confirm with an independent query which services really work before communicating",
+			{ input: {}, name: "check_services_status" },
+			AGENT_ACTOR,
+			"",
+			0,
+			false,
+			verifyIdentifiers,
+			timestamp,
+			messages,
+		),
+	)
 	steps.push(
 		createStep(
 			`step-status-v${version}`,
@@ -616,9 +647,7 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 			"",
 			0,
 			false,
-			steps
-				.filter((s) => s.invocation.name === "verify_recovery")
-				.map((s) => s.identifier),
+			[...verifyIdentifiers, checkIdentifier],
 			timestamp,
 			messages,
 		),
@@ -897,6 +926,23 @@ function refreshDependencies(
 		return step
 	}
 	return { ...step, dependsOn }
+}
+
+function previousExecuteFor(
+	previous: PlanStep | undefined,
+	resourceIdentifier: string,
+): PlanStep | undefined {
+	if (!previous || previous.invocation.name !== "execute_recovery") {
+		return previous
+	}
+	const previousResource = previous.invocation.input.resourceIdentifier
+	if (
+		typeof previousResource === "string" &&
+		previousResource !== resourceIdentifier
+	) {
+		return undefined
+	}
+	return previous
 }
 
 function carryOrCreate(

@@ -31,7 +31,8 @@ This is a hackathon prototype under active development.
 | Operations dashboard | Live Next.js dashboard backed by `/api/overview` and the activity SSE stream |
 | Backend | NestJS API with incident state, simulation controls, recovery planning, approvals, and activity records |
 | Simulation | Manual and seeded randomized runs in NestJS, with the seed and draw state persisted per run |
-| Engineer contact | Simulated mode, HappyRobot adapter, and operator-confirmed incoming reports |
+| Engineer contact | Simulated mode, ElevenLabs/HappyRobot adapters, and operator-confirmed incoming reports |
+| Standalone tool checks | Authenticated synthetic email and engineer-call checks with durable results, idempotency, and isolated provider results |
 | Recovery | Simulated mode and an HTTP adapter for a test environment |
 | Learning | Persisted capacity and recovery-outcome insights, plus per-run reports |
 | Dashboard–backend integration | Implemented through authenticated Next.js server-side proxy routes |
@@ -153,3 +154,5 @@ The dashboard integrates through Next.js server routes, the authenticated NestJS
 - [Official HackSpain 2026 challenge](https://hackspain2026.happyrobot.ai/)
 
 The canonical API is NestJS. It exposes `/documentation`, supports reproducible manual and randomized runs through `POST /api/demo/start`, and provides `/api/demo/pause`, `/api/demo/resume`, and `/api/demo/advance` for simulation control.
+
+Outbound voice setup and provider switching: [ElevenLabs guide](apps/server/docs/ELEVENLABS.md).

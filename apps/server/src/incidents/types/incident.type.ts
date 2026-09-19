@@ -7,6 +7,9 @@ import {
 import {
 	BusinessImpactLevel,
 	RecoveryActionKind,
+	ScenarioCustomer,
+	ScenarioTopologyLink,
+	ScenarioTopologyNode,
 	ServiceHealthStatus,
 	SimulatedOutcome,
 } from "@scenarios/types/scenario.type"
@@ -104,6 +107,11 @@ export interface IncidentSnapshot {
 	readonly resolvedAt: string
 	readonly businessImpactSummary: string
 	readonly services: ReadonlyArray<ServiceState>
+	readonly topology: {
+		readonly nodes: ReadonlyArray<ScenarioTopologyNode>
+		readonly links: ReadonlyArray<ScenarioTopologyLink>
+	}
+	readonly customers: ReadonlyArray<ScenarioCustomer>
 	readonly simulation: SimulationState
 	readonly resources: ReadonlyArray<ResourceState>
 	readonly facts: ReadonlyArray<Fact>

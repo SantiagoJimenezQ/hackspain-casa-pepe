@@ -33,6 +33,6 @@ export const BUSINESS_IMPACT_WEIGHTS: Record<
 
 export const SCENARIO_LANGUAGES = ["en", "es"] as const
 
-export const DEFAULT_SCENARIO_IDENTIFIER = "meteorite-eu-west-1"
+export const DEFAULT_SCENARIO_IDENTIFIER = "meteorite-me-south-1"
 
-export const SPANISH_SCENARIO_IDENTIFIER = "meteorite-eu-west-1-es"
+export const SPANISH_SCENARIO_IDENTIFIER = "meteorite-me-south-1-es"

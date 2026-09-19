@@ -3,6 +3,7 @@ import {
 	ResourceState,
 	ServiceState,
 } from "@incidents/types/incident.type"
+import { ServiceStatusCheck } from "@recovery/types/recovery.type"
 import { ServiceHealthStatus } from "@scenarios/types/scenario.type"
 import {
 	TOOL_CALL_STATUSES,
@@ -65,6 +66,17 @@ export type ToolInvocation =
 			readonly input: ContactEngineerInput
 	  }
 	| { readonly name: "assign_task"; readonly input: AssignTaskInput }
+	| {
+			readonly name: "read_incoming_emails"
+			readonly input: {
+				readonly limit?: number
+				readonly emailId?: string
+			}
+	  }
+	| {
+			readonly name: "check_services_status"
+			readonly input: Record<string, never>
+	  }
 
 export interface EngineerAnswer {
 	readonly key: string
@@ -94,6 +106,14 @@ export type ToolOutput =
 			readonly resources: ReadonlyArray<ResourceState>
 			readonly remainingCapacity: number
 			readonly confirmed: boolean
+			readonly nearbyRegions: ReadonlyArray<{
+				readonly identifier: string
+				readonly label: string
+				readonly region: string
+				readonly distanceKm: number
+				readonly remaining: number
+				readonly confirmed: boolean
+			}>
 	  }
 	| {
 			readonly kind: "engineer-call"
@@ -101,6 +121,7 @@ export type ToolOutput =
 			readonly summary: string
 			readonly answers: ReadonlyArray<EngineerAnswer>
 			readonly mode: "simulated" | "live"
+			readonly authorizations?: import("../../../../../packages/contracts/outbound-calls").EngineerCallAuthorizations
 	  }
 	| { readonly kind: "task"; readonly taskIdentifier: string }
 	| { readonly kind: "approval"; readonly approvalIdentifier: string }
@@ -117,6 +138,19 @@ export type ToolOutput =
 			readonly status: ServiceHealthStatus
 			readonly verified: boolean
 			readonly detail: string
+			readonly mode: "simulated" | "http"
+	  }
+	| {
+			readonly kind: "inbound-emails"
+			readonly emails: ReadonlyArray<Record<string, unknown>>
+			readonly selected: Record<string, unknown> | null
+	  }
+	| {
+			readonly kind: "services-status"
+			readonly checks: ReadonlyArray<ServiceStatusCheck>
+			readonly healthyCount: number
+			readonly totalCount: number
+			readonly discrepancies: ReadonlyArray<string>
 			readonly mode: "simulated" | "http"
 	  }
 

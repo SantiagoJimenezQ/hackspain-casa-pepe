@@ -171,7 +171,12 @@ export class ToolsService {
 					toolCallIdentifier: entity.identifier,
 				})
 				expired.push(
-					await this.finish(entity, null, TIMEOUT_ERROR, true),
+					await this.finish(
+						entity,
+						null,
+						this.timeoutErrorFor(entity.name, entity.simulated),
+						true,
+					),
 				)
 			}
 		}
@@ -203,6 +208,7 @@ export class ToolsService {
 				call.toolCallIdentifier,
 				{
 					answers: call.result.answers,
+					authorizations: call.result.authorizations,
 					engineerCallIdentifier: call.identifier,
 					kind: "engineer-call",
 					mode: call.mode,
@@ -216,7 +222,9 @@ export class ToolsService {
 		await this.complete(call.toolCallIdentifier, null, {
 			code: "CALL_FAILED",
 			message,
-			retryable: true,
+			// Once a live provider has accepted a request, an ambiguous failure
+			// must never redial the same person. Simulated calls remain retryable.
+			retryable: call.mode === "simulated",
 		})
 	}
 
@@ -276,7 +284,14 @@ export class ToolsService {
 		let timer: NodeJS.Timeout | undefined
 		const timeout = new Promise<ToolExecutionResult>((resolve) => {
 			timer = setTimeout(
-				() => resolve({ error: TIMEOUT_ERROR, status: "failed" }),
+				() =>
+					resolve({
+						error: this.timeoutErrorFor(
+							request.invocation.name,
+							entity.simulated,
+						),
+						status: "failed",
+					}),
 				this.timeoutFor(request.invocation.name),
 			)
 		})
@@ -290,13 +305,26 @@ export class ToolsService {
 				error: {
 					code: "UNEXPECTED_ERROR",
 					message: describeError(error),
-					retryable: true,
+					retryable:
+						!this.isEngineerCall(request.invocation.name) ||
+						entity.simulated,
 				},
 				status: "failed",
 			}
 		} finally {
 			clearTimeout(timer)
 		}
+	}
+
+	private timeoutErrorFor(name: ToolName, simulated: boolean): ToolError {
+		return {
+			...TIMEOUT_ERROR,
+			retryable: simulated || !this.isEngineerCall(name),
+		}
+	}
+
+	private isEngineerCall(name: ToolName): boolean {
+		return name === "call_engineer" || name === "contact_engineer"
 	}
 
 	private async finish(

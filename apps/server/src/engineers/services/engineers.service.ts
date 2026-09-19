@@ -7,7 +7,7 @@ import {
 	InvalidStateTransitionException,
 	StaleRunException,
 } from "@common/exceptions/domain.exception"
-import { nowISO } from "@common/helpers/clock.helper"
+import { elapsedMilliseconds, nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
 import {
@@ -17,6 +17,7 @@ import {
 } from "@engineers/constants/engineer.constant"
 import { EngineerCallEntity } from "@engineers/entities/engineer-call.entity"
 import {
+	AdapterCallOutcome,
 	EngineerCallAdapter,
 	EngineerCallFinishedEvent,
 	EngineerCallRecord,
@@ -27,12 +28,15 @@ import {
 import { RunsService } from "@incidents/services/runs.service"
 import { Inject, Injectable, Logger } from "@nestjs/common"
 import { EventEmitter2 } from "@nestjs/event-emitter"
+import { Interval } from "@nestjs/schedule"
 import { InjectRepository } from "@nestjs/typeorm"
 import { Repository } from "typeorm"
 
 @Injectable()
 export class EngineersService {
 	private readonly logger = new Logger(EngineersService.name)
+	private polling = false
+	private lastPollAt = 0
 
 	constructor(
 		@InjectRepository(EngineerCallEntity)
@@ -49,6 +53,10 @@ export class EngineersService {
 		return this.adapter.mode
 	}
 
+	get provider() {
+		return this.adapter.provider ?? this.configuration.engineerCall.provider
+	}
+
 	async startCall(
 		command: StartEngineerCallCommand,
 	): Promise<EngineerCallRecord> {
@@ -58,9 +66,12 @@ export class EngineersService {
 			failureReason: "",
 			finishedAt: "",
 			identifier: createPrefixedIdentifier("call"),
+			incidentContext: command.incidentContext,
 			incidentIdentifier: command.incidentIdentifier,
 			mode: this.adapter.mode,
 			planStepIdentifier: command.planStepIdentifier,
+			provider: this.provider,
+			providerCallSid: null,
 			providerReference: "",
 			purpose: command.purpose,
 			questions: [...command.questions],
@@ -87,28 +98,100 @@ export class EngineersService {
 			runIdentifier: record.runIdentifier,
 			simulated: record.mode === "simulated",
 			source: "tool",
-			summary: `Calling ${record.engineer.name} (${record.engineer.role}) through HappyRobot in ${record.mode} mode: ${record.purpose}`,
+			summary: `Calling ${record.engineer.name} (${record.engineer.role}) through ${record.provider ?? "the configured provider"} in ${record.mode} mode: ${record.purpose}`,
 			title: "Engineer call started",
 			type: "engineer-call.started",
 		})
-		const outcome = await this.adapter.start(
-			{
-				call: record,
-				callbackURL: `${this.configuration.runtime.publicBaseURL}/${HAPPYROBOT_CALLBACK_PATH}`,
-				simulatedScript: command.simulatedScript,
-			},
-			(callIdentifier, result) =>
-				this.completeCall(callIdentifier, result),
-		)
+		let outcome: AdapterCallOutcome
+		try {
+			outcome = await this.adapter.start(
+				{
+					call: record,
+					callbackURL: `${this.configuration.runtime.publicBaseURL}/${HAPPYROBOT_CALLBACK_PATH}`,
+					incidentContext: record.incidentContext,
+					simulatedScript: command.simulatedScript,
+				},
+				(callIdentifier, result) =>
+					this.completeCall(callIdentifier, result),
+			)
+		} catch {
+			return this.failCall(
+				saved,
+				"Call provider failed before the outcome was known; inspect the provider before retrying",
+			)
+		}
 		switch (outcome.kind) {
 			case "accepted":
 				saved.status = "in-progress"
+				saved.provider = outcome.provider ?? saved.provider
 				saved.providerReference = outcome.providerReference
+				saved.providerCallSid = outcome.providerCallSid ?? null
 				return toEngineerCallRecord(
 					await updateEntity(this.repository, saved),
 				)
 			case "failed":
 				return this.failCall(saved, outcome.reason)
+		}
+	}
+
+	/** Poll accepted ElevenLabs calls from persisted state after restarts. */
+	@Interval(1000)
+	async pollPendingCalls(): Promise<void> {
+		const interval = this.configuration.elevenLabs.pollIntervalMilliseconds
+		const now = Date.now()
+		if (now - this.lastPollAt < interval) return
+		this.lastPollAt = now
+		await this.pollPendingCallsNow()
+	}
+
+	async pollPendingCallsNow(): Promise<void> {
+		if (this.polling || !this.adapter.getResult) return
+		this.polling = true
+		try {
+			const entities = await this.repository.find({
+				where: {
+					mode: "live",
+					provider: "elevenlabs",
+					status: "in-progress",
+				},
+			})
+			for (const entity of entities) await this.pollPendingCall(entity)
+		} finally {
+			this.polling = false
+		}
+	}
+
+	private async pollPendingCall(entity: EngineerCallEntity): Promise<void> {
+		if (!this.adapter.getResult) return
+		if (!(await this.runsService.isRunActive(entity.runIdentifier))) return
+		if (
+			elapsedMilliseconds(entity.startedAt, nowISO()) >=
+			this.configuration.agent.callTimeoutMilliseconds
+		) {
+			await this.timeoutCall(
+				entity,
+				`Timed out waiting for ${entity.provider ?? "the call provider"} result`,
+			)
+			return
+		}
+		let result: EngineerCallResult | null
+		try {
+			result = await this.adapter.getResult(toEngineerCallRecord(entity))
+		} catch {
+			this.logger.warn(LOG_MESSAGES.ENGINEERS.CALL_RESULT_IGNORED, {
+				callIdentifier: entity.identifier,
+				reason: "Polling failed; the provider result was not applied",
+			})
+			return
+		}
+		if (!result) return
+		try {
+			await this.completeCall(entity.identifier, result)
+		} catch {
+			this.logger.warn(LOG_MESSAGES.ENGINEERS.CALL_RESULT_IGNORED, {
+				callIdentifier: entity.identifier,
+				reason: "Result was rejected because the run or call state changed",
+			})
 		}
 	}
 
@@ -220,6 +303,44 @@ export class EngineersService {
 		return record
 	}
 
+	private async timeoutCall(
+		entity: EngineerCallEntity,
+		reason: string,
+	): Promise<EngineerCallRecord> {
+		if (
+			entity.status === "completed" ||
+			entity.status === "failed" ||
+			entity.status === "no-answer"
+		) {
+			return toEngineerCallRecord(entity)
+		}
+		entity.status = "no-answer"
+		entity.failureReason = reason
+		entity.finishedAt = nowISO()
+		const record = toEngineerCallRecord(
+			await updateEntity(this.repository, entity),
+		)
+		await this.activityService.record({
+			correlation: {
+				engineerCallIdentifier: record.identifier,
+				planStepIdentifier: record.planStepIdentifier,
+				toolCallIdentifier: record.toolCallIdentifier,
+			},
+			incidentIdentifier: record.incidentIdentifier,
+			payload: { call: record },
+			runIdentifier: record.runIdentifier,
+			simulated: false,
+			source: "integration",
+			summary: `Call timed out: ${reason}`,
+			title: "Engineer call timed out",
+			type: "engineer-call.failed",
+		})
+		this.eventEmitter.emit(DOMAIN_EVENTS.ENGINEER_CALL_FINISHED, {
+			call: record,
+		} satisfies EngineerCallFinishedEvent)
+		return record
+	}
+
 	private async getEntity(identifier: string): Promise<EngineerCallEntity> {
 		const entity = await this.repository.findOne({ where: { identifier } })
 		if (!entity) {
@@ -251,9 +372,16 @@ export function toEngineerCallRecord(
 		failureReason: entity.failureReason,
 		finishedAt: entity.finishedAt,
 		identifier: entity.identifier,
+		incidentContext: entity.incidentContext ?? {
+			incidentDescription: "",
+			location: "",
+			servicesDown: [],
+		},
 		incidentIdentifier: entity.incidentIdentifier,
 		mode: entity.mode,
 		planStepIdentifier: entity.planStepIdentifier,
+		provider: entity.provider ?? undefined,
+		providerCallSid: entity.providerCallSid ?? undefined,
 		providerReference: entity.providerReference,
 		purpose: entity.purpose,
 		questions: entity.questions,

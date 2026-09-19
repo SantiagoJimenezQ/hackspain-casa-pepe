@@ -17,6 +17,8 @@ import type { ActivityRecord, LearningInsight, Overview, RunReport } from "@/lib
 type DashboardStatus = "ready" | "loading" | "active" | "error";
 type DemoAction = "start" | "impact" | "twist" | "reset" | "cycle" | null;
 
+export const IMPACT_PAUSE_MS = 1200;
+
 type DashboardContextValue = {
   status: DashboardStatus;
   overview: Overview | null;
@@ -46,13 +48,22 @@ const ACTIVITY_EVENTS = [
   "tool-call.started", "tool-call.completed", "tool-call.failed", "approval.requested",
   "approval.decided", "approval.superseded", "approval.expired", "task.assigned",
   "task.updated", "engineer-call.started", "engineer-call.completed",
-  "engineer-call.failed", "recovery.executed", "recovery.verified", "simulation.advanced",
+  "engineer-call.failed", "recovery.executed", "recovery.verified", "services.checked", "simulation.advanced",
   "agent.cycle-finished", "agent.limit-reached", "replay.started", "replay.finished",
 ] as const;
 
 function mergeActivity(current: ActivityRecord[], incoming: ActivityRecord) {
-  if (current.some((item) => item.identifier === incoming.identifier)) return current;
-  return [...current, incoming].toSorted((a, b) => a.sequence - b.sequence).slice(-100);
+  const existing = current.find((item) => item.identifier === incoming.identifier);
+  if (existing) {
+    return current.map((item) => item.identifier === incoming.identifier
+      ? { ...item, ...incoming, payload: incoming.payload ?? item.payload }
+      : item);
+  }
+  return [...current, incoming].toSorted((left, right) => left.sequence - right.sequence).slice(-100);
+}
+
+function mergeActivityList(current: ActivityRecord[], incoming: ActivityRecord[]) {
+  return incoming.reduce((items, item) => mergeActivity(items, item), current);
 }
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
@@ -66,34 +77,46 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestRunIdentifier = useRef<string | null>(null);
   const latestSequence = useRef(0);
+  const startGeneration = useRef(0);
+  const learningLoaded = useRef(false);
 
-  const refresh = useCallback(async () => {
+  const applyOverview = useCallback((next: Overview) => {
+    const nextSequence = Math.max(0, ...next.recentActivity.map((item) => item.sequence));
+    const runChanged = latestRunIdentifier.current !== next.incident.runIdentifier;
+    latestRunIdentifier.current = next.incident.runIdentifier;
+    latestSequence.current = runChanged
+      ? nextSequence
+      : Math.max(latestSequence.current, nextSequence);
+    startTransition(() => {
+      setOverview(next);
+      setActivity((current) => runChanged ? next.recentActivity : mergeActivityList(current, next.recentActivity));
+      setError(null);
+      setStatus("active");
+    });
+  }, []);
+
+  const loadLearning = useCallback(async () => {
+    if (learningLoaded.current) return;
+    learningLoaded.current = true;
+    const [insightsResult, reportResult] = await Promise.allSettled([
+      casaPepeClient.insights(),
+      casaPepeClient.report(),
+    ]);
+    startTransition(() => {
+      if (insightsResult.status === "fulfilled") setInsights(insightsResult.value);
+      if (reportResult.status === "fulfilled") setReport(reportResult.value);
+    });
+  }, []);
+
+  const refreshOverview = useCallback(async () => {
     try {
-      const [overviewResult, insightsResult, reportResult] = await Promise.allSettled([
-        casaPepeClient.overview(),
-        casaPepeClient.insights(),
-        casaPepeClient.report(),
-      ]);
-      if (overviewResult.status === "rejected") throw overviewResult.reason;
-      const next = overviewResult.value;
-      const nextSequence = Math.max(0, ...next.recentActivity.map((item) => item.sequence));
-      if (latestRunIdentifier.current !== next.incident.runIdentifier) {
-        latestRunIdentifier.current = next.incident.runIdentifier;
-        latestSequence.current = nextSequence;
-      } else {
-        latestSequence.current = Math.max(latestSequence.current, nextSequence);
-      }
-      startTransition(() => {
-        setOverview(next);
-        setInsights(insightsResult.status === "fulfilled" ? insightsResult.value : []);
-        setReport(reportResult.status === "fulfilled" ? reportResult.value : null);
-        setActivity(next.recentActivity);
-        setError(null);
-        setStatus("active");
-      });
+      const next = await casaPepeClient.overview();
+      applyOverview(next);
+      void loadLearning();
     } catch (cause) {
       const known = cause instanceof CasaPepeClientError ? cause : null;
-      if (known?.status === 404) {
+      if (known?.status === 404 || known?.status === 409) {
+        learningLoaded.current = false;
         latestRunIdentifier.current = null;
         latestSequence.current = 0;
         setOverview(null);
@@ -105,22 +128,22 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         return;
       }
       setError(known?.message ?? "No se pudo contactar con el backend de Casa Pepe.");
-      setStatus("error");
+      setStatus((current) => (current === "active" ? current : "error"));
     }
-  }, []);
+  }, [applyOverview, loadLearning]);
 
   useEffect(() => {
-    const initialLoad = window.setTimeout(() => void refresh(), 0);
+    const initialLoad = window.setTimeout(() => void refreshOverview(), 0);
     return () => {
       window.clearTimeout(initialLoad);
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
     };
-  }, [refresh]);
+  }, [refreshOverview]);
 
   const scheduleRefresh = useCallback(() => {
     if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    refreshTimer.current = setTimeout(() => void refresh(), 350);
-  }, [refresh]);
+    refreshTimer.current = setTimeout(() => void refreshOverview(), 350);
+  }, [refreshOverview]);
 
   useEffect(() => {
     const runIdentifier = overview?.incident.runIdentifier;
@@ -151,7 +174,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       await work();
-      await refresh();
+      await refreshOverview();
     } catch (cause) {
       const known = cause instanceof CasaPepeClientError ? cause : null;
       setError(known?.message ?? "No se pudo completar la acción solicitada.");
@@ -159,16 +182,40 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     } finally {
       setBusyAction(null);
     }
-  }, [refresh]);
+  }, [refreshOverview]);
 
   const retry = useCallback(async () => {
     setStatus("loading");
-    await refresh();
-  }, [refresh]);
-  const startDemo = useCallback(() => execute("start", casaPepeClient.start), [execute]);
+    await refreshOverview();
+  }, [refreshOverview]);
+
+  const startDemo = useCallback(async () => {
+    const generation = ++startGeneration.current;
+    setBusyAction("start");
+    setError(null);
+    try {
+      await casaPepeClient.start();
+      await refreshOverview();
+      await new Promise((resolve) => window.setTimeout(resolve, IMPACT_PAUSE_MS));
+      if (generation !== startGeneration.current) return;
+      await casaPepeClient.impact();
+      await refreshOverview();
+    } catch (cause) {
+      const known = cause instanceof CasaPepeClientError ? cause : null;
+      setError(known?.message ?? "No se pudo completar la acción solicitada.");
+      setStatus((current) => (current === "active" ? current : "error"));
+    } finally {
+      if (generation === startGeneration.current) setBusyAction(null);
+    }
+  }, [refreshOverview]);
+
   const triggerImpact = useCallback(() => execute("impact", casaPepeClient.impact), [execute]);
   const triggerTwist = useCallback(() => execute("twist", casaPepeClient.twist), [execute]);
-  const resetDemo = useCallback(() => execute("reset", casaPepeClient.reset), [execute]);
+  const resetDemo = useCallback(async () => {
+    startGeneration.current += 1;
+    learningLoaded.current = false;
+    await execute("reset", casaPepeClient.reset);
+  }, [execute]);
   const runAgentCycle = useCallback(() => execute("cycle", casaPepeClient.runCycle), [execute]);
   const decideApproval = useCallback(
     (identifier: string, decision: "approve" | "reject", comment: string) =>

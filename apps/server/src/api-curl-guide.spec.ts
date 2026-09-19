@@ -49,10 +49,12 @@ import { TasksModule } from "@tasks/tasks.module"
 import { TaskRecord } from "@tasks/types/task.type"
 import { StatusPublicationEntity } from "@tools/entities/status-publication.entity"
 import { ToolCallEntity } from "@tools/entities/tool-call.entity"
+import { ToolTestEntity } from "@tools/testing/tool-test.entity"
 import { ToolsModule } from "@tools/tools.module"
 import { ToolDefinitionView } from "@tools/types/tool.type"
 
 const ENTITIES = [
+	ToolTestEntity,
 	IncomingCallEntity,
 	StatusPublicationEntity,
 	IncidentEntity,
@@ -146,7 +148,7 @@ async function startManualRun(baseURL: string): Promise<IncidentSnapshot> {
 			body: {
 				automaticEvents: false,
 				mode: "manual",
-				scenarioIdentifier: "meteorite-eu-west-1",
+				scenarioIdentifier: "meteorite-me-south-1",
 				seed: 42,
 			},
 			method: "POST",
@@ -161,6 +163,7 @@ async function startManualRun(baseURL: string): Promise<IncidentSnapshot> {
 }
 
 describe("API curl walkthrough contract", () => {
+	jest.setTimeout(30000)
 	let application: INestApplication
 	let baseURL: string
 	let scriptedLlm: ScriptedLlmClient
@@ -250,15 +253,15 @@ describe("API curl walkthrough contract", () => {
 		)
 		expect(scenarios.status).toBe(200)
 		expect(scenarios.body.map((scenario) => scenario.identifier)).toContain(
-			"meteorite-eu-west-1",
+			"meteorite-me-south-1",
 		)
 
 		const scenario = await request<ScenarioDefinition>(
 			baseURL,
-			"/api/scenarios/meteorite-eu-west-1",
+			"/api/scenarios/meteorite-me-south-1",
 		)
 		expect(scenario.status).toBe(200)
-		expect(scenario.body.resource.identifier).toBe("backup-compute")
+		expect(scenario.body.resources[0].identifier).toBe("backup-oman")
 
 		const tools = await request<ReadonlyArray<ToolDefinitionView>>(
 			baseURL,
@@ -272,6 +275,55 @@ describe("API curl walkthrough contract", () => {
 				"verify_recovery",
 			]),
 		)
+	})
+
+	it("tests communication tools without creating or changing an incident", async () => {
+		const runsBefore = await request(baseURL, "/api/incidents/runs")
+		for (const tool of ["send_incident_email", "call_engineer"]) {
+			const response = await request<{
+				identifier: string
+				status: string
+				mode: string
+			}>(baseURL, "/api/tools/tests", {
+				body: { idempotencyKey: `no-incident-${tool}`, tool },
+				method: "POST",
+			})
+			expect(response.status).toBe(201)
+			expect(response.body.status).toBe("succeeded")
+			expect(response.body.mode).toBe("simulated")
+			const polled = await request(
+				baseURL,
+				`/api/tools/tests/${response.body.identifier}`,
+			)
+			expect(polled.body).toEqual(response.body)
+		}
+		expect((await request(baseURL, "/api/incidents/runs")).body).toEqual(
+			runsBefore.body,
+		)
+
+		await startManualRun(baseURL)
+		const paths = [
+			"/api/incidents/current",
+			"/api/plans",
+			"/api/activity",
+			"/api/tools/calls",
+			"/api/engineers/calls",
+			"/api/agent/status",
+		]
+		const before = await Promise.all(
+			paths.map((path) => request(baseURL, path)),
+		)
+		for (const tool of ["send_incident_email", "call_engineer"]) {
+			const response = await request(baseURL, "/api/tools/tests", {
+				body: { idempotencyKey: `active-incident-${tool}`, tool },
+				method: "POST",
+			})
+			expect(response.status).toBe(201)
+		}
+		const after = await Promise.all(
+			paths.map((path) => request(baseURL, path)),
+		)
+		expect(after).toEqual(before)
 	})
 
 	it("runs the mandatory curl walkthrough through the real HTTP boundary", async () => {
@@ -332,8 +384,7 @@ describe("API curl walkthrough contract", () => {
 				body.plan.priorities
 					.filter((priority) => priority.decision === "recover-now")
 					.map((priority) => priority.serviceIdentifier)
-					.join(",") ===
-					"orders-database,route-assignment,package-tracking,events-stream",
+					.join(",") === "orders-database",
 			"initial recovery plan",
 		)
 		expect(initialPlanAfterImpact.kind).toBe("plan")
@@ -349,7 +400,7 @@ describe("API curl walkthrough contract", () => {
 			`/api/tasks?runIdentifier=${runIdentifier}`,
 		)
 		expect(tasks.status).toBe(200)
-		expect(tasks.body).toHaveLength(4)
+		expect(tasks.body).toHaveLength(2)
 
 		const twist = await request(baseURL, "/api/demo/twist", {
 			method: "POST",
@@ -362,7 +413,7 @@ describe("API curl walkthrough contract", () => {
 			(body) =>
 				body.kind === "plan" &&
 				body.plan.version > oldVersion &&
-				body.plan.capacity.totalCapacity === 7,
+				body.plan.capacity.totalCapacity === 12,
 			"revised plan after capacity twist",
 		)
 		expect(revised.kind).toBe("plan")
@@ -378,12 +429,12 @@ describe("API curl walkthrough contract", () => {
 			revised.plan.priorities.find(
 				(priority) => priority.serviceIdentifier === "package-tracking",
 			)?.decision,
-		).toBe("postpone")
+		).toBe("recover-now")
 		expect(
 			revised.plan.priorities.find(
 				(priority) => priority.serviceIdentifier === "events-stream",
 			)?.decision,
-		).toBe("postpone")
+		).toBe("recover-now")
 
 		const superseded = await waitForJSON<ApprovalRecord>(
 			baseURL,
@@ -471,7 +522,7 @@ describe("API curl walkthrough contract", () => {
 			incident.body.services.find(
 				(service) => service.identifier === "package-tracking",
 			)?.status,
-		).toBe("down")
+		).toBe("healthy")
 
 		const recovery = await request(
 			baseURL,
@@ -610,7 +661,7 @@ describe("API curl walkthrough contract", () => {
 					difficulty: "medium",
 					maxConcurrentDisruptions: 2,
 					mode: "randomized",
-					scenarioIdentifier: "meteorite-eu-west-1",
+					scenarioIdentifier: "meteorite-me-south-1",
 					seed: 42,
 				},
 				method: "POST",

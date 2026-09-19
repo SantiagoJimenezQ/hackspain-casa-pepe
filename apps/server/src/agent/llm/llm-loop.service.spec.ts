@@ -14,6 +14,8 @@ import { createImpactedIncident } from "@root/testing/incident.fixture"
 import { METEORITE_SCENARIO } from "@scenarios/constants/meteorite-scenario.constant"
 
 jest.mock("@agent/llm/plan-validation", () => ({
+	LlmPlanValidationError: jest.requireActual("@agent/llm/plan-validation")
+		.LlmPlanValidationError,
 	llmPlanSchema: {
 		additionalProperties: true,
 		properties: {},
@@ -121,7 +123,10 @@ function createHarness(maximumTurns = 3) {
 		agent: { maximumStepsPerCycle: 1 },
 		llm: { maximumTurns },
 	}
-	const activity = { record: jest.fn().mockResolvedValue(undefined) }
+	const activity = {
+		list: jest.fn().mockResolvedValue({ items: [], total: 0 }),
+		record: jest.fn().mockResolvedValue(undefined),
+	}
 	const service = new LlmLoopService(
 		client as never,
 		configuration as never,
@@ -217,6 +222,231 @@ function createActivePlan(incident: IncidentSnapshot): PlanRecord {
 }
 
 describe("LlmLoopService", () => {
+	it("explains empty read arguments and recovers from a wrapped tool call without leaking values", async () => {
+		const { activity, client, service } = createHarness(3)
+		const state = createState()
+		const actions = createActions(() => state)
+		client.complete
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("get_recovery_capacity", {
+						input: {
+							apiKey: "secret-value",
+							resourceIdentifier: "private-resource",
+						},
+					}),
+				]),
+			)
+			.mockResolvedValueOnce(
+				completion([toolCall("get_recovery_capacity", {})]),
+			)
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("wait_for_input", {
+						reason: "Capacity inspected; awaiting confirmation",
+					}),
+				]),
+			)
+		expect((await service.run(actions)).kind).toBe("completed")
+		expect(actions.investigate).toHaveBeenCalledTimes(1)
+		expect(actions.investigate).toHaveBeenCalledWith({
+			input: {},
+			name: "get_recovery_capacity",
+		})
+		const [messages, definitions] = client.complete.mock.calls[0]
+		expect(messages[0].role).toBe("system")
+		expect(messages[0].content).toContain('not {"input":{}}')
+		const tool = definitions.find(
+			(item) => item.function.name === "get_recovery_capacity",
+		)
+		expect(tool.function.description).toContain("exactly {}")
+		expect(tool.function.parameters).toMatchObject({
+			additionalProperties: false,
+			properties: {},
+			required: [],
+		})
+		const feedback = JSON.parse(
+			client.complete.mock.calls[1][0].find(
+				(message) => message.role === "tool",
+			).content,
+		)
+		expect(feedback.correction).toContain("exactly {}")
+		expect(feedback.argumentDiagnostics.shape.fields[0].name).toBe("input")
+		const audit = JSON.stringify(activityInputs(activity))
+		expect(audit).not.toContain("secret-value")
+		expect(audit).not.toContain("private-resource")
+		expect(audit).toContain("[redacted-field]")
+	})
+
+	it("restores rejection and waiting context in a new loop instance without replaying raw exchanges", async () => {
+		const first = createHarness(2)
+		const state = createState()
+		first.client.complete
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("get_recovery_capacity", {
+						resourceIdentifier: "backup",
+					}),
+				]),
+			)
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("wait_for_input", {
+						reason: "Waiting for engineer confirmation",
+					}),
+				]),
+			)
+		await first.service.run(createActions(() => state))
+		const stored = first.activity.record.mock.calls.map(
+			([entry], index) => ({
+				...entry,
+				replayed: false,
+				sequence: index + 1,
+			}),
+		)
+		const next = createHarness(1)
+		next.activity.list.mockResolvedValue({
+			items: stored,
+			total: stored.length,
+		})
+		next.client.complete.mockResolvedValue(
+			completion([
+				toolCall("wait_for_input", {
+					reason: "Still awaiting engineer",
+				}),
+			]),
+		)
+		await next.service.run(createActions(() => state))
+		const messages = next.client.complete.mock.calls[0][0]
+		expect(messages.map((message) => message.role)).toEqual([
+			"system",
+			"user",
+		])
+		const summary = JSON.parse(messages[1].content).investigationSummary
+		expect(summary.runIdentifier).toBe(state.input.incident.runIdentifier)
+		expect(summary.recentEvents).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					correction: expect.stringContaining("exactly {}"),
+					type: "agent.llm-rejected",
+				}),
+				expect.objectContaining({
+					summary: "Waiting for engineer confirmation",
+					type: "agent.cycle-finished",
+				}),
+			]),
+		)
+		expect(next.activity.list).toHaveBeenCalledWith(
+			expect.objectContaining({
+				limit: 16,
+				runIdentifier: state.input.incident.runIdentifier,
+			}),
+		)
+	})
+
+	it("keeps rejection memory when stale input clears the working conversation", async () => {
+		const { client, service } = createHarness(3)
+		let state = createState()
+		const actions = createActions(() => state)
+		client.complete
+			.mockResolvedValueOnce(
+				completion([toolCall("get_recovery_capacity", { input: {} })]),
+			)
+			.mockImplementationOnce(async () => {
+				state = {
+					...state,
+					evidence: { newReport: "Capacity dropped" },
+				}
+				return completion([toolCall("get_recovery_capacity", {})])
+			})
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("wait_for_input", {
+						reason: "Reassess changed capacity",
+					}),
+				]),
+			)
+		await service.run(actions)
+		const messages = client.complete.mock.calls[2][0]
+		expect(messages.map((message) => message.role)).toEqual([
+			"system",
+			"user",
+		])
+		expect(
+			JSON.parse(messages[1].content).investigationSummary.recentEvents,
+		).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ type: "agent.llm-rejected" }),
+				expect.objectContaining({ type: "agent.llm-stale" }),
+			]),
+		)
+		expect(actions.investigate).not.toHaveBeenCalled()
+	})
+
+	it("loads a bounded latest audit window and excludes records belonging to another run", async () => {
+		const { activity, client, service } = createHarness(1)
+		const state = createState()
+		activity.list
+			.mockResolvedValueOnce({ items: [], total: 90 })
+			.mockResolvedValueOnce({
+				items: [
+					{
+						payload: {},
+						replayed: false,
+						runIdentifier: "other-run",
+						summary: "Never include me",
+						type: "agent.cycle-finished",
+					},
+				],
+				total: 90,
+			})
+		client.complete.mockResolvedValue(
+			completion([
+				toolCall("wait_for_input", { reason: "Need evidence" }),
+			]),
+		)
+		await service.run(createActions(() => state))
+		expect(activity.list).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({ limit: 16, offset: 74 }),
+		)
+		expect(JSON.stringify(client.complete.mock.calls[0])).not.toContain(
+			"Never include me",
+		)
+	})
+
+	it("does not echo malformed JSON or integration secrets into the audit trail", async () => {
+		const { activity, client, service } = createHarness(3)
+		const actions = createActions(() => createState())
+		actions.investigate.mockRejectedValue(
+			new Error("Bearer hidden-integration-token"),
+		)
+		client.complete
+			.mockResolvedValueOnce(
+				completion([
+					rawToolCall(
+						"get_recovery_capacity",
+						'{"secret":"hidden-json-token"',
+					),
+				]),
+			)
+			.mockResolvedValueOnce(
+				completion([toolCall("get_recovery_capacity", {})]),
+			)
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("wait_for_input", {
+						reason: "Investigate failure",
+					}),
+				]),
+			)
+		await service.run(actions)
+		const audit = JSON.stringify(activityInputs(activity))
+		expect(audit).not.toContain("hidden-json-token")
+		expect(audit).not.toContain("hidden-integration-token")
+		expect(audit).toContain('"validJson":false')
+	})
+
 	it("ignores bookkeeping and simulation clock changes but fingerprints decision evidence", () => {
 		const incident = createImpactedIncident(12)
 		const plan = createActivePlan(incident)

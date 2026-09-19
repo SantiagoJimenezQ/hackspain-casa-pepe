@@ -5,13 +5,14 @@ The agent's eight MVP tools are registered in `apps/server/src/tools`. Shared in
 | Tool | Behavior |
 |---|---|
 | `get_incident_context` | Read the incident and latest plan, including services, dependencies, capacity and business impact. |
-| `call_engineer` | Start the existing asynchronous HappyRobot call adapter. |
+| `call_engineer` | Start an asynchronous call through the configured ElevenLabs or HappyRobot adapter, or simulate it. |
 | `save_recovery_plan` | Check the previous version, supersede pending approvals and persist the new plan. |
 | `send_incident_email` | Render the persisted plan and send it to the configured operator via Resend, or simulate it. |
 | `request_approval` | Ask the operator to authorize a specific plan step. |
 | `execute_recovery` | Check active plan, service requirements, dependencies, capacity and matching approval before executing. |
 | `verify_recovery` | Independently check recovery; HTTP route-assignment verification submits a test delivery. |
 | `publish_status_update` | Publish a customer-safe service snapshot at `/api/status` (JSON: `/api/status/public`), marking simulation and unverified recovery explicitly. |
+| `read_incoming_emails` | List inbound emails through Resend and optionally fetch one message by provider email ID. |
 
 Legacy tools (`get_incident_state`, `get_service_health`, `get_recovery_capacity`, `contact_engineer`, `assign_task`) remain available for existing plans and integrations. They are not additional MVP deliverables.
 
@@ -27,6 +28,16 @@ The authenticated `/api/engineers/incoming-calls/simulate` endpoint provides the
 
 `INCIDENT_EMAIL_MODE=simulated` never contacts a provider. Live sending requires server-side `RESEND_API_KEY`, `INCIDENT_EMAIL_FROM` and `INCIDENT_EMAIL_TO`. The agent cannot choose arbitrary recipients. The generated email is explicitly labelled as a demo.
 
+The authenticated `/api/tools/tests` routes expose the same email and engineer-call boundaries for provider checks that do not depend on an incident. They default to synthetic simulated requests, persist idempotent results, and keep ElevenLabs result polling and HappyRobot callbacks isolated from incident records and agent events. Standalone calls use the same configured adapter as incident calls; GET of an accepted ElevenLabs test fetches its conversation result.
+
+### Resend inbound email
+
+Set `RESEND_WEBHOOK_SECRET` to the signing secret from Resend, configure the Resend webhook for `email.received` to target `/api/webhooks/resend/incoming`, and ensure the deployment preserves the raw request body. The endpoint verifies the Svix signature, rejects stale or malformed requests, deduplicates provider email IDs and associates accepted events with the active run when one exists. The `read_incoming_emails` tool uses the server-side Resend API key to list received email summaries and fetch the selected email's full payload; provider credentials stay out of browser code.
+
 ## Operational boundary
 
 This is a single coordinator hackathon runtime. It uses the existing database-backed tool log and per-run cycle serialization. It does not provide distributed scheduling or exactly-once side effects across crashes; email also relies on the provider's idempotency retention window. Unknown outcomes must be reconciled before retrying after that window. Deployments must configure the HappyRobot workflow and a reachable callback URL; adding these tools does not provision phone numbers or provider accounts.
+
+## Outbound voice providers
+
+NestJS owns the `EngineerCallAdapter` boundary, persisted call records and completion handling. ElevenLabs uses server-side polling; HappyRobot uses its callback. See [voice setup](../../apps/server/docs/ELEVENLABS.md) and the [shared outbound contract](../contracts/outbound-calls.d.ts).

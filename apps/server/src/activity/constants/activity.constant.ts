@@ -31,6 +31,7 @@ export const ACTIVITY_EVENT_TYPES = [
 	"engineer-call.failed",
 	"recovery.executed",
 	"recovery.verified",
+	"services.checked",
 	"simulation.advanced",
 	"agent.cycle-finished",
 	"agent.limit-reached",

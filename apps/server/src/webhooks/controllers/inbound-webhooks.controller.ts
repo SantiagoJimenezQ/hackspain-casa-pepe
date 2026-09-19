@@ -1,4 +1,5 @@
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
+import { InvalidStateTransitionException } from "@common/exceptions/domain.exception"
 import { HappyRobotCallResultDTO } from "@engineers/dtos/happyrobot-call-result.dto"
 import { IncomingCallDTO } from "@engineers/dtos/incoming-call.dto"
 import { EngineersService } from "@engineers/services/engineers.service"
@@ -9,6 +10,7 @@ import {
 	HttpCode,
 	HttpStatus,
 	Logger,
+	Optional,
 	Post,
 } from "@nestjs/common"
 import { ApiHeader, ApiOperation, ApiTags } from "@nestjs/swagger"
@@ -17,7 +19,12 @@ import { RecoveryService } from "@recovery/services/recovery.service"
 import {
 	HappyRobotInbound,
 	RecoveryInbound,
+	ResendInbound,
 } from "@webhooks/guards/inbound-secret.guard"
+import {
+	InboundEmailsService,
+	ResendEmailReceivedEvent,
+} from "@webhooks/services/inbound-emails.service"
 
 @ApiTags("Inbound webhooks")
 @Controller("webhooks")
@@ -28,7 +35,16 @@ export class InboundWebhooksController {
 		private readonly incomingCalls: IncomingCallsService,
 		private readonly engineersService: EngineersService,
 		private readonly recoveryService: RecoveryService,
+		@Optional() private readonly inboundEmails?: InboundEmailsService,
 	) {}
+
+	@Post("resend/incoming")
+	@HttpCode(HttpStatus.ACCEPTED)
+	@ResendInbound()
+	@ApiOperation({ summary: "Receive Resend email.received events" })
+	async resendIncoming(@Body() body: ResendEmailReceivedEvent) {
+		return this.inboundEmails?.receive(body)
+	}
 
 	@Post("happyrobot/incoming")
 	@HttpCode(HttpStatus.ACCEPTED)
@@ -57,6 +73,13 @@ export class InboundWebhooksController {
 		const call = await this.engineersService.getByIdentifier(
 			body.callIdentifier,
 		)
+		if (call.provider === "elevenlabs") {
+			throw new InvalidStateTransitionException(
+				"Engineer call",
+				"ElevenLabs",
+				"receive a HappyRobot result",
+			)
+		}
 		const questionsByKey = new Map(
 			call.questions.map((question) => [question.key, question.question]),
 		)

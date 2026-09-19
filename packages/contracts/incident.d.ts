@@ -76,6 +76,37 @@ export interface ResourceState {
 	lastChangedAt: string
 }
 
+export interface TopologyNode {
+	identifier: string
+	label: string
+	region: string
+	latitude: number
+	longitude: number
+	role: "primary" | "backup"
+	status: "up" | "degraded" | "down"
+	priority?: number
+}
+
+export interface TopologyLink {
+	identifier: string
+	from: string
+	to: string
+}
+
+export interface CustomerImpact {
+	identifier: string
+	name: string
+	shortName: string
+	sector: string
+	city?: string
+	latitude?: number
+	longitude?: number
+	logo?: string
+	users: number
+	serviceIdentifiers: ReadonlyArray<string>
+	accent: string
+}
+
 export interface Fact {
 	identifier: string
 	statement: string
@@ -109,6 +140,8 @@ export interface IncidentSnapshot {
 	resolvedAt: string
 	businessImpactSummary: string
 	services: ReadonlyArray<ServiceState>
+	topology: { nodes: ReadonlyArray<TopologyNode>; links: ReadonlyArray<TopologyLink> }
+	customers: ReadonlyArray<CustomerImpact>
 	simulation: SimulationState
 	resources: ReadonlyArray<ResourceState>
 	facts: ReadonlyArray<Fact>

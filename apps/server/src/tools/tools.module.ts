@@ -12,12 +12,14 @@ import { ToolsController } from "@tools/controllers/tools.controller"
 import { StatusPublicationEntity } from "@tools/entities/status-publication.entity"
 import { ToolCallEntity } from "@tools/entities/tool-call.entity"
 import { AssignTaskTool } from "@tools/implementations/assign-task.tool"
+import { CheckServicesStatusTool } from "@tools/implementations/check-services-status.tool"
 import {
 	CommunicationToolsService,
 	PublishStatusUpdateTool,
 	SendIncidentEmailTool,
 } from "@tools/implementations/communication-tools"
 import { ContactEngineerTool } from "@tools/implementations/contact-engineer.tool"
+import { ReadIncomingEmailsTool } from "@tools/implementations/inbound-emails.tool"
 import {
 	CallEngineerTool,
 	GetIncidentContextTool,
@@ -35,12 +37,20 @@ import {
 } from "@tools/implementations/state-tools"
 import { ToolRegistryService } from "@tools/services/tool-registry.service"
 import { ToolsService } from "@tools/services/tools.service"
+import { ToolTestEntity } from "@tools/testing/tool-test.entity"
+import { ToolTestsController } from "@tools/testing/tool-tests.controller"
+import { ToolTestsService } from "@tools/testing/tool-tests.service"
+import { HappyRobotSecretGuard } from "@webhooks/guards/inbound-secret.guard"
 
 @Module({
-	controllers: [ToolsController, PublicStatusController],
+	controllers: [ToolsController, PublicStatusController, ToolTestsController],
 	exports: [ToolsService, ToolRegistryService],
 	imports: [
-		TypeOrmModule.forFeature([ToolCallEntity, StatusPublicationEntity]),
+		TypeOrmModule.forFeature([
+			ToolCallEntity,
+			StatusPublicationEntity,
+			ToolTestEntity,
+		]),
 		PlansModule,
 		ActivityModule,
 		IncidentsModule,
@@ -64,6 +74,10 @@ import { ToolsService } from "@tools/services/tools.service"
 		RequestApprovalTool,
 		ExecuteRecoveryTool,
 		VerifyRecoveryTool,
+		ReadIncomingEmailsTool,
+		CheckServicesStatusTool,
+		HappyRobotSecretGuard,
+		ToolTestsService,
 		ToolRegistryService,
 		ToolsService,
 	],

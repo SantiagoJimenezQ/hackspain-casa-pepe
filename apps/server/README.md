@@ -88,7 +88,8 @@ With 12 reported units the initial plan recovers the four failing services. Afte
 | Approvals | `GET /approvals`, `POST /approvals/:identifier/decision` | Proposed action, consequences and operator decision |
 | Tasks | `GET /tasks`, `PATCH /tasks/:identifier/status` | Tasks with owner and status |
 | Activity | `GET /activity?afterSequence=&types=` | Full log, correlated across event, decision, tool call and approval |
-| Tools | `GET /tools`, `/tools/calls`, `/tools/calls/:identifier` | Available tools, which ones are simulated, and every execution |
+| Tools | `GET /tools`, `/tools/calls`, `/tools/calls/:identifier` | Available agent tools, which ones are simulated, and every execution |
+| Standalone tool tests | `GET/POST /tools/tests`, `GET /tools/tests/:identifier`, `POST /tools/tests/callbacks/happyrobot` | Authenticated synthetic email/call checks with durable polling; callback uses the HappyRobot shared secret and never touches an incident |
 | Calls | `GET /engineers/calls` | Engineer calls with questions and answers |
 | Recovery | `GET /recovery/actions` | Actions executed in the test environment |
 | Agent | `GET /agent/status`, `POST /agent/cycle` | Agent status and on-demand cycle |
@@ -97,10 +98,12 @@ With 12 reported units the initial plan recovers the four failing services. Afte
 | Learning | `GET /learning/insights`, `DELETE /learning/insights`, `GET /learning/reports/:run` | What the agent learned from previous runs and the post-incident report |
 | Stream | `GET /activity/stream?apiKey=` | Server-sent events for browsers, with backlog replay from `afterSequence` |
 | Webhooks | `POST/GET/DELETE /webhooks/subscriptions`, `POST /webhooks/subscriptions/:identifier/ping`, `GET /webhooks/deliveries` | Subscriptions and delivery log |
-| Inbound | `POST /webhooks/happyrobot`, `POST /webhooks/recovery` | Asynchronous results from HappyRobot and the test environment |
+| Inbound | `POST /webhooks/happyrobot`, `POST /webhooks/recovery`, `POST /webhooks/resend/incoming` | Asynchronous results from HappyRobot, the test environment and Resend inbound email events |
 | Health | `GET /health` | Postgres and integration modes |
 
 The full reference of every endpoint, body, response and the event catalog is in [docs/API.md](docs/API.md). Interactive OpenAPI documentation is served at `/documentation`.
+
+For provider-independent checks of outbound email and engineer calls, use the standalone tool-test routes. `POST /tools/tests` defaults to simulated mode and accepts fixed synthetic content; live calls use `ENGINEER_CALL_PROVIDER` and remain `accepted` until an ElevenLabs conversation lookup or HappyRobot callback completes them. Poll the result endpoint to fetch ElevenLabs completion; no public callback is needed for ElevenLabs. The copyable requests and polling examples are in [docs/API-CURL-TEST-GUIDE.md](docs/API-CURL-TEST-GUIDE.md#optional-standalone-tool-checks).
 
 For repeatable API testing with an environment-provided API key, use the [curl test guide](docs/API-CURL-TEST-GUIDE.md). It includes an ordered incident walkthrough, asynchronous polling, approval checks, and optional endpoint exercises.
 
@@ -129,10 +132,13 @@ The dashboard receives the same events through its server-side proxy at `GET /ap
 |---|---|---|
 | `POST /webhooks/happyrobot` | `x-happyrobot-signature: <HAPPYROBOT_WEBHOOK_SECRET>` | `{ callIdentifier, outcome: "completed"\|"failed"\|"no-answer", summary, transcript, answers: [{ key, answer, confirmed? }] }` |
 | `POST /webhooks/recovery` | `x-recovery-signature: <RECOVERY_WEBHOOK_SECRET>` | `{ actionIdentifier, status: "succeeded"\|"partial"\|"failed", detail }` |
+| `POST /webhooks/resend/incoming` | Svix `svix-id`, `svix-timestamp`, `svix-signature` headers | Resend `email.received` event; the raw request body is verified before persistence |
 
 When triggering the call, the service sends `HAPPYROBOT_TRIGGER_URL` the `call_identifier`, the engineer details, the questions with their `key` and the `callback_url`. The HappyRobot flow must return those same `key` values in `answers`. In `http` mode the recovery does `POST {RECOVERY_ENVIRONMENT_URL}/recovery/actions` and verifies with `GET {RECOVERY_ENVIRONMENT_URL}/recovery/services/:service/health`.
 
 A result that arrives after a reset is rejected with `409 Stale Run` and does not alter the new run. A phone call may take up to `AGENT_CALL_TIMEOUT_MILLISECONDS` (five minutes by default); if the engineer cannot be reached after the allowed attempts, the agent continues with the unconfirmed facts, says so in the plan, and assigns a task to confirm them by another channel. See [docs/API.md](docs/API.md) for the exact payloads exchanged with HappyRobot.
+
+Resend inbound requests are accepted only with a valid, recent Svix signature. Duplicate provider email IDs are ignored, and accepted events are associated with the active run when one exists. Set `RESEND_WEBHOOK_SECRET` to the signing secret shown by Resend and configure the webhook target as `/api/webhooks/resend/incoming`.
 
 ## How the agent decides
 
@@ -153,7 +159,7 @@ src/
   plans/           plan versions and diff between versions
   approvals/       approvals bound to a plan version
   tasks/           tasks with owner
-  engineers/       contact_engineer: simulated and HappyRobot adapters
+  engineers/       contact_engineer: simulated, ElevenLabs and HappyRobot adapters
   recovery/        execute_recovery and verify_recovery: simulated and HTTP adapters
   tools/           registry and execution of the eight tools
   agent/           decision cycle, plan builder, bilingual messages, overview for the UI
@@ -165,3 +171,7 @@ src/
 ## MVP tools
 
 The runtime now also exposes the agreed MVP names, operator email (simulated or Resend), incoming phone reports with operator confirmation, and a public status page and JSON feed. Existing tool names remain compatible. See [MVP tools rehearsal](../../demo/MVP-TOOLS.md) for live integration setup, the local HTTP recovery target and the complete demo sequence.
+
+## ElevenLabs outbound calls
+
+See [outbound voice setup](docs/ELEVENLABS.md) for the existing emergency agent, dynamic variables, post-call authorization evidence, and switching to HappyRobot.

@@ -29,7 +29,7 @@ export class ScenariosService {
 			identifier: scenario.identifier,
 			language: scenario.language,
 			region: scenario.region,
-			reportedCapacity: scenario.resource.reportedCapacity,
+			reportedCapacity: scenario.resources[0].reportedCapacity,
 			serviceCount: scenario.services.length,
 			title: scenario.title,
 		}))

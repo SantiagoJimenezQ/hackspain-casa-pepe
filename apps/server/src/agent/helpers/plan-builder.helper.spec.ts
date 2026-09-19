@@ -208,12 +208,27 @@ describe("buildPlanDraft", () => {
 		const publish = revised.steps.find(
 			(s) => s.invocation.name === "publish_status_update",
 		)
-		expect(publish?.dependsOn).toEqual(
-			revised.steps
-				.filter((s) => s.invocation.name === "verify_recovery")
-				.map((s) => s.identifier),
+		const check = revised.steps.find(
+			(s) => s.invocation.name === "check_services_status",
+		)
+		const verifyIdentifiers = revised.steps
+			.filter((s) => s.invocation.name === "verify_recovery")
+			.map((s) => s.identifier)
+		expect(check?.dependsOn).toEqual(verifyIdentifiers)
+		expect(publish?.dependsOn).toEqual([
+			...verifyIdentifiers,
+			check?.identifier,
+		])
+	})
+	it("fails over from Oman to Bahrain when Oman cannot cover the next recovery", () => {
+		const draft = buildPlanDraft(createInput(1))
+
+		expect(draft.capacity.resourceIdentifier).toBe("backup-bahrain")
+		expect(decisionOf(draft, "orders-database").decision).toBe(
+			"recover-now",
 		)
 	})
+
 	it("recovers every failing service when the reported capacity is enough", () => {
 		const draft = buildPlanDraft(createInput(12))
 

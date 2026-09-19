@@ -14,7 +14,7 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger"
 import { AppModule } from "@root/app.module"
 
 async function bootstrap(): Promise<void> {
-	const application = await NestFactory.create(AppModule)
+	const application = await NestFactory.create(AppModule, { rawBody: true })
 	const configuration = application.get(ConfigurationService)
 	const logger = new Logger("Bootstrap")
 	process.on("unhandledRejection", (reason) => {
@@ -63,7 +63,8 @@ async function bootstrap(): Promise<void> {
 	await application.listen(configuration.runtime.port)
 	logger.log(LOG_MESSAGES.APPLICATION.STARTED, {
 		documentation: `${configuration.runtime.publicBaseURL}/${DOCUMENTATION_PATH}`,
-		engineerCalls: configuration.happyRobot.mode,
+		engineerCallProvider: configuration.engineerCall.provider,
+		engineerCalls: configuration.engineerCall.mode,
 		environment: configuration.runtime.environment,
 		port: configuration.runtime.port,
 		recovery: configuration.recovery.mode,

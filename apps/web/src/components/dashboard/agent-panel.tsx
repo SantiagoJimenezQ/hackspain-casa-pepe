@@ -212,7 +212,7 @@ export function AgentPanel() {
       ) : null}
       <MessageScrollerProvider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={48}>
         <MessageScroller className="min-h-0 flex-1">
-          <MessageScrollerViewport className="scroll-fade px-4" aria-label="Trabajo del agente">
+          <MessageScrollerViewport className="px-4" aria-label="Trabajo del agente">
             <MessageScrollerContent className="gap-0.5 py-1 pb-4" aria-busy={live}>
               {plan ? (
                 <MessageScrollerItem messageId={`plan-${plan.version}`} className="mb-2 [content-visibility:visible]">

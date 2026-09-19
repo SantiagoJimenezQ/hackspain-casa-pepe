@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { IMPACT_PAUSE_MS, useDashboard } from "@/components/dashboard/dashboard-provider";
+import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { TopBar } from "@/components/dashboard/top-bar";
 import { LiveOperationsDashboard } from "@/components/dashboard/live-operations-dashboard";
 import { renderWithProviders } from "@/test/render";
@@ -34,6 +34,7 @@ const snapshot = {
     active: true,
     startedAt: "2026-09-19T10:00:00.000Z",
     impactedAt: "2026-09-19T10:00:02.000Z",
+    resolvedAt: "",
     businessImpactSummary: "Impacto",
     services: [
       {
@@ -97,6 +98,28 @@ const snapshot = {
   },
 };
 
+const idleSnapshot = {
+  ...snapshot,
+  incident: {
+    ...snapshot.incident,
+    status: "normal",
+    impactedAt: "",
+    resolvedAt: "",
+    services: snapshot.incident.services.map((service) => ({
+      ...service,
+      status: "healthy",
+      statusReason: "ok",
+    })),
+  },
+  toolCalls: [],
+  agent: {
+    ...snapshot.agent,
+    cycles: 0,
+    runningToolCalls: 0,
+    lastCycleOutcome: null,
+  },
+};
+
 class MockEventSource {
   url: string;
   onerror: ((event?: Event) => void) | null = null;
@@ -131,51 +154,58 @@ describe("live dashboard provider", () => {
     vi.restoreAllMocks();
   });
 
-  it("shows a deliberate ready state when the backend has no active run", async () => {
+  it("boots an idle run when the backend has no active scenario", async () => {
+    let started = false;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith("/overview")) {
-        return new Response(
-          JSON.stringify({
-            message: "There is no active incident run. Start one through the demo controls first",
-          }),
-          { status: 409 },
-        );
+        if (!started) {
+          return new Response(
+            JSON.stringify({
+              message: "There is no active incident run. Start one through the demo controls first",
+            }),
+            { status: 409 },
+          );
+        }
+        return new Response(JSON.stringify(idleSnapshot), { status: 200 });
+      }
+      if (url.includes("/demo/start")) {
+        started = true;
+        return new Response("{}", { status: 200 });
       }
       return new Response(JSON.stringify([]), { status: 200 });
     });
 
     renderWithProviders(<Probe />);
 
-    await waitFor(() => expect(screen.getByText("ready")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("active")).toBeInTheDocument());
     expect(screen.queryByText(/No active run/)).not.toBeInTheDocument();
   });
 
-  it("starts the scenario and then fires impact without fetching learning on every refresh", async () => {
+  it("starts the scenario without firing impact or fetching learning on every refresh", async () => {
     const calls: string[] = [];
-    let overviewCount = 0;
+    let started = false;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       calls.push(`${init?.method ?? "GET"} ${url}`);
       if (url.endsWith("/overview")) {
-        overviewCount += 1;
-        if (overviewCount === 1) {
+        if (!started) {
           return new Response(JSON.stringify({ message: "no run" }), { status: 409 });
         }
-        return new Response(JSON.stringify(snapshot), { status: 200 });
+        return new Response(JSON.stringify(idleSnapshot), { status: 200 });
+      }
+      if (url.includes("/demo/start")) {
+        started = true;
+        return new Response("{}", { status: 200 });
       }
       return new Response(JSON.stringify(url.includes("insights") ? [] : {}), { status: 200 });
     });
 
-    const { user } = renderWithProviders(<Probe />);
-    await waitFor(() => expect(screen.getByText("ready")).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "start" }));
-    await waitFor(() => expect(calls.some((call) => call.includes("/demo/impact"))).toBe(true), {
-      timeout: IMPACT_PAUSE_MS + 2000,
-    });
+    renderWithProviders(<Probe />);
     await waitFor(() => expect(screen.getByText("active")).toBeInTheDocument());
 
     expect(calls.some((call) => call.includes("/demo/start"))).toBe(true);
+    expect(calls.some((call) => call.includes("/demo/impact"))).toBe(false);
     expect(calls.filter((call) => call.includes("/learning/insights"))).toHaveLength(1);
     expect(calls.filter((call) => call.includes("/learning/reports/current"))).toHaveLength(1);
   });
@@ -222,11 +252,17 @@ describe("live dashboard chrome", () => {
     vi.restoreAllMocks();
   });
 
-  it("keeps start on the empty state and compact operator controls in the header", async () => {
+  it("opens on the idle dashboard with impact armed and no start gate", async () => {
+    let started = false;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith("/overview")) {
-        return new Response(JSON.stringify({ message: "no run" }), { status: 409 });
+        if (!started) return new Response(JSON.stringify({ message: "no run" }), { status: 409 });
+        return new Response(JSON.stringify(idleSnapshot), { status: 200 });
+      }
+      if (url.includes("/demo/start")) {
+        started = true;
+        return new Response("{}", { status: 200 });
       }
       return new Response(JSON.stringify([]), { status: 200 });
     });
@@ -238,10 +274,48 @@ describe("live dashboard chrome", () => {
       </>,
     );
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Iniciar demo" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Impacto" })).toBeEnabled());
+    expect(screen.queryByRole("button", { name: "Iniciar demo" })).not.toBeInTheDocument();
+    expect(screen.queryByText("La simulación está preparada")).not.toBeInTheDocument();
+    expect(screen.getByText("EN ESPERA")).toBeInTheDocument();
+    expect(screen.getByText("En espera del impacto")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Ciclo" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Demo" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Impacto" })).not.toBeInTheDocument();
+  });
+
+  it("stays on the idle dashboard after reset", async () => {
+    let runIdentifier = "run-1";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/overview")) {
+        return new Response(
+          JSON.stringify({
+            ...idleSnapshot,
+            incident: { ...idleSnapshot.incident, runIdentifier },
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("/demo/reset")) {
+        runIdentifier = "run-2";
+        return new Response("{}", { status: 200 });
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    });
+
+    const { user } = renderWithProviders(
+      <>
+        <TopBar />
+        <LiveOperationsDashboard />
+      </>,
+    );
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Impacto" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Reiniciar" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Impacto" })).toBeEnabled());
+    expect(screen.queryByRole("button", { name: "Iniciar demo" })).not.toBeInTheDocument();
+    expect(screen.queryByText("La simulación está preparada")).not.toBeInTheDocument();
+    expect(screen.getByText("EN ESPERA")).toBeInTheDocument();
   });
 
   it("shows impact, twist, reset and the elapsed timer once a run is live", async () => {
@@ -260,7 +334,8 @@ describe("live dashboard chrome", () => {
       </>,
     );
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Impacto" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Leyó el contexto del incidente")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Impacto" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Twist" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reiniciar" })).toBeInTheDocument();
     expect(screen.getByText("Tiempo de incidente")).toBeInTheDocument();
@@ -299,5 +374,66 @@ describe("live dashboard chrome", () => {
 
     await waitFor(() => expect(screen.getByText("Topología operativa")).toBeInTheDocument());
     expect(screen.getByText("Golfo · failover activo")).toBeInTheDocument();
+  });
+
+  it("holds the incident clock at zero until impact", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/overview")) {
+        return new Response(
+          JSON.stringify({
+            ...snapshot,
+            incident: { ...snapshot.incident, status: "normal", impactedAt: "", resolvedAt: "" },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    });
+
+    renderWithProviders(
+      <>
+        <TopBar />
+        <LiveOperationsDashboard />
+      </>,
+    );
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Impacto" })).toBeEnabled());
+    expect(screen.getByText("00:00")).toBeInTheDocument();
+    expect(screen.getByText("Tiempo de incidente")).toBeInTheDocument();
+    expect(screen.queryByText("Resuelto")).not.toBeInTheDocument();
+  });
+
+  it("freezes the incident clock as Resuelto when the run recovers", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/overview")) {
+        return new Response(
+          JSON.stringify({
+            ...snapshot,
+            incident: {
+              ...snapshot.incident,
+              status: "recovered",
+              impactedAt: "2026-09-19T10:00:00.000Z",
+              resolvedAt: "2026-09-19T10:01:23.000Z",
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    });
+
+    renderWithProviders(
+      <>
+        <TopBar />
+        <LiveOperationsDashboard />
+      </>,
+    );
+
+    await waitFor(() => expect(screen.getByText("Resuelto")).toBeInTheDocument());
+    expect(screen.getByText("01:23")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Impacto" })).toBeDisabled();
+    expect(screen.queryByText("Tiempo de incidente")).not.toBeInTheDocument();
   });
 });

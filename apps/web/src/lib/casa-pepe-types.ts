@@ -48,6 +48,7 @@ export type Incident = {
   active: boolean;
   startedAt: string;
   impactedAt: string;
+  resolvedAt: string;
   businessImpactSummary: string;
   services: Service[];
   topology?: {

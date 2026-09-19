@@ -14,10 +14,8 @@ import {
 import { CasaPepeClientError, casaPepeClient } from "@/lib/casa-pepe-client";
 import type { ActivityRecord, LearningInsight, Overview, RunReport } from "@/lib/casa-pepe-types";
 
-type DashboardStatus = "ready" | "loading" | "active" | "error";
+type DashboardStatus = "loading" | "active" | "error";
 type DemoAction = "start" | "impact" | "twist" | "reset" | "cycle" | null;
-
-export const IMPACT_PAUSE_MS = 1200;
 
 type DashboardContextValue = {
   status: DashboardStatus;
@@ -78,6 +76,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const latestRunIdentifier = useRef<string | null>(null);
   const latestSequence = useRef(0);
   const startGeneration = useRef(0);
+  const ensuringRun = useRef(false);
   const learningLoaded = useRef(false);
 
   const applyOverview = useCallback((next: Overview) => {
@@ -109,22 +108,44 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshOverview = useCallback(async () => {
+    const generation = startGeneration.current;
     try {
       const next = await casaPepeClient.overview();
+      if (generation !== startGeneration.current) return;
       applyOverview(next);
       void loadLearning();
     } catch (cause) {
+      if (generation !== startGeneration.current) return;
       const known = cause instanceof CasaPepeClientError ? cause : null;
       if (known?.status === 404 || known?.status === 409) {
-        learningLoaded.current = false;
-        latestRunIdentifier.current = null;
-        latestSequence.current = 0;
-        setOverview(null);
-        setInsights([]);
-        setReport(null);
-        setActivity([]);
+        if (ensuringRun.current) return;
+        ensuringRun.current = true;
+        const startGen = ++startGeneration.current;
+        setBusyAction("start");
         setError(null);
-        setStatus("ready");
+        try {
+          await casaPepeClient.start();
+          if (startGen !== startGeneration.current) return;
+          const next = await casaPepeClient.overview();
+          if (startGen !== startGeneration.current) return;
+          applyOverview(next);
+          void loadLearning();
+        } catch (startCause) {
+          if (startGen !== startGeneration.current) return;
+          const startError = startCause instanceof CasaPepeClientError ? startCause : null;
+          learningLoaded.current = false;
+          latestRunIdentifier.current = null;
+          latestSequence.current = 0;
+          setOverview(null);
+          setInsights([]);
+          setReport(null);
+          setActivity([]);
+          setError(startError?.message ?? "No se pudo completar la acción solicitada.");
+          setStatus("error");
+        } finally {
+          ensuringRun.current = false;
+          if (startGen === startGeneration.current) setBusyAction(null);
+        }
         return;
       }
       setError(known?.message ?? "No se pudo contactar con el backend de Casa Pepe.");
@@ -195,10 +216,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       await casaPepeClient.start();
-      await refreshOverview();
-      await new Promise((resolve) => window.setTimeout(resolve, IMPACT_PAUSE_MS));
-      if (generation !== startGeneration.current) return;
-      await casaPepeClient.impact();
       await refreshOverview();
     } catch (cause) {
       const known = cause instanceof CasaPepeClientError ? cause : null;

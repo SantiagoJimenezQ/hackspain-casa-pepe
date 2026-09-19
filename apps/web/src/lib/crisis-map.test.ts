@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_CAMERA_K,
   arcPath,
   cameraForView,
+  cameraSvgTransform,
   failoverArcVisible,
   failoverTarget,
   fitWorldProjection,
   mapViewForTools,
   projectPoint,
+  projectToScreen,
 } from "@/lib/crisis-map";
 import type { Overview } from "@/lib/casa-pepe-types";
 
@@ -17,8 +20,22 @@ const nodes = [
   { identifier: "riyadh", label: "Riad", region: "riyadh", latitude: 24.7136, longitude: 46.6753, role: "backup" as const, status: "up" as const },
 ];
 
+function expectInsidePanel(
+  camera: { x: number; y: number; k: number },
+  point: [number, number],
+  width: number,
+  height: number,
+  margin: number,
+) {
+  const [x, y] = projectToScreen(camera, point);
+  expect(x).toBeGreaterThan(margin);
+  expect(x).toBeLessThan(width - margin);
+  expect(y).toBeGreaterThan(margin);
+  expect(y).toBeLessThan(height - margin);
+}
+
 describe("crisis map camera and projection", () => {
-  it("keeps a world camera until impact, then Dubai, then nearby without yanking back", () => {
+  it("keeps a world camera until impact, then the primary server, then nearby without yanking back", () => {
     expect(mapViewForTools(false, [])).toBe("world");
     expect(mapViewForTools(true, ["get_incident_context"])).toBe("impact");
     expect(mapViewForTools(true, ["get_incident_context", "get_recovery_capacity"])).toBe("nearby");
@@ -49,5 +66,47 @@ describe("crisis map camera and projection", () => {
     const world = cameraForView("world", projection, 860, 440, nodes);
     expect(nearby.k).toBeGreaterThan(world.k);
     expect(arcPath(dubai, muscat)).toContain("Q");
+  });
+
+  it.each([
+    [860, 440],
+    [1200, 700],
+  ] as const)("centers impact zoom on the primary server at %i×%i", (width, height) => {
+    const projection = fitWorldProjection(width, height);
+    const primary = nodes[0]!;
+    const dubai = projectPoint(projection, primary.longitude, primary.latitude);
+    const world = cameraForView("world", projection, width, height, nodes);
+    const impact = cameraForView("impact", projection, width, height, nodes);
+    const nearby = cameraForView("nearby", projection, width, height, nodes);
+    const [x, y] = projectToScreen(impact, dubai);
+    expect(impact.k).toBeGreaterThan(world.k);
+    expect(nearby.k).toBeGreaterThan(world.k);
+    expect(impact.k).toBeLessThanOrEqual(MAX_CAMERA_K);
+    expect(nearby.k).toBeLessThanOrEqual(MAX_CAMERA_K);
+    expect(x).toBeCloseTo(width / 2, 5);
+    expect(y).toBeCloseTo(height / 2, 5);
+    expectInsidePanel(impact, dubai, width, height, 24);
+    for (const node of nodes) {
+      expectInsidePanel(nearby, projectPoint(projection, node.longitude, node.latitude), width, height, 24);
+    }
+  });
+
+  it("stays on the world camera when topology is missing after impact", () => {
+    const projection = fitWorldProjection(860, 440);
+    const camera = cameraForView("impact", projection, 860, 440, []);
+    expect(camera).toEqual({ x: 0, y: 0, k: 1 });
+  });
+
+  it("never produces a negative camera scale on a tiny panel", () => {
+    const projection = fitWorldProjection(860, 80);
+    const camera = cameraForView("impact", projection, 860, 80, nodes);
+    expect(camera.k).toBeGreaterThanOrEqual(1);
+    expect(Number.isFinite(camera.k)).toBe(true);
+  });
+
+  it("pans and zooms from the SVG origin so the globe stays in view", () => {
+    const camera = { x: 10, y: 20, k: 2 };
+    expect(cameraSvgTransform(camera)).toBe("translate(10 20) scale(2)");
+    expect(projectToScreen(camera, [5, 6])).toEqual([20, 32]);
   });
 });

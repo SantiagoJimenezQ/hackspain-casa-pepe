@@ -1,4 +1,5 @@
-import type { Incident, Overview, ServiceHealth } from "@/lib/casa-pepe-types";
+import { recoveryStartTimes } from "@/lib/agent-trace";
+import type { ActivityRecord, Incident, Overview, ServiceHealth } from "@/lib/casa-pepe-types";
 
 export type VisualStatus = "up" | "degraded" | "down";
 const visualStatus = (status: ServiceHealth): VisualStatus => status === "healthy" ? "up" : status === "recovering" ? "degraded" : status;
@@ -23,6 +24,32 @@ export function customerView(incident: Incident) {
     const action = progress === 100 ? "recovered" as const : active || progress > 0 ? "migrating" as const : "queued" as const;
     return { ...customer, progress, status, action };
   });
+}
+
+export function customerViewOrdered(overview: Overview, activity: ReadonlyArray<ActivityRecord> = []) {
+  const starts = recoveryStartTimes(overview, activity);
+  return customerView(overview.incident)
+    .map((customer, scenarioIndex) => {
+      const times = customer.serviceIdentifiers.flatMap((identifier) => {
+        const startedAt = starts.get(identifier);
+        return startedAt === undefined ? [] : [startedAt];
+      });
+      return {
+        customer,
+        scenarioIndex,
+        recoveryStartedAt: times.length ? Math.min(...times) : null,
+      };
+    })
+    .toSorted((left, right) => {
+      if (left.recoveryStartedAt !== null && right.recoveryStartedAt !== null) {
+        if (left.recoveryStartedAt !== right.recoveryStartedAt) return left.recoveryStartedAt - right.recoveryStartedAt;
+        return left.customer.identifier.localeCompare(right.customer.identifier);
+      }
+      if (left.recoveryStartedAt !== null) return -1;
+      if (right.recoveryStartedAt !== null) return 1;
+      return left.scenarioIndex - right.scenarioIndex;
+    })
+    .map((row) => ({ ...row.customer, recoveryStartedAt: row.recoveryStartedAt }));
 }
 
 export function topologyView(overview: Overview) {

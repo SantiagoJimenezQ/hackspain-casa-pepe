@@ -102,6 +102,8 @@ With 12 reported units the initial plan recovers the four failing services. Afte
 
 The full reference of every endpoint, body, response and the event catalog is in [docs/API.md](docs/API.md). Interactive OpenAPI documentation is served at `/documentation`.
 
+For repeatable API testing with an environment-provided API key, use the [curl test guide](docs/API-CURL-TEST-GUIDE.md). It includes an ordered incident walkthrough, asynchronous polling, approval checks, and optional endpoint exercises.
+
 The simulation configuration and state are shared in [`packages/contracts/simulation.d.ts`](../../packages/contracts/simulation.d.ts). The incident snapshot contract is [`packages/contracts/incident.d.ts`](../../packages/contracts/incident.d.ts). These files describe the consumer-facing payload; NestJS DTOs remain the runtime validators.
 
 ## Outbound webhooks

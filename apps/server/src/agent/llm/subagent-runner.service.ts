@@ -10,7 +10,10 @@ import { LlmMessage } from "@agent/llm/llm.types"
 import { LlmClientError, LlmClientService } from "@agent/llm/llm-client.service"
 import { argumentDiagnostics } from "@agent/llm/llm-context"
 import { modelVisible } from "@agent/llm/llm-state"
-import { subagentContext } from "@agent/llm/subagent-context"
+import {
+	subagentAvailableSteps,
+	subagentContext,
+} from "@agent/llm/subagent-context"
 import {
 	parseDispatchIdentifier,
 	parseSubagentReport,
@@ -21,7 +24,6 @@ import {
 } from "@agent/llm/subagent-tools"
 import { LlmLoopActions, LlmLoopState } from "@agent/types/llm-loop.type"
 import {
-	SubagentKind,
 	SubagentOutcome,
 	SubagentRequest,
 } from "@agent/types/subagent.type"
@@ -239,7 +241,7 @@ export class SubagentRunnerService {
 			throw new SubagentArgumentsError(
 				"Action budget reached; report what you know instead of dispatching",
 			)
-		const available = subagentAvailable(request)
+		const available = subagentAvailableSteps(request.state, request.kind)
 		if (!available.some((step) => step.identifier === identifier)) {
 			this.logger.warn(LOG_MESSAGES.SUBAGENTS.DISPATCH_OUT_OF_SCOPE, {
 				specialist: request.kind,
@@ -279,10 +281,6 @@ export class SubagentRunnerService {
 	}
 }
 
-function subagentAvailable(request: SubagentRequest) {
-	return subagentAvailableStepsOf(request.state, request.kind)
-}
-
 function parseArguments(raw: string): unknown {
 	try {
 		return JSON.parse(raw)
@@ -299,5 +297,3 @@ function safeToolName(
 		? name
 		: "[unknown-tool]"
 }
-
-export type { SubagentKind }

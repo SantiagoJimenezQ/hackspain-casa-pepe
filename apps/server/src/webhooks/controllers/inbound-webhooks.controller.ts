@@ -2,6 +2,7 @@ import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
 import { InvalidStateTransitionException } from "@common/exceptions/domain.exception"
 import { HappyRobotCallResultDTO } from "@engineers/dtos/happyrobot-call-result.dto"
 import { IncomingCallDTO } from "@engineers/dtos/incoming-call.dto"
+import { LiveAuthorizationDTO } from "@engineers/dtos/live-authorization.dto"
 import { EngineersService } from "@engineers/services/engineers.service"
 import { IncomingCallsService } from "@engineers/services/incoming-calls.service"
 import {
@@ -64,6 +65,30 @@ export class InboundWebhooksController {
 		)
 		return this.incomingCalls.receive(body, "live")
 	}
+	@Post("elevenlabs/authorization")
+	@HttpCode(HttpStatus.ACCEPTED)
+	@HappyRobotInbound()
+	@ApiHeader({
+		description: "Shared secret configured in HAPPYROBOT_WEBHOOK_SECRET",
+		name: "x-happyrobot-signature",
+	})
+	@ApiOperation({
+		summary:
+			"Permissions granted during an ElevenLabs call, reported before it ends",
+	})
+	async elevenLabsAuthorization(@Body() body: LiveAuthorizationDTO) {
+		this.logger.log(LOG_MESSAGES.WEBHOOKS.INBOUND_RECEIVED, {
+			callIdentifier: body.callIdentifier,
+			provider: "ElevenLabs",
+		})
+		const call = await this.engineersService.recordLiveAuthorizations(body)
+		return {
+			accepted: true as const,
+			authorizations: call.result?.authorizations,
+			callIdentifier: call.identifier,
+		}
+	}
+
 	@Post("happyrobot")
 	@HttpCode(HttpStatus.ACCEPTED)
 	@HappyRobotInbound()

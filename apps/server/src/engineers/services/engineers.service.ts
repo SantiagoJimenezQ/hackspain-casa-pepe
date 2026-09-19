@@ -31,6 +31,10 @@ import { EventEmitter2 } from "@nestjs/event-emitter"
 import { Interval } from "@nestjs/schedule"
 import { InjectRepository } from "@nestjs/typeorm"
 import { Repository } from "typeorm"
+import {
+	EngineerCallAuthorizations,
+	LiveAuthorizationReport,
+} from "../../../../../packages/contracts/outbound-calls"
 
 @Injectable()
 export class EngineersService {
@@ -202,6 +206,78 @@ export class EngineersService {
 				reason: "Result was rejected because the run is no longer active",
 			})
 		}
+	}
+
+	/**
+	 * Stores permissions the contact granted out loud while the line is still open. They go in
+	 * `result` because the call is not finished yet and nothing reads that field until the status
+	 * says so: every consumer switches on `status`. When the provider analysis finally lands,
+	 * `completeCall` overwrites this partial, and the adapter has already merged what it needs.
+	 */
+	async recordLiveAuthorizations(
+		report: LiveAuthorizationReport,
+	): Promise<EngineerCallRecord> {
+		const entity = await this.getEntity(report.callIdentifier)
+		if (!(await this.runsService.isRunActive(entity.runIdentifier))) {
+			this.logger.warn(LOG_MESSAGES.ENGINEERS.CALL_RESULT_IGNORED, {
+				callIdentifier: report.callIdentifier,
+				runIdentifier: entity.runIdentifier,
+			})
+			throw new StaleRunException(entity.runIdentifier)
+		}
+		// A terminal call already carries provider-analysed permissions. A late live report
+		// must never overwrite them.
+		if (entity.status !== "dialing" && entity.status !== "in-progress") {
+			throw new InvalidStateTransitionException(
+				ENGINEER_CALL_ENTITY_NAME,
+				entity.status,
+				"receive live permissions",
+			)
+		}
+		const authorizations: EngineerCallAuthorizations = {
+			notifyAllClients: {
+				rationale: report.rationale,
+				value: report.notifyAllClients,
+			},
+			trafficFailoverAuthorized: {
+				rationale: report.rationale,
+				value: report.trafficFailoverAuthorized,
+			},
+		}
+		const summary = summariseLivePermissions(entity.engineer.name, report)
+		entity.result = {
+			answers: [],
+			authorizations,
+			outcome: "completed",
+			summary,
+			transcript: "",
+		}
+		const record = toEngineerCallRecord(
+			await updateEntity(this.repository, entity),
+		)
+		this.logger.log(LOG_MESSAGES.ENGINEERS.CALL_AUTHORIZED, {
+			callIdentifier: record.identifier,
+			notifyAllClients: report.notifyAllClients,
+			trafficFailoverAuthorized: report.trafficFailoverAuthorized,
+		})
+		await this.activityService.record({
+			correlation: {
+				engineerCallIdentifier: record.identifier,
+				planStepIdentifier: record.planStepIdentifier,
+				toolCallIdentifier: record.toolCallIdentifier,
+			},
+			incidentIdentifier: record.incidentIdentifier,
+			payload: { authorizations, call: record },
+			runIdentifier: record.runIdentifier,
+			simulated: record.mode === "simulated",
+			source: "integration",
+			summary,
+			title: "Engineer granted permissions during the call",
+			type: "engineer-call.authorized",
+		})
+		const event: EngineerCallFinishedEvent = { call: record }
+		this.eventEmitter.emit(DOMAIN_EVENTS.ENGINEER_CALL_AUTHORIZED, event)
+		return record
 	}
 
 	async completeCall(
@@ -400,4 +476,19 @@ export function toEngineerCallRecord(
 		status: entity.status,
 		toolCallIdentifier: entity.toolCallIdentifier,
 	}
+}
+
+function summariseLivePermissions(
+	contactName: string,
+	report: LiveAuthorizationReport,
+): string {
+	const granted = [
+		report.notifyAllClients ? "notifying every client" : "",
+		report.trafficFailoverAuthorized ? "failing traffic over to the backup" : "",
+	].filter(Boolean)
+	const verdict =
+		granted.length > 0
+			? `authorised ${granted.join(" and ")}`
+			: "refused both permissions"
+	return `${contactName} ${verdict} while still on the call. Reported by the voice agent, pending the provider analysis.`
 }

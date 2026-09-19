@@ -41,6 +41,7 @@ export const LOG_MESSAGES = {
 		CONNECTION_FAILED: "Failed to connect to the database",
 	},
 	ENGINEERS: {
+		CALL_AUTHORIZED: "Engineer call reported live permissions",
 		CALL_FINISHED: "Engineer call finished",
 		CALL_RESULT_ALREADY_SETTLED:
 			"Engineer call result ignored because the call already has one",

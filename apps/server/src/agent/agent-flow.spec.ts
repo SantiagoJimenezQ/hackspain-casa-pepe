@@ -255,7 +255,8 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		)
 		const finalPlan = await waitFor(async () => {
 			const plan = await plansService.findLatestPlan(runIdentifier)
-			return plan?.steps.every((step) => step.status === "completed")
+			return plan?.version >= 3 &&
+				plan.steps.every((step) => step.status === "completed")
 				? plan
 				: null
 		}, "planned actions finishing")
@@ -284,7 +285,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			]),
 		)
 		expect(finalIncident.status).toBe("partially-recovered")
-		expect(finalIncident.backupRegion).toBe("me-south-1")
+		expect(finalIncident.backupRegion).toBe("riyadh")
 		expect(serviceStatuses).toEqual({
 			"customer-notifications": "degraded",
 			"driver-mobile-api": "healthy",

@@ -497,6 +497,7 @@ describe("API curl walkthrough contract", () => {
 			`/api/plans/current?runIdentifier=${runIdentifier}`,
 			(body) =>
 				body.kind === "plan" &&
+				body.plan.version >= 3 &&
 				body.plan.status === "active" &&
 				body.plan.steps.every((step) => step.status === "completed") &&
 				body.plan.steps.some(

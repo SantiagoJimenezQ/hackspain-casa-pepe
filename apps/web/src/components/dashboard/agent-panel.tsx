@@ -4,15 +4,7 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import { GitBranch } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ToolUIPart } from "ai";
-import { ArrowDown, Check, CheckCircle2, CheckCircleIcon, ChevronDownIcon, CircleIcon, Copy, Loader2, XCircle, XCircleIcon } from "lucide-react";
-import {
-  Confirmation,
-  ConfirmationAction,
-  ConfirmationActions,
-  ConfirmationRequest,
-  ConfirmationTitle,
-} from "@/components/ai-elements/confirmation";
+import { ArrowDown, Check, CheckCircleIcon, ChevronDownIcon, CircleIcon, Copy, Loader2, XCircleIcon } from "lucide-react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Task, TaskContent, TaskTrigger } from "@/components/ai-elements/task";
@@ -44,7 +36,7 @@ import {
   type TranscriptItem,
 } from "@/lib/agent-trace";
 import { formatChatDebugDump } from "@/lib/agent-chat-debug";
-import type { LlmPublicToolCall, ToolCall } from "@/lib/casa-pepe-types";
+import type { Approval, LlmPublicToolCall, ToolCall } from "@/lib/casa-pepe-types";
 import type { VisualStatus } from "@/lib/live-dashboard";
 
 const DecisionTreeView = dynamic(() => import("./decision-tree-view"), { ssr: false });
@@ -112,6 +104,55 @@ function proposedToolState(
   if (item.disposition === "rejected") return "output-error";
   if (item.status === "streaming" || item.disposition === "pending") return "input-available";
   return "input-streaming";
+}
+
+function PendingApproval({
+  approval,
+  busy,
+  onApprove,
+  onReject,
+}: {
+  approval: Approval;
+  busy: boolean;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div
+      role="alert"
+      className="flex items-center gap-3 rounded-[6px] border border-border bg-muted/50 px-2.5 py-2"
+    >
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-medium leading-5 text-foreground">{approval.actionSummary}</p>
+        {approval.reason ? (
+          <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-muted-foreground">{approval.reason}</p>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          className="h-7 rounded-[6px] px-2.5 text-[12px] text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+          onClick={onReject}
+        >
+          {t("agent.reject")}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          className="h-7 rounded-[6px] border border-black/10 bg-white px-3 text-[12px] font-medium text-neutral-950 shadow-[0_1px_1px_rgba(0,0,0,0.06)] hover:bg-neutral-100 dark:border-white/20 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-100"
+          onClick={onApprove}
+        >
+          {t("agent.approve")}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function ProposedTool({
@@ -367,26 +408,6 @@ export function AgentPanel() {
         </Button>
       </div>
       {treeOpen ? <DecisionTreeView onClose={() => setTreeOpen(false)} /> : null}
-      {overview.pendingApprovals.length ? (
-        <div className="space-y-3 px-4 pb-3">
-          {overview.pendingApprovals.map((approval) => (
-            <Confirmation key={approval.identifier} approval={{ id: approval.identifier }} state={"approval-requested" as ToolUIPart["state"]} className="border-amber-400/25 bg-amber-400/5">
-              <ConfirmationTitle className="font-medium text-foreground">{approval.actionSummary}</ConfirmationTitle>
-              <ConfirmationRequest>
-                <p className="text-[11px] text-muted-foreground">{approval.reason}</p>
-              </ConfirmationRequest>
-              <ConfirmationActions>
-                <ConfirmationAction variant="destructive" disabled={busyAction !== null} onClick={() => void decideApproval(approval.identifier, "reject", "")}>
-                  <XCircle /> Rechazar
-                </ConfirmationAction>
-                <ConfirmationAction disabled={busyAction !== null} onClick={() => void decideApproval(approval.identifier, "approve", "")}>
-                  <CheckCircle2 /> Aprobar
-                </ConfirmationAction>
-              </ConfirmationActions>
-            </Confirmation>
-          ))}
-        </div>
-      ) : null}
       {plan ? (
         <div className="shrink-0 px-4 pb-2">
           <PlanTodosCard plan={plan} streaming={planStreaming} />
@@ -415,6 +436,19 @@ export function AgentPanel() {
           </MessageScrollerButton>
         </MessageScroller>
       </MessageScrollerProvider>
+      {overview.pendingApprovals.length ? (
+        <div className="shrink-0 space-y-2 px-3 pb-3 pt-1">
+          {overview.pendingApprovals.map((approval) => (
+            <PendingApproval
+              key={approval.identifier}
+              approval={approval}
+              busy={busyAction !== null}
+              onApprove={() => void decideApproval(approval.identifier, "approve", "")}
+              onReject={() => void decideApproval(approval.identifier, "reject", "")}
+            />
+          ))}
+        </div>
+      ) : null}
     </Panel>
   );
 }

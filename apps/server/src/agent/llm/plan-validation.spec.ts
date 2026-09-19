@@ -3,7 +3,10 @@ import { repairLlmPlanDraft } from "@agent/llm/plan-repair"
 import { validateLlmPlan } from "@agent/llm/plan-validation"
 import { PlanBuildInput, PlanDraft } from "@agent/types/agent.type"
 import { PlanRecord, PlanStep } from "@plans/types/plan.type"
-import { createImpactedIncident } from "@root/testing/incident.fixture"
+import {
+	createImpactedIncident,
+	createLastDegradedIncident,
+} from "@root/testing/incident.fixture"
 import { METEORITE_SCENARIO } from "@scenarios/constants/meteorite-scenario.constant"
 
 function fixture(): { input: PlanBuildInput; draft: PlanDraft } {
@@ -149,6 +152,51 @@ describe("LLM plan boundary", () => {
 		expect(() =>
 			validateLlmPlan({ ...conservative, assumptions: [] }, input),
 		).toThrow(/explain/)
+	})
+	it("rejects assumedCapacity 0 while reported remaining units exist", () => {
+		const { input, draft } = fixture()
+		expect(() =>
+			validateLlmPlan(
+				{
+					...draft,
+					assumptions: [
+						"Capacity is unconfirmed so nothing is usable",
+					],
+					capacity: {
+						...draft.capacity,
+						assumedCapacity: 0,
+						plannedUnits: 0,
+						postponedUnits: 4,
+						remainingUnits: 0,
+					},
+					priorities: draft.priorities.map((priority) => ({
+						...priority,
+						decision: "postpone",
+					})),
+					steps: [],
+				},
+				input,
+			),
+		).toThrow(/assumedCapacity cannot be 0/)
+	})
+	it("rejects a first plan that leaves pending facts without an engineer call", () => {
+		const { input, draft } = fixture()
+		const pending = {
+			...input,
+			incident: {
+				...input.incident,
+				facts: [
+					{
+						identifier: "fact_pending",
+						recordedAt: input.incident.updatedAt,
+						source: "Runbook",
+						statement: "The snapshot is recent enough",
+						status: "pending" as const,
+					},
+				],
+			},
+		}
+		expect(() => validateLlmPlan(draft, pending)).toThrow(/call_engineer/)
 	})
 	it.each([
 		[
@@ -528,7 +576,7 @@ describe("LLM plan boundary", () => {
 })
 
 describe("repair followed by validation", () => {
-	it("accepts a consistent postpone decision after fixing only its derived total", () => {
+	it("promotes a fitting postponed service instead of leaving the first plan idle", () => {
 		const { input, draft } = fixture()
 		const proposed = {
 			...draft,
@@ -551,8 +599,12 @@ describe("repair followed by validation", () => {
 			repairLlmPlanDraft(proposed, input),
 			input,
 		)
-		expect(result.capacity.postponedUnits).toBe(4)
-		expect(result.priorities[0].decision).toBe("postpone")
+		expect(result.capacity.postponedUnits).toBe(0)
+		expect(result.priorities[0].decision).toBe("recover-now")
+		expect(result.steps.map((step) => step.invocation.name)).toEqual([
+			"execute_recovery",
+			"verify_recovery",
+		])
 	})
 	it("repairs a misquoted priority cost and still rejects over-capacity recovery plans", () => {
 		const { input, draft } = fixture()
@@ -627,5 +679,704 @@ describe("repair followed by validation", () => {
 		expect(
 			result.steps.filter((step) => step.status === "completed").length,
 		).toBe(completed.length)
+	})
+	it("repairs a postpone-all zero-capacity stall into a callable recover-now plan", () => {
+		const incident = createImpactedIncident(4)
+		const resource = incident.resources[0]
+		const stallInput: PlanBuildInput = {
+			briefing: METEORITE_SCENARIO.engineerBriefing,
+			capacityAssumption: null,
+			engineer: { name: "Marta", phone: "+34600000000", role: "on-call" },
+			failedServices: [],
+			incident,
+			language: "en",
+			maximumStepAttempts: 2,
+			previousPlan: null,
+			rejectedServices: [],
+			supportContact: METEORITE_SCENARIO.supportContact,
+			triggeredBy: "test",
+		}
+		const proposed = {
+			assumptions: ["Capacity is unconfirmed"],
+			capacity: {
+				assumedCapacity: 0,
+				confirmed: false,
+				plannedUnits: 0,
+				postponedUnits: 6,
+				remainingUnits: 0,
+				resourceIdentifier: resource.identifier,
+				totalCapacity: 4,
+			},
+			priorities: incident.services.map((service, index) => ({
+				blockedBy: service.dependencies,
+				businessImpact: service.businessImpact,
+				capacityUnits: service.recoveryCapacityUnits,
+				decision:
+					service.identifier === "orders-database" ||
+					service.dependencies.length === 0
+						? "postpone"
+						: "waiting-for-dependency",
+				rank: index + 1,
+				reason: "Waiting for confirmation",
+				score: 100 - index,
+				serviceIdentifier: service.identifier,
+				serviceName: service.name,
+			})),
+			reason: "Investigate before recovering",
+			steps: [
+				{
+					approvalIdentifier: "",
+					attempts: 0,
+					capacityUnits: 0,
+					dependsOn: [],
+					identifier: "stp_investigate_task",
+					invocation: {
+						input: {
+							assigneeName:
+								METEORITE_SCENARIO.supportContact.name,
+							assigneeRole:
+								METEORITE_SCENARIO.supportContact.role,
+							description: "Confirm snapshot",
+							priority: "critical",
+							serviceIdentifier: "orders-database",
+							title: "Confirm Muscat",
+						},
+						name: "assign_task",
+					},
+					order: 1,
+					owner: {
+						kind: "engineer",
+						name: METEORITE_SCENARIO.supportContact.name,
+					},
+					reason: "Need independent confirmation",
+					requiresApproval: false,
+					resultSummary: "",
+					serviceIdentifier: "orders-database",
+					status: "proposed",
+					statusReason: "",
+					title: "Coordinate platform confirmations",
+					toolCallIdentifier: "",
+					updatedAt: incident.updatedAt,
+				},
+			],
+			summary: "Wait for confirmation",
+		}
+		const result = validateLlmPlan(
+			repairLlmPlanDraft(proposed, stallInput),
+			stallInput,
+		)
+		expect(result.steps.map((step) => step.invocation.name)).toEqual([
+			"call_engineer",
+			"assign_task",
+			"execute_recovery",
+			"verify_recovery",
+		])
+		expect(
+			result.priorities.find(
+				(priority) => priority.serviceIdentifier === "orders-database",
+			)?.decision,
+		).toBe("recover-now")
+		expect(result.capacity).toMatchObject({
+			assumedCapacity: 4,
+			plannedUnits: 4,
+			remainingUnits: 0,
+		})
+	})
+	it("accepts a first plan that marked events-stream recover-now without steps", () => {
+		const incident = createImpactedIncident(4)
+		const database = incident.services.find(
+			(service) => service.identifier === "orders-database",
+		)
+		if (!database) throw new Error("fixture lacks orders-database")
+		const engineer = {
+			name: "Marta Ruiz",
+			phone: "+34600000000",
+			role: "Platform on-call engineer",
+		}
+		const changed: PlanBuildInput = {
+			briefing: METEORITE_SCENARIO.engineerBriefing,
+			capacityAssumption: null,
+			engineer,
+			failedServices: [],
+			incident,
+			language: "en",
+			maximumStepAttempts: 2,
+			previousPlan: null,
+			rejectedServices: [],
+			supportContact: METEORITE_SCENARIO.supportContact,
+			triggeredBy: "test",
+		}
+		const dump = {
+			assumptions: ["Oman remaining is committed to the database"],
+			capacity: {
+				assumedCapacity: 4,
+				confirmed: false,
+				plannedUnits: 4,
+				postponedUnits: 10,
+				remainingUnits: 0,
+				resourceIdentifier: "backup-oman",
+				totalCapacity: 4,
+			},
+			priorities: incident.services.map((service, index) => ({
+				blockedBy: service.dependencies,
+				businessImpact: service.businessImpact,
+				capacityUnits: service.recoveryCapacityUnits,
+				decision:
+					service.identifier === "orders-database" ||
+					service.identifier === "events-stream"
+						? "recover-now"
+						: service.dependencies.length
+							? "waiting-for-dependency"
+							: "postpone",
+				rank: index + 1,
+				reason: "Dump first proposal",
+				score: 100 - index,
+				serviceIdentifier: service.identifier,
+				serviceName: service.name,
+			})),
+			reason: "Recover database and events",
+			steps: [
+				{
+					approvalIdentifier: "",
+					attempts: 0,
+					capacityUnits: 0,
+					dependsOn: [],
+					identifier: "stp_call_engineer",
+					invocation: {
+						input: {
+							engineerName: engineer.name,
+							engineerPhone: engineer.phone,
+							engineerRole: engineer.role,
+							purpose: "Authorize failover",
+							questions: [
+								{
+									key: "traffic-failover-authorized",
+									question: "Authorize failover?",
+								},
+							],
+						},
+						name: "call_engineer",
+					},
+					order: 1,
+					owner: { kind: "engineer", name: engineer.name },
+					reason: "Call the engineer",
+					requiresApproval: false,
+					resultSummary: "",
+					serviceIdentifier: "",
+					status: "proposed",
+					statusReason: "",
+					title: "Call engineer",
+					toolCallIdentifier: "",
+					updatedAt: incident.updatedAt,
+				},
+				{
+					approvalIdentifier: "",
+					attempts: 0,
+					capacityUnits: database.recoveryCapacityUnits,
+					dependsOn: [],
+					identifier: "stp_orders-database_execute",
+					invocation: {
+						input: {
+							actionDescription:
+								database.recoveryActionDescription,
+							actionKind: database.recoveryActionKind,
+							approvalIdentifier: "",
+							capacityUnits: database.recoveryCapacityUnits,
+							resourceIdentifier: "backup-oman",
+							serviceIdentifier: "orders-database",
+						},
+						name: "execute_recovery",
+					},
+					order: 2,
+					owner: { kind: "operator", name: "Operator" },
+					reason: "Failover the database",
+					requiresApproval: true,
+					resultSummary: "",
+					serviceIdentifier: "orders-database",
+					status: "proposed",
+					statusReason: "",
+					title: "Recover database",
+					toolCallIdentifier: "",
+					updatedAt: incident.updatedAt,
+				},
+				{
+					approvalIdentifier: "",
+					attempts: 0,
+					capacityUnits: 0,
+					dependsOn: ["stp_orders-database_execute"],
+					identifier: "stp_orders-database_verify",
+					invocation: {
+						input: {
+							recoveryActionIdentifier: "",
+							serviceIdentifier: "orders-database",
+						},
+						name: "verify_recovery",
+					},
+					order: 3,
+					owner: { kind: "agent", name: AGENT_ACTOR_NAME },
+					reason: "Verify the failover",
+					requiresApproval: false,
+					resultSummary: "",
+					serviceIdentifier: "orders-database",
+					status: "proposed",
+					statusReason: "",
+					title: "Verify database",
+					toolCallIdentifier: "",
+					updatedAt: incident.updatedAt,
+				},
+			],
+			summary: "First plan with an extra recover-now",
+		}
+		expect(() => validateLlmPlan(dump, changed)).toThrow(
+			/recover-now services require both execution and verification steps/,
+		)
+		const result = validateLlmPlan(
+			repairLlmPlanDraft(dump, changed),
+			changed,
+		)
+		expect(
+			result.priorities.find(
+				(priority) => priority.serviceIdentifier === "events-stream",
+			)?.decision,
+		).toBe("postpone")
+		expect(
+			result.priorities.find(
+				(priority) => priority.serviceIdentifier === "orders-database",
+			)?.decision,
+		).toBe("recover-now")
+	})
+	it("repairs the post-recovery already-healthy dump into a Bahrain recover-now plan", () => {
+		const engineer = {
+			name: "Marta Ruiz",
+			phone: "+34600000000",
+			role: "Platform on-call engineer",
+		}
+		const incident = createImpactedIncident(4)
+		const recovered = {
+			...incident,
+			resources: incident.resources.map((resource, index) =>
+				index === 0 ? { ...resource, allocatedCapacity: 4 } : resource,
+			),
+			services: incident.services.map((service) =>
+				service.identifier === "orders-database"
+					? { ...service, status: "healthy" as const }
+					: service,
+			),
+		}
+		const database = recovered.services.find(
+			(service) => service.identifier === "orders-database",
+		)
+		if (!database) throw new Error("fixture lacks orders-database")
+		const completed: PlanStep[] = [
+			{
+				approvalIdentifier: "",
+				attempts: 1,
+				capacityUnits: 0,
+				dependsOn: [],
+				identifier: "stp_engineer_call",
+				invocation: {
+					input: {
+						engineerName: engineer.name,
+						engineerPhone: engineer.phone,
+						engineerRole: engineer.role,
+						purpose: "Request permission",
+						questions: [
+							{
+								key: "traffic-failover-authorized",
+								question: "Authorize failover?",
+							},
+						],
+					},
+					name: "call_engineer",
+				},
+				order: 1,
+				owner: { kind: "engineer", name: engineer.name },
+				reason: "Call the engineer",
+				requiresApproval: false,
+				resultSummary: "Authorized",
+				serviceIdentifier: "",
+				status: "completed",
+				statusReason: "Completed",
+				title: "Call engineer",
+				toolCallIdentifier: "tool_call",
+				updatedAt: recovered.updatedAt,
+			},
+			{
+				approvalIdentifier: "apr_db",
+				attempts: 1,
+				capacityUnits: database.recoveryCapacityUnits,
+				dependsOn: [],
+				identifier: "stp_orders-database_execute",
+				invocation: {
+					input: {
+						actionDescription: database.recoveryActionDescription,
+						actionKind: database.recoveryActionKind,
+						approvalIdentifier: "",
+						capacityUnits: database.recoveryCapacityUnits,
+						resourceIdentifier: "backup-oman",
+						serviceIdentifier: "orders-database",
+					},
+					name: "execute_recovery",
+				},
+				order: 2,
+				owner: { kind: "operator", name: "Operator" },
+				reason: "Failover the database",
+				requiresApproval: true,
+				resultSummary: "Replica promoted",
+				serviceIdentifier: "orders-database",
+				status: "completed",
+				statusReason: "Completed",
+				title: "Recover database",
+				toolCallIdentifier: "tool_execute",
+				updatedAt: recovered.updatedAt,
+			},
+			{
+				approvalIdentifier: "",
+				attempts: 1,
+				capacityUnits: 0,
+				dependsOn: ["stp_orders-database_execute"],
+				identifier: "stp_orders-database_verify",
+				invocation: {
+					input: {
+						recoveryActionIdentifier: "",
+						serviceIdentifier: "orders-database",
+					},
+					name: "verify_recovery",
+				},
+				order: 3,
+				owner: { kind: "agent", name: AGENT_ACTOR_NAME },
+				reason: "Verify the failover",
+				requiresApproval: false,
+				resultSummary: "Healthy",
+				serviceIdentifier: "orders-database",
+				status: "completed",
+				statusReason: "Completed",
+				title: "Verify database",
+				toolCallIdentifier: "tool_verify",
+				updatedAt: recovered.updatedAt,
+			},
+		]
+		const changed: PlanBuildInput = {
+			briefing: METEORITE_SCENARIO.engineerBriefing,
+			capacityAssumption: null,
+			engineer,
+			failedServices: [],
+			incident: recovered,
+			language: "en",
+			maximumStepAttempts: 2,
+			previousPlan: prior({
+				assumptions: [],
+				capacity: {
+					assumedCapacity: 4,
+					confirmed: false,
+					plannedUnits: 4,
+					postponedUnits: 10,
+					remainingUnits: 0,
+					resourceIdentifier: "backup-oman",
+					totalCapacity: 4,
+				},
+				priorities: recovered.services.map((service, index) => ({
+					blockedBy: [],
+					businessImpact: service.businessImpact,
+					capacityUnits: service.recoveryCapacityUnits,
+					decision: "postpone",
+					rank: index + 1,
+					reason: "Previous plan",
+					score: 100 - index,
+					serviceIdentifier: service.identifier,
+					serviceName: service.name,
+				})),
+				reason: "Previous recovery",
+				steps: completed,
+				summary: "Database recovered",
+			}),
+			rejectedServices: [],
+			supportContact: METEORITE_SCENARIO.supportContact,
+			triggeredBy: "test",
+		}
+		const dump = {
+			assumptions: ["Oman is full after the database failover"],
+			capacity: {
+				assumedCapacity: 4,
+				confirmed: false,
+				plannedUnits: 4,
+				postponedUnits: 10,
+				remainingUnits: 0,
+				resourceIdentifier: "backup-oman",
+				totalCapacity: 4,
+			},
+			priorities: recovered.services.map((service, index) => ({
+				blockedBy: [],
+				businessImpact: service.businessImpact,
+				capacityUnits: service.recoveryCapacityUnits,
+				decision:
+					service.identifier === "orders-database"
+						? "already-healthy"
+						: "postpone",
+				rank: index + 1,
+				reason: "Dump revision",
+				score: 100 - index,
+				serviceIdentifier: service.identifier,
+				serviceName: service.name,
+			})),
+			reason: "Preserve the recovered database",
+			steps: [
+				{
+					approvalIdentifier: "",
+					attempts: 0,
+					capacityUnits: 0,
+					dependsOn: [],
+					identifier: "stp_engineer_call_2",
+					invocation: {
+						input: {
+							engineerName: engineer.name,
+							engineerPhone: engineer.phone,
+							engineerRole: engineer.role,
+							purpose: "Chase remaining facts",
+							questions: [
+								{
+									key: "backup-capacity-available",
+									question: "Authorize remaining capacity?",
+								},
+							],
+						},
+						name: "call_engineer",
+					},
+					order: 1,
+					owner: { kind: "engineer", name: engineer.name },
+					reason: "Follow-up call",
+					requiresApproval: false,
+					resultSummary: "",
+					serviceIdentifier: "",
+					status: "proposed",
+					statusReason: "",
+					title: "Call engineer again",
+					toolCallIdentifier: "",
+					updatedAt: recovered.updatedAt,
+				},
+			],
+			summary: "Wait for another call",
+		}
+		const result = validateLlmPlan(
+			repairLlmPlanDraft(dump, changed),
+			changed,
+		)
+		expect(
+			result.priorities.find(
+				(priority) => priority.serviceIdentifier === "orders-database",
+			),
+		).toMatchObject({ capacityUnits: 0, decision: "already-healthy" })
+		expect(
+			result.priorities.find(
+				(priority) => priority.serviceIdentifier === "route-assignment",
+			)?.decision,
+		).toBe("recover-now")
+		expect(result.capacity.resourceIdentifier).toBe("backup-bahrain")
+		const execute = result.steps.find(
+			(step) => step.identifier === "stp_route-assignment_execute",
+		)
+		expect(execute?.status).toBe("proposed")
+		expect(execute?.order).toBeLessThan(
+			result.steps.find(
+				(step) => step.identifier === "stp_engineer_call_2",
+			)?.order ?? Number.POSITIVE_INFINITY,
+		)
+	})
+
+	it("validates a repaired leftover notifications recover-now on Bahrain", () => {
+		const engineer = {
+			name: "Marta Ruiz",
+			phone: "+34600000000",
+			role: "Platform on-call engineer",
+		}
+		const leftover = createLastDegradedIncident()
+		const database = leftover.services.find(
+			(service) => service.identifier === "orders-database",
+		)
+		if (!database) throw new Error("fixture lacks orders-database")
+		const completed: PlanStep[] = [
+			{
+				approvalIdentifier: "",
+				attempts: 1,
+				capacityUnits: 0,
+				dependsOn: [],
+				identifier: "stp_engineer_call",
+				invocation: {
+					input: {
+						engineerName: engineer.name,
+						engineerPhone: engineer.phone,
+						engineerRole: engineer.role,
+						purpose: "Request permission",
+						questions: [
+							{
+								key: "traffic-failover-authorized",
+								question: "Authorize failover?",
+							},
+						],
+					},
+					name: "call_engineer",
+				},
+				order: 1,
+				owner: { kind: "engineer", name: engineer.name },
+				reason: "Call the engineer",
+				requiresApproval: false,
+				resultSummary: "Authorized",
+				serviceIdentifier: "",
+				status: "completed",
+				statusReason: "Completed",
+				title: "Call engineer",
+				toolCallIdentifier: "tool_call",
+				updatedAt: leftover.updatedAt,
+			},
+			{
+				approvalIdentifier: "apr_db",
+				attempts: 1,
+				capacityUnits: database.recoveryCapacityUnits,
+				dependsOn: [],
+				identifier: "stp_orders-database_execute",
+				invocation: {
+					input: {
+						actionDescription: database.recoveryActionDescription,
+						actionKind: database.recoveryActionKind,
+						approvalIdentifier: "",
+						capacityUnits: database.recoveryCapacityUnits,
+						resourceIdentifier: "backup-oman",
+						serviceIdentifier: "orders-database",
+					},
+					name: "execute_recovery",
+				},
+				order: 2,
+				owner: { kind: "operator", name: "Operator" },
+				reason: "Failover the database",
+				requiresApproval: true,
+				resultSummary: "Replica promoted",
+				serviceIdentifier: "orders-database",
+				status: "completed",
+				statusReason: "Completed",
+				title: "Recover database",
+				toolCallIdentifier: "tool_execute",
+				updatedAt: leftover.updatedAt,
+			},
+			{
+				approvalIdentifier: "",
+				attempts: 1,
+				capacityUnits: 0,
+				dependsOn: ["stp_orders-database_execute"],
+				identifier: "stp_orders-database_verify",
+				invocation: {
+					input: {
+						recoveryActionIdentifier: "",
+						serviceIdentifier: "orders-database",
+					},
+					name: "verify_recovery",
+				},
+				order: 3,
+				owner: { kind: "agent", name: AGENT_ACTOR_NAME },
+				reason: "Verify the failover",
+				requiresApproval: false,
+				resultSummary: "Healthy",
+				serviceIdentifier: "orders-database",
+				status: "completed",
+				statusReason: "Completed",
+				title: "Verify database",
+				toolCallIdentifier: "tool_verify",
+				updatedAt: leftover.updatedAt,
+			},
+		]
+		const changed: PlanBuildInput = {
+			briefing: METEORITE_SCENARIO.engineerBriefing,
+			capacityAssumption: null,
+			engineer,
+			failedServices: [],
+			incident: leftover,
+			language: "en",
+			maximumStepAttempts: 2,
+			previousPlan: prior({
+				assumptions: [],
+				capacity: {
+					assumedCapacity: 4,
+					confirmed: false,
+					plannedUnits: 4,
+					postponedUnits: 1,
+					remainingUnits: 0,
+					resourceIdentifier: "backup-oman",
+					totalCapacity: 4,
+				},
+				priorities: leftover.services.map((service, index) => ({
+					blockedBy: [],
+					businessImpact: service.businessImpact,
+					capacityUnits: service.recoveryCapacityUnits,
+					decision: "postpone",
+					rank: index + 1,
+					reason: "Previous plan",
+					score: 100 - index,
+					serviceIdentifier: service.identifier,
+					serviceName: service.name,
+				})),
+				reason: "Previous recovery",
+				steps: completed,
+				summary: "Five services recovered",
+			}),
+			rejectedServices: [],
+			supportContact: METEORITE_SCENARIO.supportContact,
+			triggeredBy: "test",
+		}
+		const dump = {
+			assumptions: ["Oman is full and only notifications remain"],
+			capacity: {
+				assumedCapacity: 4,
+				confirmed: false,
+				plannedUnits: 4,
+				postponedUnits: 1,
+				remainingUnits: 0,
+				resourceIdentifier: "backup-oman",
+				totalCapacity: 4,
+			},
+			priorities: leftover.services.map((service, index) => ({
+				blockedBy: [],
+				businessImpact: service.businessImpact,
+				capacityUnits: service.recoveryCapacityUnits,
+				decision:
+					service.identifier === "customer-notifications"
+						? "postpone"
+						: "already-healthy",
+				rank: index + 1,
+				reason: "Dump revision",
+				score: 100 - index,
+				serviceIdentifier: service.identifier,
+				serviceName: service.name,
+			})),
+			reason: "No remaining Oman capacity",
+			steps: [],
+			summary: "Wait because Oman is full",
+		}
+		const result = validateLlmPlan(
+			repairLlmPlanDraft(dump, changed),
+			changed,
+		)
+		expect(
+			result.priorities.find(
+				(priority) =>
+					priority.serviceIdentifier === "customer-notifications",
+			)?.decision,
+		).toBe("recover-now")
+		expect(result.capacity).toMatchObject({
+			assumedCapacity: 12,
+			plannedUnits: 9,
+			remainingUnits: 3,
+			resourceIdentifier: "backup-bahrain",
+		})
+		expect(
+			result.steps.some(
+				(step) =>
+					step.identifier === "stp_customer-notifications_execute",
+			),
+		).toBe(true)
+		expect(
+			result.steps.some(
+				(step) =>
+					step.identifier === "stp_customer-notifications_verify",
+			),
+		).toBe(true)
 	})
 })

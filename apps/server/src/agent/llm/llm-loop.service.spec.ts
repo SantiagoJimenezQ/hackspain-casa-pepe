@@ -635,19 +635,6 @@ describe("LlmLoopService", () => {
 				),
 			)
 			.mockResolvedValueOnce(
-				completion([toolCall("get_service_health", {})]),
-			)
-			.mockResolvedValueOnce(
-				completion([
-					toolCall("report_result", {
-						details: ["Orders database is down."],
-						pending: [],
-						summary:
-							"Service health confirms Orders database is down.",
-					}),
-				]),
-			)
-			.mockResolvedValueOnce(
 				completion(
 					[
 						toolCall("wait_for_input", {
@@ -700,6 +687,31 @@ describe("LlmLoopService", () => {
 		const delegation = records.find(
 			(record) => record.payload.specialist === "investigator",
 		)
+		expect(delegation?.payload).toMatchObject({
+			executedSteps: 0,
+			specialist: "investigator",
+		})
+		// Commander turns emit pending and accepted records for the same output.
+		const commander = records.filter((record) => record.payload.disposition)
+		expect(commander.map((record) => record.payload.disposition)).toEqual([
+			"pending",
+			"accepted",
+			"pending",
+			"accepted",
+		])
+		for (const offset of [0, 2]) {
+			expect(commander[offset].payload.outputIdentifier).toEqual(
+				expect.any(String),
+			)
+			expect(commander[offset + 1].payload.outputIdentifier).toBe(
+				commander[offset].payload.outputIdentifier,
+			)
+		}
+		expect(
+			records.filter(
+				(record) => record.payload.subagent === "investigator",
+			),
+		).toHaveLength(2)
 		expect(activityInputs(activity).map((input) => input.type)).toEqual([
 			"agent.llm-decision",
 			"agent.llm-decision",

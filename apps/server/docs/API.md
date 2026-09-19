@@ -43,7 +43,7 @@ Common errors:
 
 ## Common parameter `runIdentifier`
 
-List queries accept `?runIdentifier=run_…`. When omitted they use the active run. Without an active run they return `409 No Active Run`.
+List queries, `GET /incidents/current`, `GET /agent/status`, `POST /agent/cycle` and every demo control accept `?runIdentifier=run_…`. Several runs can be active at the same time, one per person driving a demo: `POST /demo/start` no longer stops other runs, `POST /demo/reset` resets only the run it targets, and the agent and simulation clock tick every active run independently. When `runIdentifier` is omitted the most recently started active run is used, so single-user setups keep working. Without an active run they return `409 No Active Run`.
 
 ---
 

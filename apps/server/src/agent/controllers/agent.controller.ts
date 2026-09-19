@@ -9,8 +9,10 @@ import {
 	HttpCode,
 	HttpStatus,
 	Post,
+	Query,
 } from "@nestjs/common"
 import { ApiOperation, ApiSecurity, ApiTags } from "@nestjs/swagger"
+import { RunScopedQueryDTO } from "@plans/dtos/list-plans.dto"
 
 @ApiTags("Agent")
 @ApiSecurity("operator")
@@ -26,8 +28,10 @@ export class AgentController {
 		summary:
 			"Agent status for the active run: cycles, limits, pending approvals and integration modes",
 	})
-	async status(): Promise<AgentStatus> {
-		const runIdentifier = await this.runsService.resolveRunIdentifier()
+	async status(@Query() query: RunScopedQueryDTO): Promise<AgentStatus> {
+		const runIdentifier = await this.runsService.resolveRunIdentifier(
+			query.runIdentifier,
+		)
 		return this.agentService.getStatus(runIdentifier)
 	}
 
@@ -37,8 +41,13 @@ export class AgentController {
 		summary:
 			"Ask the agent to run a decision cycle now (operator intervention)",
 	})
-	async requestCycle(@Body() body: RequestCycleDTO): Promise<CycleOutcome> {
-		const runIdentifier = await this.runsService.resolveRunIdentifier()
+	async requestCycle(
+		@Body() body: RequestCycleDTO,
+		@Query() query: RunScopedQueryDTO,
+	): Promise<CycleOutcome> {
+		const runIdentifier = await this.runsService.resolveRunIdentifier(
+			query.runIdentifier,
+		)
 		return this.agentService.requestCycle(runIdentifier, {
 			kind: "operator-requested",
 			operatorName: body.operatorName,

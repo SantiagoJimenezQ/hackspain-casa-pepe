@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircleIcon, ChevronDownIcon, CircleIcon, Loader2, XCircleIcon } from "lucide-react";
+import { useState } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -47,6 +48,15 @@ export function PlanTodosCard({
   streaming?: boolean;
 }) {
   const { t } = useI18n();
+  // Controlled on purpose: the computed default changes as the plan advances, and an
+  // uncontrolled collapsible would ignore it after the first render.
+  const shouldOpen = planTodosDefaultOpen(plan, streaming);
+  const [open, setOpen] = useState(shouldOpen);
+  const [lastShouldOpen, setLastShouldOpen] = useState(shouldOpen);
+  if (lastShouldOpen !== shouldOpen) {
+    setLastShouldOpen(shouldOpen);
+    setOpen(shouldOpen);
+  }
   const todos = planTodos(plan);
   if (todos.total === 0) return null;
 
@@ -57,7 +67,8 @@ export function PlanTodosCard({
 
   return (
     <Collapsible
-      defaultOpen={planTodosDefaultOpen(plan, streaming)}
+      open={open}
+      onOpenChange={setOpen}
       className="group not-prose w-full rounded-xl bg-background/70 ring-1 ring-foreground/10"
     >
       <CollapsibleTrigger

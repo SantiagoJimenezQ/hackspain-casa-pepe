@@ -1,8 +1,8 @@
 # 0. INTRO
 
-> Esto no es ciencia ficción. Desde marzo, Amazon ha perdido una región entera en Bahréin y parte de la de Emiratos por ataques con drones.
+> Esto es una historia real, la hemos vivido todos. Desde marzo, Amazon ha perdido una región entera en Bahréin y parte de la de Emiratos por ataques con drones.
 >
-> Y esta semana ha confirmado que esos datos no se pueden recuperar. Esta noche, otro ataque.
+> Esta semana ha confirmado que esos datos no se pueden recuperar. Esta noche, otro ataque.
 
 **Apagón luces (XXXX) + botón (YYYY)** → pantalla empieza a caer y sale regiones middle east caídas
 

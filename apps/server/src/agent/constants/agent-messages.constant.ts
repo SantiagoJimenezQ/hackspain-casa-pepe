@@ -254,6 +254,8 @@ const ENGLISH: AgentMessages = {
 	waitingFor: (items) => `Waiting for: ${items.join(", ")}`,
 	waitingForDependency: (dependencies) =>
 		`Degraded only because ${dependencies.join(", ")} ${dependencies.length === 1 ? "is" : "are"} down. It recovers on its own once they are back`,
+	waitingForInFlightWork:
+		"Work already in flight; waiting for its completion instead of spending another model turn",
 	waitingForOperator:
 		"Waiting for the operator to approve or reject the action",
 	waitingForTool: (toolName) => `Waiting for ${toolName} to finish`,
@@ -462,6 +464,8 @@ const SPANISH: AgentMessages = {
 	waitingFor: (items) => `Esperando: ${items.join(", ")}`,
 	waitingForDependency: (dependencies) =>
 		`Degradado solo porque ${dependencies.join(", ")} ${dependencies.length === 1 ? "está caído" : "están caídos"}. Se recupera solo cuando vuelvan`,
+	waitingForInFlightWork:
+		"Hay trabajo en curso; se espera su finalización en lugar de gastar otro turno del modelo",
 	waitingForOperator:
 		"Esperando a que el operador apruebe o rechace la acción",
 	waitingForTool: (toolName) => `Esperando a que termine ${toolName}`,

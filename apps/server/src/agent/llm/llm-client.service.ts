@@ -21,9 +21,9 @@ const MAXIMUM_RESPONSE_BYTES = 1024 * 1024
 
 /** A rate limit or an overloaded provider clears on its own; anything else is the caller's. */
 const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([429, 500, 502, 503])
-const MAXIMUM_ATTEMPTS = 3
+const MAXIMUM_ATTEMPTS = 5
 const DEFAULT_RETRY_MILLISECONDS = 1000
-const MAXIMUM_RETRY_MILLISECONDS = 15000
+const MAXIMUM_RETRY_MILLISECONDS = 30000
 /** How long the relief provider keeps the traffic after the primary one turned it away. */
 const RELIEF_WINDOW_MILLISECONDS = 60000
 
@@ -42,6 +42,10 @@ export class LlmClientService {
 	private readonly logger = new Logger(LlmClientService.name)
 	/** When the primary provider becomes worth trying again. */
 	private reliefUntil = 0
+	/** One in-flight provider request at a time; a 429 must cool down the whole process. */
+	private chain: Promise<void> = Promise.resolve()
+	private cooldownUntil = 0
+
 	constructor(
 		private readonly configuration: ConfigurationService,
 		private readonly httpService: HttpService,
@@ -52,6 +56,48 @@ export class LlmClientService {
 		tools: LlmToolDefinition[],
 		onText?: (text: string) => Promise<void>,
 		overrides: LlmCompletionOverrides = {},
+	): Promise<{
+		message: LlmMessage
+		usage: unknown
+		model: string
+		finishReason?: string | null
+	}> {
+		return this.enqueue(() =>
+			this.completeExclusive(messages, tools, onText, overrides),
+		)
+	}
+
+	private enqueue<T>(work: () => Promise<T>): Promise<T> {
+		const run = this.chain.then(async () => {
+			await this.waitForCooldown()
+			return work()
+		})
+		this.chain = run.then(
+			() => undefined,
+			() => undefined,
+		)
+		return run
+	}
+
+	private async waitForCooldown(): Promise<void> {
+		const wait = this.cooldownUntil - Date.now()
+		if (wait > 0) {
+			await sleep(wait)
+		}
+	}
+
+	private noteRateLimit(waitMilliseconds: number): void {
+		this.cooldownUntil = Math.max(
+			this.cooldownUntil,
+			Date.now() + waitMilliseconds,
+		)
+	}
+
+	private async completeExclusive(
+		messages: LlmMessage[],
+		tools: LlmToolDefinition[],
+		onText: ((text: string) => Promise<void>) | undefined,
+		overrides: LlmCompletionOverrides,
 	): Promise<{
 		message: LlmMessage
 		usage: unknown
@@ -210,14 +256,22 @@ export class LlmClientService {
 						? error.retryAfterMilliseconds
 						: 0
 				if (pause === 0 || attempt >= MAXIMUM_ATTEMPTS) {
+					if (pause > 0) {
+						this.noteRateLimit(pause)
+					}
 					throw error
 				}
+				const wait = Math.min(
+					MAXIMUM_RETRY_MILLISECONDS,
+					pause * 2 ** (attempt - 1),
+				)
+				this.noteRateLimit(wait)
 				this.logger.warn(LOG_MESSAGES.AGENT.LLM_RETRYING, {
 					attempt,
 					model: configuration.model,
-					waitMilliseconds: pause * attempt,
+					waitMilliseconds: wait,
 				})
-				await sleep(pause * attempt)
+				await sleep(wait)
 			}
 		}
 	}

@@ -5,7 +5,7 @@ import { ConfigurationService } from "@common/services/configuration.service"
 import { LlmConfiguration } from "@common/types/configuration.type"
 import { HttpService } from "@nestjs/axios"
 import { Logger } from "@nestjs/common"
-import { of, throwError } from "rxjs"
+import { Observable, of, throwError } from "rxjs"
 
 const CONFIGURATION: LlmConfiguration = {
 	apiKey: "test-provider-key",
@@ -343,12 +343,64 @@ describe("LlmClientService", () => {
 		const pending = client
 			.complete([{ content: "Go", role: "user" }], [])
 			.catch((value: unknown) => value as Error)
-		await jest.advanceTimersByTimeAsync(10000)
+		await jest.advanceTimersByTimeAsync(20000)
 		const failure = await pending
 
 		expect(failure.message).toBe("LLM provider returned HTTP 429")
-		expect(post).toHaveBeenCalledTimes(3)
+		expect(post).toHaveBeenCalledTimes(5)
 		jest.useRealTimers()
+	})
+
+	it("holds the next request until a rate-limit cooldown elapses", async () => {
+		jest.useFakeTimers()
+		const { client, post } = setup()
+		post.mockReturnValue(
+			throwError(() =>
+				Object.assign(new Error("rate limited"), {
+					isAxiosError: true,
+					response: { headers: { "retry-after": "2" }, status: 429 },
+				}),
+			),
+		)
+
+		const first = client
+			.complete([{ content: "Go", role: "user" }], [])
+			.catch((value: unknown) => value as Error)
+		await jest.advanceTimersByTimeAsync(30000)
+		await first
+		expect(post).toHaveBeenCalledTimes(5)
+
+		post.mockReturnValue(of({ data: completion(), status: 200 }))
+		const second = client.complete([{ content: "Retry", role: "user" }], [])
+		await jest.advanceTimersByTimeAsync(1999)
+		expect(post).toHaveBeenCalledTimes(5)
+		await jest.advanceTimersByTimeAsync(1)
+		await second
+		expect(post).toHaveBeenCalledTimes(6)
+		jest.useRealTimers()
+	})
+
+	it("does not send a second provider request while the first is still open", async () => {
+		const { client, post } = setup()
+		let emit!: (value: unknown) => void
+		post.mockReturnValueOnce(
+			new Observable((subscriber) => {
+				emit = (value) => {
+					subscriber.next(value)
+					subscriber.complete()
+				}
+			}),
+		)
+		post.mockReturnValue(of({ data: completion(), status: 200 }))
+
+		const first = client.complete([{ content: "One", role: "user" }], [])
+		const second = client.complete([{ content: "Two", role: "user" }], [])
+		await Promise.resolve()
+		await Promise.resolve()
+		expect(post).toHaveBeenCalledTimes(1)
+		emit({ data: completion(), status: 200 })
+		await Promise.all([first, second])
+		expect(post).toHaveBeenCalledTimes(2)
 	})
 
 	it("surfaces a client error without retrying", async () => {
@@ -601,6 +653,7 @@ describe("feature-flagged public output streaming", () => {
 	})
 
 	it("moves a rate limited request to the relief provider", async () => {
+		jest.useFakeTimers()
 		jest.spyOn(Logger.prototype, "warn").mockImplementation(() => {})
 		const { client, post } = setup({
 			fallback: {
@@ -622,7 +675,9 @@ describe("feature-flagged public output streaming", () => {
 			return throwError(() => rateLimited)
 		})
 
-		const result = await client.complete([], [])
+		const pending = client.complete([], [])
+		await jest.advanceTimersByTimeAsync(20000)
+		const result = await pending
 
 		expect(result.message.content).toBe("Ready")
 		const [reliefEndpoint, reliefBody, reliefOptions] =
@@ -633,9 +688,11 @@ describe("feature-flagged public output streaming", () => {
 		expect(reliefBody.model).toBe("relief-model")
 		expect(reliefBody.reasoning_effort).toBe("low")
 		expect(reliefOptions.headers.Authorization).toBe("Bearer relief-key")
+		jest.useRealTimers()
 	})
 
 	it("surfaces a rate limit when no relief provider is configured", async () => {
+		jest.useFakeTimers()
 		jest.spyOn(Logger.prototype, "warn").mockImplementation(() => {})
 		const { client, post } = setup()
 		post.mockReturnValue(
@@ -645,9 +702,13 @@ describe("feature-flagged public output streaming", () => {
 			})),
 		)
 
-		await expect(client.complete([], [])).rejects.toThrow(
-			"LLM provider returned HTTP 429",
-		)
+		const pending = client
+			.complete([], [])
+			.catch((value: unknown) => value as Error)
+		await jest.advanceTimersByTimeAsync(20000)
+		const failure = await pending
+		expect(failure.message).toBe("LLM provider returned HTTP 429")
+		jest.useRealTimers()
 	})
 
 	it("accepts a tool call answered without a content field", async () => {
@@ -689,6 +750,7 @@ describe("feature-flagged public output streaming", () => {
 	})
 
 	it("keeps the next request on the relief provider instead of paying the retries again", async () => {
+		jest.useFakeTimers()
 		jest.spyOn(Logger.prototype, "warn").mockImplementation(() => {})
 		const { client, post } = setup({
 			fallback: {
@@ -709,13 +771,18 @@ describe("feature-flagged public output streaming", () => {
 			}))
 		})
 
-		await client.complete([], [])
+		const first = client.complete([], [])
+		await jest.advanceTimersByTimeAsync(20000)
+		await first
 		const callsAfterFirst = post.mock.calls.length
-		await client.complete([], [])
+		const second = client.complete([], [])
+		await jest.advanceTimersByTimeAsync(2000)
+		await second
 
 		expect(post.mock.calls.length).toBe(callsAfterFirst + 1)
 		expect(post.mock.calls[callsAfterFirst][0]).toBe(
 			"https://relief.example.test/v1/chat/completions",
 		)
+		jest.useRealTimers()
 	})
 })

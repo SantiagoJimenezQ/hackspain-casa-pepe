@@ -23,6 +23,12 @@ export const RUN_IDLE_TIMEOUT_MILLISECONDS = 1800000
  */
 export const AGENT_STALLED_RUN_MILLISECONDS = 30000
 
+/**
+ * After a provider 429 the next automatic nudge must wait for the rate limit
+ * window, not the ordinary 30-second stall delay.
+ */
+export const AGENT_RATE_LIMIT_COOLDOWN_MILLISECONDS = 60000
+
 /** Step statuses the agent may still dispatch. */
 export const RUNNABLE_STEP_STATUSES = ["proposed", "approved"] as const
 

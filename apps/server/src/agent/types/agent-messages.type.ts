@@ -93,6 +93,8 @@ export interface AgentMessages {
 	selectingNextSpecialistAction: string
 	/** Shown when fresh evidence invalidates a decision the agent had drafted. */
 	newEvidenceReassessing: string
+	/** Shown when a stale decision arrives while a call, recovery, or approval is still open. */
+	waitingForInFlightWork: string
 	/** Shown when the run the decision belongs to is no longer the live one. */
 	runNoLongerLive: string
 	/** Shown when the model answered with something other than a single tool call. */

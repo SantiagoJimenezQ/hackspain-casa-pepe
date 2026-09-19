@@ -25,28 +25,10 @@ export default function OpenGraphImage() {
           display: "flex",
           flexDirection: "column",
           background: "#141414",
-          position: "relative",
         }}
       >
-        {/* Satori only honours gradients through backgroundImage, and it drops radial ones. */}
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            backgroundImage: "linear-gradient(225deg, rgba(240,68,68,0.30) 0%, rgba(20,20,20,0) 55%)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            backgroundImage: "linear-gradient(45deg, rgba(62,224,143,0.20) 0%, rgba(20,20,20,0) 48%)",
-          }}
-        />
-
-        <div style={{ display: "flex", height: 28 }}>
+        {/* Satori drops CSS gradients in this renderer, so the accent is a solid status bar. */}
+        <div style={{ display: "flex", height: 10 }}>
           {STATUS.map((status) => (
             <div key={status.label} style={{ display: "flex", flex: 1, background: status.color }} />
           ))}

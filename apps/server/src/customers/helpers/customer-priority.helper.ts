@@ -224,6 +224,7 @@ function prioritizeCustomer(
 		),
 		highestImpact,
 		identifier: customer.identifier,
+		justification: "",
 		minutesDown,
 		name: customer.name,
 		nextAction,
@@ -278,8 +279,11 @@ export function prioritizeCustomers(
 			key: criterion.key,
 		})),
 		customers: ranked,
+		fallbackReason: "",
 		generatedAt: now,
 		incidentIdentifier: incident.identifier,
+		model: "",
 		runIdentifier: incident.runIdentifier,
+		source: "deterministic",
 	}
 }

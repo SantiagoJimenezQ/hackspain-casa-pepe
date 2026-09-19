@@ -20,6 +20,7 @@ export interface RuntimeConfiguration {
 export interface DatabaseConfiguration {
 	readonly url: string
 	readonly queryLogging: boolean
+	readonly poolMaximum: number
 }
 
 export interface AuthenticationConfiguration {
@@ -85,6 +86,8 @@ export interface LlmConfiguration {
 	readonly maximumTurns: number
 	readonly maximumOutputTokens: number
 	readonly reasoningEffort: LlmReasoningEffort
+	readonly fastModel: string
+	readonly fastTimeoutMilliseconds: number
 }
 
 export interface EmailConfiguration {

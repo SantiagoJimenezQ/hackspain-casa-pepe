@@ -9,6 +9,8 @@ import { of, throwError } from "rxjs"
 const CONFIGURATION: LlmConfiguration = {
 	apiKey: "test-provider-key",
 	baseURL: "https://provider.example.test/v1",
+	fastModel: "",
+	fastTimeoutMilliseconds: 5000,
 	maximumOutputTokens: 128,
 	maximumTurns: 24,
 	model: "test-model",

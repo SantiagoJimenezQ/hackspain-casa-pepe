@@ -361,7 +361,7 @@ source.onmessage = (message) => append(JSON.parse(message.data))
 
 ## Customers (`/customers`)
 
-### `GET /customers/priorities?runIdentifier=`
+### `GET /customers/priorities?runIdentifier=&mode=`
 
 Customers (the companies whose services run on the affected region) ranked by recovery priority. Pure read over the incident state and the recovery actions, no model call, so it answers in milliseconds and is safe to poll from the UI.
 
@@ -389,6 +389,8 @@ Customers (the companies whose services run on the affected region) ranked by re
 ```
 
 `status` is `down` \| `degraded` \| `recovering` \| `healthy`. `score` is the sum of `breakdown`: highest business impact of the unavailable services (critical 40, high 25, medium 12, low 5), 8 points per service of any customer blocked by them, 6 per unavailable service, 1 per 500 users (maximum 30), 1 per 5 minutes down (maximum 20), minus 10 per recovery action already requested or running. Ties break by users, then name. The same ranking is available to the agent as the `prioritize_customers` tool (output `kind: "customer-priorities"`).
+
+`mode=llm` sends the deterministic ranking and the customer state to the fast model (`LLM_FAST_MODEL`, or `LLM_MODEL` when empty) and asks it to confirm or reorder the customers with one sentence of `justification` each. The answer is cached per run until a service status, recovery action or blocked dependency changes, so repeated reads are instant; a failure is remembered for 30 seconds so polling stays fast. `source` says whether the order came from the `llm` or is the `deterministic` fallback, `model` names the model used, and `fallbackReason` explains a fallback (timeout past `LLM_FAST_TIMEOUT_MILLISECONDS`, provider error or an invalid answer).
 
 ## Tools (`/tools`)
 

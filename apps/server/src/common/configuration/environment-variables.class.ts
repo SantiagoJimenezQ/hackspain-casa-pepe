@@ -45,6 +45,12 @@ export class EnvironmentVariables {
 	@IsIn(["true", "false"])
 	DATABASE_QUERY_LOGGING: string = "false"
 
+	@Type(() => Number)
+	@IsInt()
+	@Min(1)
+	@Max(20)
+	DATABASE_POOL_MAXIMUM: number = 1
+
 	@IsString()
 	@Matches(/^postgres(ql)?:\/\//, {
 		message: DATABASE_URL_MESSAGE,
@@ -196,4 +202,13 @@ export class EnvironmentVariables {
 
 	@IsIn(LLM_REASONING_EFFORTS)
 	LLM_REASONING_EFFORT: LlmReasoningEffort = ""
+
+	@IsString()
+	LLM_FAST_MODEL: string = ""
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(100)
+	@Max(120000)
+	LLM_FAST_TIMEOUT_MILLISECONDS: number = 5000
 }

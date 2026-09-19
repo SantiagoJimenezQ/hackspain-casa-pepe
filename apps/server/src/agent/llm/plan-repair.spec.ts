@@ -38,7 +38,7 @@ describe("repairLlmPlanDraft", () => {
 						serviceIdentifier: "orders-database",
 					},
 					{
-						decision: "postponed",
+						decision: "postpone",
 						serviceIdentifier: "events-stream",
 					},
 				],
@@ -141,5 +141,74 @@ describe("repairLlmPlanDraft", () => {
 		expect(repairLlmPlanDraft({ steps: "x" }, input())).toEqual({
 			steps: "x",
 		})
+	})
+})
+
+describe("postponed capacity bookkeeping", () => {
+	it("derives the postponed total from trusted costs without changing model decisions", () => {
+		const built = input()
+		const priorities = built.incident.services.map((service, index) => ({
+			capacityUnits: 999,
+			decision: index === 0 ? "postpone" : "waiting-for-dependency",
+			serviceIdentifier: service.identifier,
+		}))
+		const draft = {
+			capacity: {
+				assumedCapacity: 7,
+				plannedUnits: 4,
+				postponedUnits: 999,
+				remainingUnits: 3,
+			},
+			priorities,
+			steps: [],
+		}
+		const result = repairLlmPlanDraft(draft, built) as typeof draft
+		expect(result.capacity).toEqual({
+			...draft.capacity,
+			postponedUnits: built.incident.services[0].recoveryCapacityUnits,
+		})
+		expect(result.priorities).toEqual(priorities)
+		expect(draft.capacity.postponedUnits).toBe(999)
+	})
+	it("sets zero when no services are explicitly postponed", () => {
+		const built = input()
+		const result = repairLlmPlanDraft(
+			{
+				capacity: { postponedUnits: 999 },
+				priorities: built.incident.services.map((service) => ({
+					decision: "waiting-for-dependency",
+					serviceIdentifier: service.identifier,
+				})),
+				steps: [],
+			},
+			built,
+		)
+		expect(result).toMatchObject({ capacity: { postponedUnits: 0 } })
+	})
+	it("does not guess totals for missing, duplicate or unknown services", () => {
+		const built = input()
+		const priorities = built.incident.services.map((service) => ({
+			decision: "postpone",
+			serviceIdentifier: service.identifier,
+		}))
+		for (const invalid of [
+			priorities.slice(1),
+			[...priorities, priorities[0]],
+			[
+				...priorities.slice(1),
+				{ decision: "postpone", serviceIdentifier: "unknown" },
+			],
+		]) {
+			expect(
+				repairLlmPlanDraft(
+					{
+						capacity: { postponedUnits: 999 },
+						priorities: invalid,
+						steps: [],
+					},
+					built,
+				),
+			).toMatchObject({ capacity: { postponedUnits: 999 } })
+		}
 	})
 })

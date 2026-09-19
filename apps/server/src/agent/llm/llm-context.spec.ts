@@ -144,3 +144,31 @@ describe("LLM context projections", () => {
 		expect(summary.currentPlan.reason).toBe("Capacity dropped")
 	})
 })
+
+describe("readable validation feedback", () => {
+	it("does not redact argument substrings inside controlled field names and prose", () => {
+		const message =
+			"Invalid LLM plan at plan.capacity.postponedUnits: must equal the capacity of explicitly postponed services"
+		expect(
+			safeValidationError(
+				message,
+				JSON.stringify({
+					decision: "postpone",
+					name: "d",
+					reason: "a",
+				}),
+			),
+		).toBe(message)
+	})
+	it("escapes regex characters and redacts literal submitted identifiers only once", () => {
+		expect(
+			safeValidationError(
+				"Invalid plan.steps.service[x]: missing dependency argument",
+				JSON.stringify({
+					dependsOn: ["argument"],
+					identifier: "service[x]",
+				}),
+			),
+		).toBe("Invalid plan.steps.[argument]: missing dependency [argument]")
+	})
+})

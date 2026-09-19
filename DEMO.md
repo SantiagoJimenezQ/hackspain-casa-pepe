@@ -1,12 +1,12 @@
 # 0. INTRO
 
-> Esto no es ciencia ficción. Desde marzo, Amazon ha perdido dos regiones enteras en Oriente Medio por ataques con drones.
+> Esto no es ciencia ficción. Desde marzo, Amazon ha perdido una región entera en Bahréin y parte de la de Emiratos por ataques con drones.
 >
 > Y esta semana ha dicho algo que nunca había dicho: esos datos no se pueden recuperar. Esta noche, otro ataque.
 
 **Apagón luces (XXXX) + botón (YYYY)** → pantalla empieza a caer y sale regiones middle east caídas
 
-> Acaban de caer las tres zonas de disponibilidad de ME
+> Acaban de caer las otras dos zonas de disponibilidad de Emiratos.
 
 ---
 
@@ -22,7 +22,7 @@
 
 > - Ahora mismo **Santi** es un enfermo terminal, depende de un tratamiento experimental que PureHealth monitoriza segundo a segundo desde la nube. Si nadie mira sus constantes, en unas horas puede ser tarde.
 > - **Sergio** depende de Emirates: está en el aeropuerto de Dubái sin tarjeta de embarque y el espacio aéreo cambia cada hora.
-> - **Sergio** es founder de una startup que gestiona pagos y depende de Emirates NBD: no puede pagar ni sacar dinero, todo Emiratos está pagando en efectivo. Y ahí también está parte de la ronda de HappyRobot.
+> - **Sergio** es founder de una startup que gestiona pagos y depende de Emirates NBD. Y ahí también está parte de la ronda de HappyRobot.
 > - Y **Luis** depende de Deliveroo: ha pedido la cena.
 
 ---

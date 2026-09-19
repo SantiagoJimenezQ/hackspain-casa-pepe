@@ -215,6 +215,7 @@ const es = {
 
   "call.calling": "Llamando a {name}",
   "call.ended": "Llamada finalizada",
+  "call.authorized": "AUTORIZACIÓN RECIBIDA",
   "call.failed": "No se ha podido completar la llamada",
   "call.noAnswer": "Sin respuesta",
 
@@ -586,6 +587,7 @@ const en: { [K in keyof typeof es]: string } = {
 
   "call.calling": "Calling {name}",
   "call.ended": "Call ended",
+  "call.authorized": "PERMISSION RECEIVED",
   "call.failed": "Call could not be completed",
   "call.noAnswer": "No answer",
 

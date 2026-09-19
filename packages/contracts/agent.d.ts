@@ -13,3 +13,18 @@ export interface LlmDecisionMetadata {
   readonly fingerprint: string
   readonly tools?: readonly string[]
 }
+
+/** Additive payload fields on agent.llm-rejected; argument values are never included. */
+export interface LlmRejectionMetadata {
+  readonly tool: string
+  readonly result: {
+    readonly error: string
+    readonly correction: string
+    readonly argumentDiagnostics: {
+      readonly bytes: number
+      readonly validJson: boolean
+      /** Bounded field names/types; unknown names are redacted and all values omitted. */
+      readonly shape?: unknown
+    }
+  }
+}

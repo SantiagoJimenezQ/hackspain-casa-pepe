@@ -65,10 +65,7 @@ export async function readCompletionStream(
 			if (delta.content != null) {
 				if (typeof delta.content !== "string") throw invalid()
 				content += delta.content
-				const visible = delta.content.slice(
-					0,
-					Math.max(0, 2000 - published),
-				)
+				const visible = delta.content
 				published += visible.length
 				pending += visible
 				// Publish the first fragment immediately, then bounded batches to avoid per-token DB writes.

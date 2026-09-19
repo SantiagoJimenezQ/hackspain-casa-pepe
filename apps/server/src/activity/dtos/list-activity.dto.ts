@@ -18,6 +18,15 @@ import {
 
 export class ListActivityDTO {
 	@ApiPropertyOptional({
+		description: "Exclusive cursor for older LLM history",
+	})
+	@IsOptional()
+	@Type(() => Number)
+	@IsInt()
+	@Min(1)
+	beforeSequence?: number
+
+	@ApiPropertyOptional({
 		description: "Run identifier. Defaults to the active run",
 	})
 	@IsOptional()

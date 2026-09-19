@@ -713,3 +713,18 @@ See [MVP tools rehearsal](../../../demo/MVP-TOOLS.md) for configuration, payload
 | `GET /status/public` | Public | Explicitly published, customer-safe JSON service status for the active run; no credentials, call details or internal plan data. |
 
 `GET /tools` now includes the eight MVP names plus the legacy tools. Email destinations are server configuration, never agent input. The email tool records provider acceptance separately from inbox delivery; simulated emails send nothing. HTTP `verify_recovery` submits a test delivery for `route-assignment`; other services use health queries scoped to the run. `check_services_status` runs after every verification and before the status publication: it queries the independent health read of every service (recovery environment in `http` mode, scenario state in `simulated` mode), compares it with the state the agent has recorded and returns `checks[]` with `knownStatus`, `observedStatus`, `matches` and `healthy`, plus `healthyCount`, `totalCount` and the list of `discrepancies`. Discrepancies are reported, never applied to the harness state. Each run records a `services.checked` activity event.
+
+
+## Complete public LLM turns
+
+The authenticated activity API and stream expose full public explanations in `payload.text` (the activity `summary` remains a short preview). See `LlmPublicTurn` in `packages/contracts/agent.d.ts`. Payload fields include `outputIdentifier`, `turn`, `text`, `toolCalls: [{ id, name, arguments }]`, `model`, `finishReason`, optional `usage`, `redacted`, `disposition`, and optional `dispositionReason`.
+
+`agent.llm-decision` first reports `pending`, then `accepted` after runtime validation/dispatch. `agent.llm-rejected` and `agent.llm-stale` retain the complete public response with the corresponding disposition. `agent.llm-failed` identifies incomplete output; it does not promise a complete response. Merge updates by `outputIdentifier`. Acceptance is distinct from tool execution success. Known credentials, sensitive argument fields and unknown-schema argument values are redacted before these records are persisted. Private reasoning is excluded; numeric reasoning-token counts may appear in usage.
+
+`agent.llm-output` remains provisional append-only text. Deduplicate by activity sequence, replace provisional text with a completed turn's `text`, and keep rejected/stale/incomplete output labeled as such. Redaction buffers complete lines, so single-line output may appear only at completion. Provider response budgets remain enforced.
+
+### `GET /activity/llm`
+
+Query: `runIdentifier` (defaults to active run), `limit` (1–500, default 100), optional `beforeSequence` (exclusive positive integer cursor). Returns `{ items: ActivityRecord[], nextBeforeSequence: number | null }` in descending sequence order. Request subsequent pages using the returned cursor; null means history is exhausted. No new Next.js proxy or history UI is included; the frontend team owns that integration. Keep the backend API key server-side. Older pre-upgrade records keep their original fields.
+
+The SSE endpoint now drains all backlog pages after the resume cursor and buffers concurrent live events during catch-up. The existing frontend behavior is unchanged, including its 100-event activity window. Consumers building a full transcript should load history through the cursor endpoint and deduplicate it against SSE events.

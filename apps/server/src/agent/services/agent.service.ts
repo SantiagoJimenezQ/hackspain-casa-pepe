@@ -454,6 +454,18 @@ export class AgentService {
 				reason: "No impact has been detected yet",
 			}
 		}
+		// Every service is healthy again, so there is nothing left to investigate, plan or
+		// verify. A service that breaks again moves the incident out of this status and the
+		// agent wakes up with it.
+		if (incident.status === "recovered") {
+			this.logger.log(LOG_MESSAGES.AGENT.CYCLE_SKIPPED_RECOVERED, {
+				runIdentifier,
+			})
+			return {
+				kind: "skipped",
+				reason: "The incident is recovered; every service is healthy",
+			}
+		}
 		const messages = this.messagesFor(incident)
 		const pendingCalls = await this.incomingCalls.list(runIdentifier)
 		if (pendingCalls.some((call) => call.status === "pending"))

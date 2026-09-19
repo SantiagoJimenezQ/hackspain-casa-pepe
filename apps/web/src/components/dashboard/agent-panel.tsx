@@ -3,6 +3,7 @@
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { GitBranch } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, Check, CheckCircleIcon, ChevronDownIcon, CircleIcon, Copy, Loader2, XCircleIcon } from "lucide-react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
@@ -108,6 +109,48 @@ function proposedToolState(
   return "input-streaming";
 }
 
+/**
+ * Where each eye sits inside the 192x172 drawing, measured from the artwork itself. The pupils
+ * are redrawn on top of a white patch so they can look around; the face underneath is white, so
+ * the patch is invisible.
+ */
+const PEPE_EYES = [
+  { key: "left", left: "36.9%", top: "48.2%" },
+  { key: "right", left: "51.0%", top: "48.6%" },
+];
+
+/** A long dwell at each side, so he reads as watching the door rather than twitching. */
+const PUPIL_KEYFRAMES = ["0%", "62%", "62%", "-62%", "-62%", "0%"];
+const PUPIL_TIMES = [0, 0.16, 0.4, 0.56, 0.8, 1];
+
+/** Pepe waiting for something to happen: he looks from side to side until the incident starts. */
+function WaitingPepe() {
+  const stillness = useReducedMotion();
+  return (
+    <span className="relative flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white ring-1 ring-border/60">
+      <span className="relative block aspect-[192/172] w-full">
+        <Image src="/agents/pepe.webp" alt="" fill sizes="96px" className="object-contain" priority />
+        <span aria-hidden className="pointer-events-none absolute inset-0">
+          {PEPE_EYES.map((eye) => (
+            <span
+              key={eye.key}
+              className="absolute flex items-center justify-center rounded-full bg-white"
+              style={{ height: "12%", left: eye.left, top: eye.top, transform: "translate(-50%, -50%)", width: "7.5%" }}
+            >
+              <motion.span
+                className="rounded-full bg-[#141414]"
+                style={{ height: "66%", width: "36%" }}
+                animate={stillness ? undefined : { x: PUPIL_KEYFRAMES }}
+                transition={{ duration: 5.5, ease: "easeInOut", repeat: Infinity, times: PUPIL_TIMES }}
+              />
+            </span>
+          ))}
+        </span>
+      </span>
+    </span>
+  );
+}
+
 function PendingApproval({
   approval,
   busy,
@@ -196,11 +239,12 @@ function ReasoningRow({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { locale, t } = useI18n();
   const streaming = item.status === "streaming";
   const label = streaming
-    ? item.title || "Pensando"
-    : completedReasoningLabel(item.title || item.text, item.durationMs, item.disposition);
-  const disposition = dispositionTitle(item.disposition);
+    ? item.title || t("agent.thinking")
+    : completedReasoningLabel(item.title || item.text, item.durationMs, item.disposition, locale);
+  const disposition = dispositionTitle(item.disposition, locale);
   const usage = item.usage && typeof item.usage === "object"
     ? item.usage as Record<string, unknown>
     : null;
@@ -405,7 +449,7 @@ export function AgentPanel() {
 
   const work = useMemo(() => (overview ? currentWork(overview, activity, locale) : null), [overview, activity, locale]);
   const tools = useMemo(() => (overview ? mergedToolCalls(overview, activity) : []), [overview, activity]);
-  const items = useMemo(() => (overview ? buildTranscript(overview, activity) : []), [overview, activity]);
+  const items = useMemo(() => (overview ? buildTranscript(overview, activity, locale) : []), [overview, activity, locale]);
 
   useEffect(() => () => {
     if (copiedTimer.current) window.clearTimeout(copiedTimer.current);
@@ -438,23 +482,11 @@ export function AgentPanel() {
   return (
     <Panel className="h-full min-h-0">
       <div className="flex items-center gap-2.5 px-4 pt-4 pb-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="relative flex size-7 shrink-0 overflow-hidden rounded-md bg-muted">
-            <Image
-              src="/agents/pepe.webp"
-              alt="Pepe"
-              width={192}
-              height={172}
-              className="size-full object-cover"
-            />
-          </span>
-          <h2 className="text-[14px] font-medium">Pepe</h2>
-        </div>
-        <span className="ml-auto flex min-w-0 max-w-[60%] items-center gap-1.5 text-[11px]">
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px]">
           <Dot status={headerStatus(work, live)} />
           <span className={cn("min-w-0 truncate", headerToneClass(work, live))}>{work.title}</span>
         </span>
-        <button type="button" title="Árbol de decisiones" aria-label="Abrir árbol de decisiones" onClick={() => setTreeOpen(true)} className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-status-up"><GitBranch className="size-4" /></button>
+        <button type="button" title={t("agent.decisionTree")} aria-label={t("agent.openDecisionTree")} onClick={() => setTreeOpen(true)} className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-status-up"><GitBranch className="size-4" /></button>
         <Button
           type="button"
           variant="ghost"
@@ -474,9 +506,16 @@ export function AgentPanel() {
           <PlanTodosCard plan={plan} streaming={planStreaming} />
         </div>
       ) : null}
+      {items.length ? null : (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+          <WaitingPepe />
+          <p className="text-[14px] font-medium text-foreground">{t("empty.agent.title")}</p>
+          <p className="max-w-[38ch] text-[12px] leading-5 text-muted-foreground">{t("empty.agent.hint")}</p>
+        </div>
+      )}
       <MessageScrollerProvider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={48}>
-        <MessageScroller className="min-h-0 flex-1">
-          <MessageScrollerViewport className="px-4" aria-label="Trabajo del agente">
+        <MessageScroller className={cn("min-h-0 flex-1", items.length ? "" : "hidden")}>
+          <MessageScrollerViewport className="px-4" aria-label={t("agent.workLabel")}>
             <MessageScrollerContent className="gap-0.5 py-1 pb-4" aria-busy={live}>
               {items.map((item) => (
                 <MessageScrollerItem key={transcriptKey(item)} messageId={transcriptKey(item)} className="[content-visibility:visible]">
@@ -493,7 +532,7 @@ export function AgentPanel() {
           </MessageScrollerViewport>
           <MessageScrollerButton>
             <ArrowDown />
-            <span className="sr-only">Ir al último</span>
+            <span className="sr-only">{t("agent.scrollToLatest")}</span>
           </MessageScrollerButton>
         </MessageScroller>
       </MessageScrollerProvider>

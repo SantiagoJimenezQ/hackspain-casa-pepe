@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleDashed } from "lucide-react";
+import { CircleDashed, ListChecks } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { ActiveCallBanner } from "@/components/dashboard/active-call-banner";
 import { AgentPanel } from "@/components/dashboard/agent-panel";
@@ -281,8 +281,12 @@ function Recovery() {
           </AnimatePresence>
         </LayoutGroup>
         {items.length ? null : (
-          <li className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border px-3 text-[11px] text-muted-foreground">
-            {t("migration.waiting")}
+          <li className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/70 px-6 py-8 text-center">
+            <ListChecks className="size-7 text-muted-foreground/50" aria-hidden />
+            <p className="text-[12px] font-medium text-foreground/80">{t("empty.recovery.title")}</p>
+            <p className="max-w-[34ch] text-[11px] leading-4 text-muted-foreground">
+              {t("empty.recovery.hint", { count: recovery.total })}
+            </p>
           </li>
         )}
       </ol>
@@ -292,15 +296,16 @@ function Recovery() {
 
 export function LiveOperationsDashboard() {
   const { status, overview, error, retry, busyAction } = useDashboard();
+  const { t } = useI18n();
   if (status === "error" && !overview) {
     return (
       <div className="flex flex-1 items-center justify-center">
         <Panel className="max-w-xl p-8">
-          <p className="text-[11px] tracking-[.16em] text-primary uppercase">Casa Pepe · Centro de mando</p>
-          <h1 className="mt-3 text-3xl font-semibold">No se puede alcanzar al coordinador</h1>
-          <p className="mt-3 text-sm text-muted-foreground">{error ?? "No se pudo contactar con el backend de Casa Pepe."}</p>
+          <p className="text-[11px] tracking-[.16em] text-primary uppercase">{t("error.eyebrow")}</p>
+          <h1 className="mt-3 text-3xl font-semibold">{t("error.title")}</h1>
+          <p className="mt-3 text-sm text-muted-foreground">{error ?? t("error.body")}</p>
           <Button className="mt-6" onClick={() => void retry()} disabled={busyAction !== null}>
-            Reintentar
+            {t("error.retry")}
           </Button>
         </Panel>
       </div>

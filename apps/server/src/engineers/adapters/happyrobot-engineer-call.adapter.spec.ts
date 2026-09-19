@@ -62,6 +62,41 @@ describe("HappyRobot outbound adapter", () => {
 			}),
 		)
 	})
+	it("authenticates direct webhooks with x-api-key and a flat payload", async () => {
+		const hookURL = "https://workflows.platform.eu.happyrobot.ai/hooks/test"
+		const { adapter, post } = setup(hookURL)
+		await expect(
+			adapter.start(request as never, jest.fn()),
+		).resolves.toMatchObject({
+			kind: "accepted",
+			providerReference: "run_provider",
+		})
+		expect(post).toHaveBeenCalledWith(
+			hookURL,
+			expect.objectContaining({
+				call_identifier: "call_test",
+				callback_url: request.callbackURL,
+				phone_number: "+34600000000",
+			}),
+			expect.objectContaining({
+				headers: {
+					"Content-Type": "application/json",
+					"x-api-key": "test-key",
+				},
+			}),
+		)
+		expect(post.mock.calls[0][1]).not.toHaveProperty("payload")
+	})
+	it("rejects a webhook acknowledgement without a run ID", async () => {
+		const { adapter, post } = setup(
+			"https://workflows.platform.eu.happyrobot.ai/hooks/test",
+			{},
+		)
+		await expect(
+			adapter.start(request as never, jest.fn()),
+		).resolves.toMatchObject({ kind: "failed" })
+		expect(post).toHaveBeenCalledTimes(1)
+	})
 	it("keeps legacy webhook payloads compatible", async () => {
 		const { adapter, post } = setup("https://example.test/trigger", {})
 		await expect(

@@ -67,16 +67,18 @@ export class HappyRobotEngineerCallAdapter implements EngineerCallAdapter {
 			severity: HAPPYROBOT_DEFAULT_SEVERITY,
 		}
 		try {
-			const isV2 = /\/api\/v2\/workflows\/[^/]+\/runs\/?$/u.test(
-				new URL(triggerURL).pathname,
-			)
+			const pathname = new URL(triggerURL).pathname
+			const isWebhook = pathname.startsWith("/hooks/")
+			const isV2 = /\/api\/v2\/workflows\/[^/]+\/runs\/?$/u.test(pathname)
 			const response = await firstValueFrom(
 				this.httpService.post<{ run_id?: string }>(
 					triggerURL,
 					isV2 ? { payload } : payload,
 					{
 						headers: {
-							Authorization: `Bearer ${apiKey}`,
+							...(isWebhook
+								? { "x-api-key": apiKey }
+								: { Authorization: `Bearer ${apiKey}` }),
 							"Content-Type": "application/json",
 						},
 						timeout:
@@ -85,7 +87,10 @@ export class HappyRobotEngineerCallAdapter implements EngineerCallAdapter {
 				),
 			)
 			const runId = response.data?.run_id
-			if (isV2 && (typeof runId !== "string" || !runId.trim())) {
+			if (
+				(isV2 || isWebhook) &&
+				(typeof runId !== "string" || !runId.trim())
+			) {
 				return {
 					kind: "failed",
 					reason: "HappyRobot did not return a run ID; check the provider before retrying",

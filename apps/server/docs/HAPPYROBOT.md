@@ -69,3 +69,27 @@ Check the voice node's output: `status`, `failure_reason`, SIP response and dura
 Use `POST /api/tools/tests` with `tool: "call_engineer"`, `mode: "live"`, a fresh idempotency key and an intended recipient. Do this only when the recipient is ready. Poll its result until terminal; HappyRobot callbacks complete it without ElevenLabs polling. Test acceptance, refusal, partial permission, interruption, unknown answers and an unanswered call. Confirm the result, transcript and operator approval boundary before switching the incident demo.
 
 Never retry an ambiguous start failure automatically: the provider may already have dialed. This integration retains the existing single-coordinator and provider-acceptance/persistence crash-window limitations.
+
+## Verified product call (2026-09-20)
+
+Production test `tool-test_d86592de-c4eb-4f41-9bf1-61a377526a76` was initiated through the product API, received provider run `f239e88b-9f80-4551-84fa-199b062c4d6a`, and persisted a completed final callback with both permissions `true`. This verified the standalone product path, not a live incident or dashboard browser rehearsal. The spoken yes followed the combined question; early-interruption behavior still requires its own live rehearsal.
+
+The same call exposed an interim callback issue: tool arguments arrived as strings, so the backend correctly rejected textual booleans with HTTP 400. The final extractor emitted real booleans and completed successfully. Keep strict backend validation.
+
+A HappyRobot draft adds a Python conversion node between `registrar_autorizacion` and its HTTP callback. Publish requires explicit approval because HappyRobot can run automatic tests/calls while publishing. The converter passed seven local input checks (booleans, string true/false, unknown, empty, null):
+
+```python
+def permission(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        value = value.strip().lower()
+        if value == "true":
+            return True
+        if value == "false":
+            return False
+    return None
+output = {key: permission(input_data.get(key)) for key in ("notifyAllClients", "trafficFailoverAuthorized")}
+```
+
+Wire the HTTP authorization value fields to the converter outputs, preserving the tool rationale. Never use Python `bool(value)` for string inputs: `bool("false")` is true.

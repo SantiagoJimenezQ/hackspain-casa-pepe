@@ -1,4 +1,7 @@
-import { buildPlanDraft } from "@agent/helpers/plan-builder.helper"
+import {
+	buildPlanDraft,
+	effectiveCapacity,
+} from "@agent/helpers/plan-builder.helper"
 import {
 	LlmMessage,
 	LlmToolCall,
@@ -200,7 +203,11 @@ function needsRevision(input: PlanBuildInput): boolean {
 	const previous = input.previousPlan
 	if (!previous) return true
 
-	const resource = selectBackupResource(input.incident)
+	const resource = selectBackupResource(
+		input.incident,
+		(candidate) =>
+			effectiveCapacity(candidate, input) - candidate.allocatedCapacity,
+	)
 	if (
 		previous.capacity.resourceIdentifier !== resource.identifier ||
 		previous.capacity.totalCapacity !== resource.totalCapacity ||

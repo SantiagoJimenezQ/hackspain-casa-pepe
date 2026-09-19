@@ -31,4 +31,23 @@ describe("meteorite gulf geography", () => {
 		expect(selected.identifier).toBe("backup-bahrain")
 		expect(selected.region).toBe("me-south-1")
 	})
+
+	it("keeps the region that already has allocated recovery work", () => {
+		const incident = createImpactedIncident(1)
+		const bahrain = incident.resources.find(
+			(resource) => resource.identifier === "backup-bahrain",
+		)
+		if (!bahrain) {
+			throw new Error("Expected Bahrain backup capacity")
+		}
+		const selected = selectBackupResource({
+			...incident,
+			resources: incident.resources.map((resource) =>
+				resource.identifier === "backup-bahrain"
+					? { ...resource, allocatedCapacity: 12 }
+					: resource,
+			),
+		})
+		expect(selected.identifier).toBe("backup-bahrain")
+	})
 })

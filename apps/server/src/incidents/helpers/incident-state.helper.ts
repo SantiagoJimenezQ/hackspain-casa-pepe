@@ -182,6 +182,10 @@ export function selectBackupResource(
 ): ResourceState {
 	const needed = nextRecoveryUnits(incident)
 	const ordered = incident.resources
+	const committed = ordered.find((resource) => resource.allocatedCapacity > 0)
+	if (committed) {
+		return committed
+	}
 	const fitting = ordered.find((resource) => remainingOf(resource) >= needed)
 	if (fitting) {
 		return fitting

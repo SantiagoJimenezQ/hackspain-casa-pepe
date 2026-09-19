@@ -175,6 +175,8 @@ export type EngineerCall = {
   status: string;
   result: { summary: string; transcript: string } | null;
   failureReason: string;
+  startedAt: string;
+  finishedAt: string;
 };
 
 export type ToolCallSubagent = {

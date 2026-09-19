@@ -1,9 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ToolUIPart } from "ai";
-import { ArrowDown, CheckCircle2, CheckCircleIcon, ChevronDownIcon, CircleIcon, Loader2, XCircle, XCircleIcon } from "lucide-react";
+import { ArrowDown, Check, CheckCircle2, CheckCircleIcon, ChevronDownIcon, CircleIcon, Copy, Loader2, XCircle, XCircleIcon } from "lucide-react";
 import {
   Confirmation,
   ConfirmationAction,
@@ -18,6 +18,8 @@ import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "@/componen
 import { Panel } from "@/components/dashboard/panel";
 import { PlanTodosCard } from "@/components/dashboard/plan-todos-card";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
+import { useI18n } from "@/components/i18n/locale-provider";
+import { Button } from "@/components/ui/button";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -39,6 +41,7 @@ import {
   toolTitle,
   type TranscriptItem,
 } from "@/lib/agent-trace";
+import { formatChatDebugDump } from "@/lib/agent-chat-debug";
 import type { LlmPublicToolCall, ToolCall } from "@/lib/casa-pepe-types";
 import type { VisualStatus } from "@/lib/live-dashboard";
 
@@ -270,11 +273,33 @@ function transcriptKey(item: TranscriptItem) {
 
 export function AgentPanel() {
   const { overview, activity, busyAction, decideApproval } = useDashboard();
+  const { t } = useI18n();
   const [manualOpen, setManualOpen] = useState<Record<string, boolean>>({});
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const work = useMemo(() => (overview ? currentWork(overview, activity) : null), [overview, activity]);
   const tools = useMemo(() => (overview ? mergedToolCalls(overview, activity) : []), [overview, activity]);
   const items = useMemo(() => (overview ? buildTranscript(overview, activity) : []), [overview, activity]);
+
+  useEffect(() => () => {
+    if (copiedTimer.current) window.clearTimeout(copiedTimer.current);
+  }, []);
+
+  const copyChatDebug = useCallback(() => {
+    if (!overview) return;
+    const text = formatChatDebugDump(overview, activity);
+    const clipboard = navigator.clipboard;
+    if (!clipboard?.writeText) return;
+    void clipboard.writeText(text).then(() => {
+      setCopied(true);
+      if (copiedTimer.current) window.clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      setCopied(false);
+    });
+  }, [overview, activity]);
+
   const plan = overview?.plan.kind === "plan" ? overview.plan.plan : null;
   const live = Boolean(overview && (overview.agent.cycleInProgress || (work?.kind === "tool" && work.state === "input-available")));
   const planStreaming = Boolean(
@@ -312,6 +337,18 @@ export function AgentPanel() {
             {work.title}
           </span>
         </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="shrink-0 text-[10px] text-muted-foreground"
+          aria-label={copied ? t("agent.copied") : t("agent.copyDebug")}
+          title={copied ? t("agent.copied") : t("agent.copyDebug")}
+          onClick={copyChatDebug}
+        >
+          {copied ? <Check className="text-status-up" /> : <Copy />}
+          DEBUG
+        </Button>
       </div>
       {overview.pendingApprovals.length ? (
         <div className="space-y-3 px-4 pb-3">
@@ -333,15 +370,15 @@ export function AgentPanel() {
           ))}
         </div>
       ) : null}
+      {plan ? (
+        <div className="shrink-0 px-4 pb-2">
+          <PlanTodosCard plan={plan} streaming={planStreaming} />
+        </div>
+      ) : null}
       <MessageScrollerProvider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={48}>
         <MessageScroller className="min-h-0 flex-1">
           <MessageScrollerViewport className="px-4" aria-label="Trabajo del agente">
             <MessageScrollerContent className="gap-0.5 py-1 pb-4" aria-busy={live}>
-              {plan ? (
-                <MessageScrollerItem key={`plan-${plan.version}`} messageId={`plan-${plan.version}`} className="mb-2 [content-visibility:visible]">
-                  <PlanTodosCard plan={plan} streaming={planStreaming} />
-                </MessageScrollerItem>
-              ) : null}
               {items.map((item) => (
                 <MessageScrollerItem key={transcriptKey(item)} messageId={transcriptKey(item)} className="[content-visibility:visible]">
                   <TranscriptItemView

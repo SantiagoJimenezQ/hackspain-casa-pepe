@@ -9,6 +9,8 @@ export const LOG_MESSAGES = {
 			"Agent cycle skipped because the run is no longer active",
 		CYCLE_SKIPPED_REPLAY: "Agent cycle skipped because the run is a replay",
 		CYCLE_STARTED: "Agent cycle started",
+		ENGINEER_CALL_DISPATCHED:
+			"On-call engineer called immediately, before the first model turn",
 		PLAN_CREATED: "Initial response plan created",
 		PLAN_REVISED: "Response plan revised after a change in conditions",
 		STALLED_RUN_RESUMED:

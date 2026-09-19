@@ -62,6 +62,8 @@ const ENGLISH: AgentMessages = {
 	approvedBy: (name, comment) => withComment(`Approved by ${name}`, comment),
 	attemptFailedRetrying: (attempt, message) =>
 		`Attempt ${attempt} failed (${message}). Retrying`,
+	awaitingEngineerCall:
+		"Waiting for the on-call engineer to confirm the pending facts before committing capacity",
 	capacityConfirmed: (units, reason) =>
 		`Backup capacity confirmed at ${units} units: ${reason}`,
 	changeBackInPlan: (serviceName, reason) =>
@@ -105,6 +107,10 @@ const ENGLISH: AgentMessages = {
 	healthyNoAction: "Healthy, no action needed",
 	historicalCapacityAssumption: (reportedUnits, assumedUnits, unit, runs) =>
 		`The dashboard reports ${reportedUnits} ${unit} but in ${runs} previous ${runs === 1 ? "run" : "runs"} only ${assumedUnits} were really available. Planning with ${assumedUnits} until the capacity is confirmed`,
+	immediateCallReason:
+		"Only the on-call engineer can settle the pending facts, so the call goes out before any other work",
+	immediateCallSummary:
+		"The on-call engineer is being called right now. Every recovery stays postponed until the pending facts are settled",
 	impactLabel: (level) => IMPACT_LABELS_EN[level],
 	informationGathered: "Information gathered",
 	insufficientCapacity: (details) =>
@@ -207,6 +213,8 @@ const SPANISH: AgentMessages = {
 	approvedBy: (name, comment) => withComment(`Aprobado por ${name}`, comment),
 	attemptFailedRetrying: (attempt, message) =>
 		`El intento ${attempt} falló (${message}). Reintentando`,
+	awaitingEngineerCall:
+		"A la espera de que la ingeniera de guardia confirme los hechos pendientes antes de comprometer capacidad",
 	capacityConfirmed: (units, reason) =>
 		`Capacidad de respaldo confirmada en ${units} unidades: ${reason}`,
 	changeBackInPlan: (serviceName, reason) =>
@@ -251,6 +259,10 @@ const SPANISH: AgentMessages = {
 	healthyNoAction: "Sano, no requiere acción",
 	historicalCapacityAssumption: (reportedUnits, assumedUnits, unit, runs) =>
 		`El panel indica ${reportedUnits} ${unit}, pero en ${runs} ${runs === 1 ? "ejecución anterior" : "ejecuciones anteriores"} solo había ${assumedUnits} disponibles. Se planifica con ${assumedUnits} hasta confirmar la capacidad`,
+	immediateCallReason:
+		"Solo la ingeniera de guardia puede resolver los hechos pendientes, así que la llamada sale antes que cualquier otro trabajo",
+	immediateCallSummary:
+		"Se está llamando ahora mismo a la ingeniera de guardia. Toda recuperación queda pospuesta hasta resolver los hechos pendientes",
 	impactLabel: (level) => IMPACT_LABELS_ES[level],
 	informationGathered: "Información recogida",
 	insufficientCapacity: (details) =>

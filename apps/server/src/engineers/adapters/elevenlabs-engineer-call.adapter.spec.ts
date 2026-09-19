@@ -359,6 +359,39 @@ describe("ElevenLabsEngineerCallAdapter", () => {
 		await expect(adapter.getResult(call())).resolves.toBeNull()
 	})
 
+	it("settles a cancelled call instead of leaving it ringing until the timeout", async () => {
+		const fetch = fetchMock()
+		fetch.mockResolvedValue(
+			response({
+				analysis: null,
+				conversation_id: "conv_test",
+				status: "cancelled",
+			}),
+		)
+		const adapter = new ElevenLabsEngineerCallAdapter(configuration())
+
+		const result = await adapter.getResult(call())
+
+		expect(result?.outcome).toBe("no-answer")
+		expect(result?.answers).toEqual([])
+	})
+
+	it("settles a conversation whose status is neither in flight nor done", async () => {
+		const fetch = fetchMock()
+		fetch.mockResolvedValue(
+			response({
+				analysis: null,
+				conversation_id: "conv_test",
+				status: "something-new",
+			}),
+		)
+		const adapter = new ElevenLabsEngineerCallAdapter(configuration())
+
+		const result = await adapter.getResult(call())
+
+		expect(result?.outcome).toBe("failed")
+	})
+
 	it("maps data collection results back to one answer per asked question", async () => {
 		const fetch = fetchMock()
 		fetch.mockResolvedValue(

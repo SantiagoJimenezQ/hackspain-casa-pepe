@@ -203,6 +203,14 @@ function needsRevision(input: PlanBuildInput): boolean {
 	const previous = input.previousPlan
 	if (!previous) return true
 
+	// The server opens every run with a plan that holds nothing but the engineer call, so the
+	// first real decision is still owed: answer it with the full plan instead of waiting.
+	if (
+		previous.steps.every((step) => step.invocation.name === "call_engineer")
+	) {
+		return true
+	}
+
 	const resource = selectBackupResource(
 		input.incident,
 		(candidate) =>

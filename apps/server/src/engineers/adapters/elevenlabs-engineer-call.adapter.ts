@@ -56,11 +56,38 @@ const TERMINAL_FAILURE_STATUSES: ReadonlyMap<
 	string,
 	EngineerCallResult["outcome"]
 > = new Map([
+	["aborted", "failed"],
+	["busy", "no-answer"],
+	["canceled", "no-answer"],
+	["cancelled", "no-answer"],
+	["declined", "no-answer"],
 	["error", "failed"],
+	["expired", "no-answer"],
 	["failed", "failed"],
 	["failure", "failed"],
 	["no-answer", "no-answer"],
 	["no_answer", "no-answer"],
+	["rejected", "no-answer"],
+	["terminated", "failed"],
+	["timeout", "no-answer"],
+	["timed_out", "no-answer"],
+])
+
+/**
+ * Statuses that mean the conversation is still in flight. An empty status belongs here too: a
+ * partial response says nothing about the call. Every other status ends the call, so a hang-up
+ * or a provider abort settles on the next poll instead of ringing until the call timeout.
+ */
+const IN_FLIGHT_STATUSES: ReadonlySet<string> = new Set([
+	"",
+	"dialing",
+	"in-progress",
+	"in_progress",
+	"initiated",
+	"initializing",
+	"processing",
+	"queued",
+	"ringing",
 ])
 
 @Injectable()
@@ -234,11 +261,27 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 				return buildResult(body, null, failureOutcome, call.questions)
 			}
 
-			if (status !== "done" || !isRecord(body.analysis)) {
-				return null
+			if (status === "done") {
+				// The analysis lands a moment after the conversation ends; wait for it.
+				if (!isRecord(body.analysis)) {
+					return null
+				}
+				return buildResult(
+					body,
+					body.analysis,
+					"completed",
+					call.questions,
+				)
 			}
-
-			return buildResult(body, body.analysis, "completed", call.questions)
+			if (!IN_FLIGHT_STATUSES.has(status)) {
+				this.diagnostic(call, "result", startedAt, {
+					metadata: body.metadata,
+					stage: "conversation",
+					status,
+				})
+				return buildResult(body, null, "failed", call.questions)
+			}
+			return null
 		} catch (error) {
 			this.diagnostic(call, "result", startedAt, {
 				error,

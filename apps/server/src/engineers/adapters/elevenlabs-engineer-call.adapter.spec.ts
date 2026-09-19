@@ -150,6 +150,8 @@ describe("ElevenLabsEngineerCallAdapter", () => {
 					incident_description: "First sentence. Second sentence.",
 					location: "eu-west-1",
 					outage_time: "",
+					questions: "",
+					questions_count: "0",
 					services_down: "orders, tracking",
 				},
 			},

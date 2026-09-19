@@ -199,6 +199,10 @@ const es = {
   "placeholder.body":
     "Esta vista se conectará al mismo snapshot cuando el backend esté listo. Por ahora el diseño completo vive en Visión general.",
 
+  "plan.todos.progress": "{completed} de {total} tareas",
+  "plan.todos.completed": "{completed} de {total} tareas completadas",
+  "plan.todos.toggle": "Mostrar u ocultar las tareas del plan",
+
   "language.label": "Idioma",
   "language.es": "ES",
   "language.en": "EN",
@@ -390,6 +394,10 @@ const en: { [K in keyof typeof es]: string } = {
 
   "placeholder.body":
     "This view will connect to the same snapshot when the backend is ready. The full design currently lives in Overview.",
+
+  "plan.todos.progress": "{completed} of {total} To-dos",
+  "plan.todos.completed": "{completed} of {total} To-dos Completed",
+  "plan.todos.toggle": "Show or hide plan to-dos",
 
   "language.label": "Language",
   "language.es": "ES",

@@ -46,5 +46,11 @@ describe("i18n", () => {
     expect(translate("en", "agent.subagent.label", { name: "Iberdrola" })).toBe(
       "Subagent · Iberdrola",
     );
+    expect(translate("es", "plan.todos.progress", { completed: 1, total: 3 })).toBe(
+      "1 de 3 tareas",
+    );
+    expect(translate("en", "plan.todos.completed", { completed: 3, total: 3 })).toBe(
+      "3 of 3 To-dos Completed",
+    );
   });
 });

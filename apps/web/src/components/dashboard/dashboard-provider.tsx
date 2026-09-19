@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { CasaPepeClientError, casaPepeClient } from "@/lib/casa-pepe-client";
+import { isLlmActivityType } from "@/lib/agent-trace";
 import type { ActivityRecord, LearningInsight, Overview, RunReport } from "@/lib/casa-pepe-types";
 
 type DashboardStatus = "loading" | "active" | "error";
@@ -50,14 +51,44 @@ const ACTIVITY_EVENTS = [
   "agent.cycle-finished", "agent.limit-reached", "replay.started", "replay.finished",
 ] as const;
 
+function outputIdentifierOf(event: ActivityRecord): string {
+  const payload = event.payload;
+  const value = payload && typeof payload === "object" ? payload.outputIdentifier : null;
+  return typeof value === "string" && value.trim() ? value : "";
+}
+
+function compactActivity(events: ActivityRecord[]) {
+  const completed = new Set(
+    events
+      .filter((event) => isLlmActivityType(event.type) && event.type !== "agent.llm-output")
+      .map(outputIdentifierOf)
+      .filter(Boolean),
+  );
+  const kept = events.filter((event) => {
+    if (event.type !== "agent.llm-output") return true;
+    const id = outputIdentifierOf(event);
+    return !id || !completed.has(id);
+  });
+  const llm: ActivityRecord[] = [];
+  const other: ActivityRecord[] = [];
+  for (const event of kept) {
+    if (isLlmActivityType(event.type)) llm.push(event);
+    else other.push(event);
+  }
+  return [...llm, ...other.slice(-100)].toSorted((left, right) => {
+    if (left.sequence !== right.sequence) return left.sequence - right.sequence;
+    return left.identifier.localeCompare(right.identifier);
+  });
+}
+
 function mergeActivity(current: ActivityRecord[], incoming: ActivityRecord) {
   const existing = current.find((item) => item.identifier === incoming.identifier);
   if (existing) {
-    return current.map((item) => item.identifier === incoming.identifier
+    return compactActivity(current.map((item) => item.identifier === incoming.identifier
       ? { ...item, ...incoming, payload: incoming.payload ?? item.payload }
-      : item);
+      : item));
   }
-  return [...current, incoming].toSorted((left, right) => left.sequence - right.sequence).slice(-100);
+  return compactActivity([...current, incoming]);
 }
 
 function mergeActivityList(current: ActivityRecord[], incoming: ActivityRecord[]) {
@@ -79,6 +110,31 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const ensuringRun = useRef(false);
   const learningLoaded = useRef(false);
 
+  const loadLlmHistory = useCallback(async (runIdentifier: string, generation: number) => {
+    try {
+      let beforeSequence: number | undefined;
+      const pages: ActivityRecord[] = [];
+      for (let page = 0; page < 8; page += 1) {
+        const result = await casaPepeClient.llmHistory({
+          beforeSequence,
+          limit: 100,
+          runIdentifier,
+        });
+        if (!Array.isArray(result.items)) break;
+        pages.push(...result.items);
+        if (result.nextBeforeSequence == null) break;
+        beforeSequence = result.nextBeforeSequence;
+      }
+      if (generation !== startGeneration.current) return;
+      if (latestRunIdentifier.current !== runIdentifier) return;
+      startTransition(() => {
+        setActivity((current) => mergeActivityList(current, pages));
+      });
+    } catch {
+      // Live SSE still renders; older turns are additive history.
+    }
+  }, []);
+
   const applyOverview = useCallback((next: Overview) => {
     const nextSequence = Math.max(0, ...next.recentActivity.map((item) => item.sequence));
     const runChanged = latestRunIdentifier.current !== next.incident.runIdentifier;
@@ -92,7 +148,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       setError(null);
       setStatus("active");
     });
-  }, []);
+    if (runChanged && next.incident.runIdentifier) {
+      void loadLlmHistory(next.incident.runIdentifier, startGeneration.current);
+    }
+  }, [loadLlmHistory]);
 
   const loadLearning = useCallback(async () => {
     if (learningLoaded.current) return;

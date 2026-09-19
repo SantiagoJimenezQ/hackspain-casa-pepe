@@ -62,6 +62,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<DemoAction>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestRunIdentifier = useRef<string | null>(null);
   const latestSequence = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -73,10 +74,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       ]);
       if (overviewResult.status === "rejected") throw overviewResult.reason;
       const next = overviewResult.value;
-      latestSequence.current = Math.max(
-        latestSequence.current,
-        ...next.recentActivity.map((item) => item.sequence),
-      );
+      const nextSequence = Math.max(0, ...next.recentActivity.map((item) => item.sequence));
+      if (latestRunIdentifier.current !== next.incident.runIdentifier) {
+        latestRunIdentifier.current = next.incident.runIdentifier;
+        latestSequence.current = nextSequence;
+      } else {
+        latestSequence.current = Math.max(latestSequence.current, nextSequence);
+      }
       startTransition(() => {
         setOverview(next);
         setInsights(insightsResult.status === "fulfilled" ? insightsResult.value : []);
@@ -88,6 +92,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     } catch (cause) {
       const known = cause instanceof CasaPepeClientError ? cause : null;
       if (known?.status === 404) {
+        latestRunIdentifier.current = null;
+        latestSequence.current = 0;
         setOverview(null);
         setInsights([]);
         setReport(null);

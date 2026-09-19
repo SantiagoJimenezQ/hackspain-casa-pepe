@@ -24,7 +24,7 @@ export class CreateWebhookSubscriptionDTO {
 	@MaxLength(500)
 	description: string = ""
 
-	@ApiProperty({ example: "http://localhost:3001/api/casa-pepe/webhook" })
+	@ApiProperty({ example: "https://consumer.example.test/casa-pepe/events" })
 	@IsUrl({ require_tld: false })
 	targetURL: string
 

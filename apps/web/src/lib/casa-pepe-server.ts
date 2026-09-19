@@ -1,4 +1,5 @@
 import "server-only";
+import { normalizeCasaPepeAPIBaseURL } from "@/lib/casa-pepe-url";
 
 type BackendErrorBody = { message?: string | string[]; error?: string };
 
@@ -20,7 +21,7 @@ function apiRoot() {
       503,
     );
   }
-  return `${configured.replace(/\/$/, "")}${configured.endsWith("/api") ? "" : "/api"}`;
+  return normalizeCasaPepeAPIBaseURL(configured);
 }
 
 function apiKey() {

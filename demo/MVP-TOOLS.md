@@ -1,6 +1,6 @@
 # MVP tools rehearsal
 
-This implementation adds the eight agreed agent tools and an inbound phone-report flow to the NestJS runtime. No external calls or emails are sent by the setup or automated tests. The operations dashboard remains a separate integration; the endpoints below allow a backend rehearsal now.
+This implementation adds the eight agreed agent tools and an inbound phone-report flow to the NestJS runtime. No external calls or emails are sent by the setup or automated tests. The operations dashboard now consumes the same API through its server-side proxy; the endpoints below remain useful for a backend-only rehearsal.
 
 ## Configure
 
@@ -40,7 +40,7 @@ All routes except the public status feed and provider callbacks use the existing
 6. Read `GET /api/approvals?status=pending`, then approve the **current** database action through the existing `/api/approvals/<identifier>/decision` endpoint. Recovery only executes when its plan, service, dependencies and approval match.
 7. Read `GET /api/recovery/actions` and `GET /api/tools/calls`. Route verification must return a valid route for a test delivery in HTTP mode.
 8. Open `/api/status` in a second browser tab to see the public status page. Use its refresh link after publication; `/api/status/public` exposes the same snapshot as JSON. It contains only service names/statuses, timestamps, and demo/simulation labels. Status is published after verification steps finish; actions that merely report success are not advertised as verified recovery.
-9. Reset and repeat. Old run callbacks are rejected. Duplicate inbound webhook deliveries do not create another report or change confirmed capacity.
+9. Reset and repeat. Old run callbacks are rejected. Duplicate inbound webhook deliveries do not create another report or change confirmed capacity. For the operator UI, follow [apps/web/README.md](../apps/web/README.md) and use the Demo drawer instead of subscribing the browser to outbound webhooks.
 
 ## Real local recovery target
 
@@ -64,4 +64,4 @@ Run its integration test with `node --test demo/recovery-environment/server.test
 
 ## Remaining live validation
 
-Rehearse provider credentials, sender verification, phone number/workflow mapping, public callback reachability, real incoming/outgoing calls, operator inbox receipt, and dashboard integration before presenting. Unit and local HTTP tests do not prove any of those external integrations.
+Rehearse provider credentials, sender verification, phone number/workflow mapping, public callback reachability, real incoming/outgoing calls, operator inbox receipt, and the deployed dashboard before presenting. Unit and local HTTP tests do not prove any of those external integrations.

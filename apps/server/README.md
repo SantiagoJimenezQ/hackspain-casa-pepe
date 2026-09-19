@@ -4,7 +4,7 @@ Owner: harness and backend track, in coordination with the agent and integration
 
 Backend of **Casa Pepe**, the AI incident coordinator for HackSpain. It implements the `apps/server/` process described in the [root README](../../README.md) and the use case in [MASTER.md](../../MASTER.md): a meteorite takes down the `eu-west-1` region of a delivery company and the agent decides what to recover first with the backup capacity available, coordinates people, asks the operator for approval, executes the recovery and verifies it.
 
-Built with NestJS and TypeScript, persisted in **Supabase (Postgres)** through TypeORM, and it **notifies the frontend and every other consumer through signed webhooks**.
+Built with NestJS and TypeScript, persisted in **Supabase (Postgres)** through TypeORM. The Next.js dashboard reads the authenticated API and proxied SSE activity stream; other consumers can subscribe through signed outbound webhooks.
 
 ## Scope
 
@@ -64,8 +64,6 @@ Everything the operator reads follows the scenario language: service names, impa
 
 ```bash
 BASE=http://localhost:3000/api; AUTH="Authorization: API casa-pepe-local-api-key"
-curl -X POST $BASE/webhooks/subscriptions -H "$AUTH" -H "Content-Type: application/json" \
-  -d '{"name":"UI","targetURL":"http://localhost:3001/api/casa-pepe/webhook","secret":"a-secret-of-at-least-16-characters"}'
 curl -X POST $BASE/demo/start  -H "$AUTH" -H "Content-Type: application/json" -d '{"scenarioIdentifier":"meteorite-eu-west-1-es"}'   # 1. everything healthy (Spanish scenario)
 curl -X POST $BASE/demo/impact -H "$AUTH"      # 2. meteorite: the agent creates plan v1 and calls the engineer
 curl -X POST $BASE/demo/twist  -H "$AUTH"      # 5. backup capacity is insufficient: plan v2, approvals invalidated
@@ -108,7 +106,7 @@ The simulation configuration and state are shared in [`packages/contracts/simula
 
 ## Outbound webhooks
 
-Every activity event is delivered to the active subscriptions. The UI subscribes once and receives the live state.
+Every activity event is delivered to active outbound webhook subscriptions. The dashboard does not need a webhook subscription: it reads the authenticated overview and uses the SSE endpoint below through its own Next.js server route.
 
 - `POST` request with body `{ deliveryIdentifier, subscriptionIdentifier, attempt, sentAt, eventType, event }`, where `event` is the full activity record.
 - Headers `x-casa-pepe-event`, `x-casa-pepe-delivery`, `x-casa-pepe-timestamp` and `x-casa-pepe-signature`.
@@ -121,13 +119,13 @@ Every event carries `simulated` (simulated data or action) and `replayed` (repro
 
 ### Browser stream
 
-Webhooks reach the Next.js server, not the browser. For the browser the same events are available as server-sent events at `GET /api/activity/stream`. `EventSource` cannot send headers, so the API key goes in the query string: `new EventSource("/api/activity/stream?apiKey=<API_KEY>&afterSequence=0")`. The stream first replays the backlog after `afterSequence` and then pushes new events live; each message carries the event `type` and `id` equal to the sequence, so a reconnect can resume.
+The dashboard receives the same events through its server-side proxy at `GET /api/casa-pepe/activity/stream`. The proxy adds the backend API key before opening `GET /api/activity/stream`, so the key never reaches the browser. The backend stream first replays the backlog after `afterSequence` and then pushes new events live; each message carries the event `type` and `id` equal to the sequence, so a reconnect can resume.
 
 ## Inbound webhooks
 
 | Route | Header | Body |
 |---|---|---|
-| `POST /webhooks/happyrobot` | `x-happyrobot-signature: <HAPPYROBOT_WEBHOOK_SECRET>` | `{ callIdentifier, outcome: "completed"\|"failed"\|"no-answer", summary, transcript, answers: [{ key, answer }] }` |
+| `POST /webhooks/happyrobot` | `x-happyrobot-signature: <HAPPYROBOT_WEBHOOK_SECRET>` | `{ callIdentifier, outcome: "completed"\|"failed"\|"no-answer", summary, transcript, answers: [{ key, answer, confirmed? }] }` |
 | `POST /webhooks/recovery` | `x-recovery-signature: <RECOVERY_WEBHOOK_SECRET>` | `{ actionIdentifier, status: "succeeded"\|"partial"\|"failed", detail }` |
 
 When triggering the call, the service sends `HAPPYROBOT_TRIGGER_URL` the `call_identifier`, the engineer details, the questions with their `key` and the `callback_url`. The HappyRobot flow must return those same `key` values in `answers`. In `http` mode the recovery does `POST {RECOVERY_ENVIRONMENT_URL}/recovery/actions` and verifies with `GET {RECOVERY_ENVIRONMENT_URL}/recovery/services/:service/health`.

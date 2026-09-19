@@ -445,15 +445,15 @@ Post-incident **RunReport**:
 
 ```json
 {
-  "name": "Operations UI",
-  "description": "Next.js route handler",
-  "targetURL": "http://localhost:3001/api/casa-pepe/webhook",
+  "name": "Incident observer",
+  "description": "Downstream activity consumer",
+  "targetURL": "https://consumer.example.test/casa-pepe/events",
   "secret": "at-least-sixteen-characters",
   "eventTypes": ["plan.created", "plan.revised", "approval.requested"]
 }
 ```
 
-Empty or omitted `eventTypes` receives everything. Creating a subscription for a `targetURL` that already has an active one updates that subscription (name, secret, event types) instead of adding a duplicate, so a UI can call it on every start. Response: `WebhookSubscriptionRecord` (`identifier`, `name`, `description`, `targetURL`, `eventTypes`, `active`, `createdAt`, `updatedAt`). The secret is never returned.
+Empty or omitted `eventTypes` receives everything. Creating a subscription for a `targetURL` that already has an active one updates that subscription (name, secret, event types) instead of adding a duplicate. Response: `WebhookSubscriptionRecord` (`identifier`, `name`, `description`, `targetURL`, `eventTypes`, `active`, `createdAt`, `updatedAt`). The secret is never returned.
 
 ### `GET /webhooks/subscriptions`, `GET /webhooks/subscriptions/:identifier`
 
@@ -597,7 +597,7 @@ POST /approvals/:id/decision approve
   → agent.cycle-finished: recovered / pending / next step
 ```
 
-Every activity event is persisted, delivered through webhooks to the subscriptions and queryable at `GET /activity` with its correlation identifiers.
+Every activity event is persisted, delivered through webhooks to the subscriptions, and queryable at `GET /activity` with its correlation identifiers. The Next.js dashboard reads the same activity through `GET /activity/stream` via its server-side proxy; it does not register an outbound webhook subscription.
 
 ## MVP communications and incoming calls
 

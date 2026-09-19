@@ -38,3 +38,13 @@ Plan validation checks identifiers, arguments, dependency structure, capacity an
 8. Enable HappyRobot or email only for the intended live demo recipients and verify the external effect.
 
 Unit and integration tests use explicitly injected scripted model responses. These prove orchestration and guard behavior, not live model quality or Helmcode compatibility. The previous planner is retained solely as a test fixture/reference. This is a single-coordinator hackathon runtime; distributed scheduling and cancellation of already dispatched provider actions are not supplied.
+
+## Public summary streaming (feature flag)
+
+Set `LLM_STREAM_OUTPUT=true` on the backend and restart to request provider SSE streaming. Default `false` preserves the non-streaming request. The provider must support OpenAI-compatible chat completion streaming; failures pause the cycle rather than retrying and risking duplicate decisions.
+
+The existing authenticated `/api/activity/stream` and Next.js proxy deliver `agent.llm-output` activity records as the model emits public assistant content. These are **provisional summaries**, not private chain of thought or executed actions. Reasoning fields and partial tool arguments are never forwarded. The dashboard activity feed displays the draft fragments live without fetching a full overview per fragment.
+
+Payload: `{ outputIdentifier, turn, text, provisional: true }`. Append `text` in activity sequence order and deduplicate by sequence on reconnect. The first fragment is emitted immediately; subsequent fragments are batched at 160 characters, with a final flush and a 2,000-character public output limit per turn. Output is persisted like other activity for replay. Correlate terminal `agent.llm-decision`, `agent.llm-failed`, or `agent.llm-stale` via `outputIdentifier`; discard provisional output on failure or stale evidence. The final decision summary remains authoritative.
+
+Tools execute only after the stream terminates, the complete response is validated, and current incident state is rechecked. Missing termination, malformed or oversized output, truncation, and timeouts pause autonomous decisions. Disable the flag to roll back without frontend changes.

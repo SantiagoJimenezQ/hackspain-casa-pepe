@@ -906,3 +906,29 @@ describe("LlmLoopService", () => {
 		expect(configuration.agent.maximumStepsPerCycle).toBe(1)
 	})
 })
+
+it("correlates provisional public output with the final decision before executing tools", async () => {
+	const { service, client, activity } = createHarness()
+	const actions = createActions(() => createState())
+	client.complete.mockImplementation(async (_messages, _tools, onText) => {
+		await onText("Waiting for capacity confirmation")
+		expect(actions.execute).not.toHaveBeenCalled()
+		return completion([
+			toolCall("wait_for_input", {
+				reason: "Capacity confirmation pending",
+			}),
+		])
+	})
+	await service.run(actions)
+	const records = activityInputs(activity)
+	const draft = records.find((record) => record.type === "agent.llm-output")
+	const final = records.find((record) => record.type === "agent.llm-decision")
+	expect(draft?.payload).toMatchObject({
+		provisional: true,
+		text: "Waiting for capacity confirmation",
+		turn: 0,
+	})
+	expect(final?.payload.outputIdentifier).toBe(
+		draft?.payload.outputIdentifier,
+	)
+})

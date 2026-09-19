@@ -77,6 +77,7 @@ export interface AgentConfiguration {
 export type LlmReasoningEffort = (typeof LLM_REASONING_EFFORTS)[number]
 
 export interface LlmConfiguration {
+	readonly streamOutput?: boolean
 	readonly baseURL: string
 	readonly apiKey: string
 	readonly model: string

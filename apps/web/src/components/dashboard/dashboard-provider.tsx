@@ -39,6 +39,7 @@ type DashboardContextValue = {
 const DashboardContext = createContext<DashboardContextValue | null>(null);
 
 const ACTIVITY_EVENTS = [
+  "agent.llm-output",
   "agent.llm-decision", "agent.llm-failed", "agent.llm-stale", "agent.llm-rejected",
   "engineer-call.incoming", "incident.run-started", "incident.impact-detected",
   "incident.event-applied", "incident.status-changed", "incident.run-reset",
@@ -155,7 +156,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         const event = JSON.parse(message.data) as ActivityRecord;
         latestSequence.current = Math.max(latestSequence.current, event.sequence);
         startTransition(() => setActivity((current) => mergeActivity(current, event)));
-        scheduleRefresh();
+        if (event.type !== "agent.llm-output") scheduleRefresh();
       } catch {
         // A malformed event must not stop the remainder of the live demo stream.
       }

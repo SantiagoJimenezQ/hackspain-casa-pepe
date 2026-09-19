@@ -4,8 +4,8 @@ import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
 import { insertEntity, updateEntity } from "@common/database/persistence.helper"
 import { StaleRunException } from "@common/exceptions/domain.exception"
 import { nowISO } from "@common/helpers/clock.helper"
-import { ConfigurationService } from "@common/services/configuration.service"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
+import { ConfigurationService } from "@common/services/configuration.service"
 import { IncidentEntity } from "@incidents/entities/incident.entity"
 import {
 	applyImpact,

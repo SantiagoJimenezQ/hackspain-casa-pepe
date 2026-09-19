@@ -7,6 +7,8 @@ process.env.API_KEY = randomBytes(32).toString("hex")
 process.env.HAPPYROBOT_WEBHOOK_SECRET = randomBytes(32).toString("hex")
 process.env.RECOVERY_WEBHOOK_SECRET = randomBytes(32).toString("hex")
 process.env.HAPPYROBOT_MODE = "simulated"
+// Pinned so a developer's .env.local cannot change what the approval tests exercise.
+process.env.AGENT_REQUIRE_OPERATOR_APPROVAL = "true"
 process.env.ENGINEER_CALL_PROVIDER = "happyrobot"
 process.env.ENGINEER_CALL_MODE = "simulated"
 process.env.RECOVERY_MODE = "simulated"

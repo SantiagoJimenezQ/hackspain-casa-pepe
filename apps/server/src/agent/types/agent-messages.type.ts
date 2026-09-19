@@ -113,6 +113,33 @@ export interface AgentMessages {
 	specialistTurnBudgetReached: string
 	/** Shown when the provider left the cycle without a decision. */
 	providerUnavailable(detail: string): string
+	/** Activity summary for capacity committed to a service. */
+	capacityAllocated(
+		units: number,
+		unit: string,
+		serviceName: string,
+		remaining: number,
+	): string
+	/** Activity summary for a fact the agent recorded. */
+	factRecorded(status: string, statement: string, source: string): string
+	/** Activity summary for a recovery the independent check confirmed. */
+	recoveryVerified(serviceName: string, mode: string): string
+	/** Activity summary for a recovery the independent check did not confirm. */
+	recoveryNotVerified(
+		serviceName: string,
+		status: string,
+		detail: string,
+	): string
+	/** Activity summary for a recovery action the environment ran. */
+	recoveryExecuted(
+		actionDescription: string,
+		outcome: string,
+		detail: string,
+	): string
+	/** Activity summary for the meteorite impact the harness injected. */
+	harnessImpact: string
+	/** Activity summary for the harness limiting the backup capacity. */
+	harnessCapacityLimited(units: number, reason: string): string
 	readonly toolWithoutResult: string
 	factsConfirmed(count: number, mode: string): string
 	taskCreated(taskIdentifier: string): string

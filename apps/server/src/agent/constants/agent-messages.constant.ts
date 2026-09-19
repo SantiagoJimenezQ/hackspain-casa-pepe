@@ -24,6 +24,12 @@ const MODE_LABELS_ES: Record<string, string> = {
 	simulated: "simulado",
 }
 
+const FACT_STATUS_LABELS_ES: Record<string, string> = {
+	confirmed: "confirmado",
+	pending: "pendiente",
+	refuted: "descartado",
+}
+
 const OUTCOME_LABELS_ES: Record<string, string> = {
 	failure: "fallida",
 	partial: "parcial",
@@ -74,6 +80,8 @@ const ENGLISH: AgentMessages = {
 		"The on-call engineer authorized diverting traffic to the backup region",
 	awaitingEngineerCall:
 		"Waiting for the on-call engineer to confirm the pending facts before committing capacity",
+	capacityAllocated: (units, unit, serviceName, remaining) =>
+		`${units} ${unit} committed to ${serviceName}, ${remaining} left`,
 	capacityConfirmed: (units, reason) =>
 		`Backup capacity confirmed at ${units} units: ${reason}`,
 	changeBackInPlan: (serviceName, reason) =>
@@ -111,12 +119,17 @@ const ENGLISH: AgentMessages = {
 	engineerUnreachable: (pendingFacts) =>
 		`The engineer could not be reached after the allowed attempts. The plan continues with ${pendingFacts} unconfirmed ${pendingFacts === 1 ? "fact" : "facts"} and asks for confirmation by another channel`,
 	expectedSingleToolCall: "Expected exactly one declared tool call",
+	factRecorded: (status, statement, source) =>
+		`${status}: ${statement} (${source})`,
 	factsConfirmed: (count, mode) =>
 		`${count} facts confirmed by the engineer in ${mode} mode`,
 	followUpTaskDescription: (serviceIdentifier, detail) =>
 		`${serviceIdentifier} answers but is degraded: ${detail}. Finish the recovery and confirm when healthy.`,
 	followUpTaskTitle: (serviceIdentifier) =>
 		`Finish partial recovery of ${serviceIdentifier}`,
+	harnessCapacityLimited: (units, reason) =>
+		`Backup capacity limited to ${units} units: ${reason}`,
+	harnessImpact: "Meteorite impact: the primary region is offline",
 	healthyNoAction: "Healthy, no action needed",
 	historicalCapacityAssumption: (reportedUnits, assumedUnits, unit, runs) =>
 		`The dashboard reports ${reportedUnits} ${unit} but in ${runs} previous ${runs === 1 ? "run" : "runs"} only ${assumedUnits} were really available. Planning with ${assumedUnits} until the capacity is confirmed`,
@@ -161,12 +174,18 @@ const ENGLISH: AgentMessages = {
 	recoveredAndVerified: "Recovered and verified with an independent check",
 	recoverNow: (impact, impactDescription, units, unit) =>
 		`${IMPACT_LABELS_EN[impact]} impact: ${impactDescription}. Uses ${units} ${unit}`,
+	recoveryExecuted: (actionDescription, outcome, detail) =>
+		`${actionDescription}: ${outcome}. ${detail}`,
 	recoveryFailed: (mode, detail) =>
 		`Recovery failed in ${mode} mode: ${detail}`,
 	recoveryFailedConstraint: (reason) => `Recovery failed: ${reason}`,
 	recoveryInProgress: "Recovery already in progress with capacity reserved",
+	recoveryNotVerified: (serviceName, status, detail) =>
+		`${serviceName} is ${status} after the recovery: ${detail}`,
 	recoveryPendingVerification: (outcome, mode) =>
 		`Recovery ${outcome} in ${mode} mode. Pending verification`,
+	recoveryVerified: (serviceName, mode) =>
+		`${serviceName} verified healthy through an independent check (${mode})`,
 	rejectedBy: (name, comment) => withComment(`Rejected by ${name}`, comment),
 	rejectedConstraint: (name, comment) =>
 		`${withComment(`Rejected by ${name}`, comment)}. The agent respects the operator decision`,
@@ -259,6 +278,8 @@ const SPANISH: AgentMessages = {
 		"La ingeniera de guardia autorizó desviar el tráfico a la región de respaldo",
 	awaitingEngineerCall:
 		"A la espera de que la ingeniera de guardia confirme los hechos pendientes antes de comprometer capacidad",
+	capacityAllocated: (units, unit, serviceName, remaining) =>
+		`${units} ${unit} comprometidas en ${serviceName}, quedan ${remaining}`,
 	capacityConfirmed: (units, reason) =>
 		`Capacidad de respaldo confirmada en ${units} unidades: ${reason}`,
 	changeBackInPlan: (serviceName, reason) =>
@@ -298,12 +319,18 @@ const SPANISH: AgentMessages = {
 		`No se pudo contactar con la ingeniera tras los intentos permitidos. El plan continúa con ${pendingFacts} ${pendingFacts === 1 ? "hecho sin confirmar" : "hechos sin confirmar"} y pide confirmación por otro canal`,
 	expectedSingleToolCall:
 		"Se esperaba exactamente una llamada a herramienta declarada",
+	factRecorded: (status, statement, source) =>
+		`${labelOr(FACT_STATUS_LABELS_ES, status)}: ${statement} (${source})`,
 	factsConfirmed: (count, mode) =>
 		`${count} hechos confirmados por la ingeniera en modo ${labelOr(MODE_LABELS_ES, mode)}`,
 	followUpTaskDescription: (serviceIdentifier, detail) =>
 		`${serviceIdentifier} responde pero está degradado: ${detail}. Terminar la recuperación y confirmar cuando esté sano.`,
 	followUpTaskTitle: (serviceIdentifier) =>
 		`Terminar la recuperación parcial de ${serviceIdentifier}`,
+	harnessCapacityLimited: (units, reason) =>
+		`La capacidad de respaldo baja a ${units} unidades: ${reason}`,
+	harnessImpact:
+		"Impacto de meteorito: la región principal está fuera de servicio",
 	healthyNoAction: "Sano, no requiere acción",
 	historicalCapacityAssumption: (reportedUnits, assumedUnits, unit, runs) =>
 		`El panel indica ${reportedUnits} ${unit}, pero en ${runs} ${runs === 1 ? "ejecución anterior" : "ejecuciones anteriores"} solo había ${assumedUnits} disponibles. Se planifica con ${assumedUnits} hasta confirmar la capacidad`,
@@ -350,12 +377,18 @@ const SPANISH: AgentMessages = {
 		"Recuperado y verificado con una comprobación independiente",
 	recoverNow: (impact, impactDescription, units, unit) =>
 		`Impacto ${IMPACT_LABELS_ES[impact]}: ${impactDescription}. Usa ${units} ${unit}`,
+	recoveryExecuted: (actionDescription, outcome, detail) =>
+		`${actionDescription}: ${labelOr(OUTCOME_LABELS_ES, outcome)}. ${detail}`,
 	recoveryFailed: (mode, detail) =>
 		`La recuperación falló en modo ${labelOr(MODE_LABELS_ES, mode)}: ${detail}`,
 	recoveryFailedConstraint: (reason) => `La recuperación falló: ${reason}`,
 	recoveryInProgress: "Recuperación ya en curso con capacidad reservada",
+	recoveryNotVerified: (serviceName, status, detail) =>
+		`${serviceName} sigue ${labelOr(STATUS_LABELS_ES, status)} después de la recuperación: ${detail}`,
 	recoveryPendingVerification: (outcome, mode) =>
 		`Recuperación ${labelOr(OUTCOME_LABELS_ES, outcome)} en modo ${labelOr(MODE_LABELS_ES, mode)}. Pendiente de verificación`,
+	recoveryVerified: (serviceName, mode) =>
+		`${serviceName} verificado saludable por una comprobación independiente (${labelOr(MODE_LABELS_ES, mode)})`,
 	rejectedBy: (name, comment) =>
 		withComment(`Rechazado por ${name}`, comment),
 	rejectedConstraint: (name, comment) =>

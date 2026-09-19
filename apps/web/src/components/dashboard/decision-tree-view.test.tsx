@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DecisionTreeView from './decision-tree-view';
+import { LocaleProvider } from '@/components/i18n/locale-provider';
 import type { ActivityRecord } from '@/lib/casa-pepe-types';
 const fixture = vi.hoisted(() => ({ run: 'one', events: [] as ActivityRecord[] }));
 vi.mock('./dashboard-provider', () => ({ useDashboard: () => ({ overview: { incident: { runIdentifier: fixture.run, startedAt: '2026-09-19T10:00:00Z', title: 'Test incident' }, recentActivity: [] }, activity: fixture.events, decisionEvents: [] }) }));
@@ -13,7 +14,7 @@ beforeEach(() => {
 });
 describe('decision tree view', () => {
   it('opens an accessible empty view and closes with the close button', async () => {
-    const close = vi.fn(); render(<DecisionTreeView onClose={close} />);
+    const close = vi.fn(); render(<LocaleProvider><DecisionTreeView onClose={close} /></LocaleProvider>);
     expect(screen.getByRole('dialog', { name: 'Árbol de decisiones' })).toBeVisible();
     await screen.findByText('Esperando la primera decisión');
     expect(screen.getByRole('button', { name: 'Reproducir recorrido' })).toBeDisabled();
@@ -21,7 +22,7 @@ describe('decision tree view', () => {
     expect(close).toHaveBeenCalledOnce();
   });
   it('selects a postponed branch and exposes its recorded reason and source', async () => {
-    fixture.events = [plan]; render(<DecisionTreeView onClose={vi.fn()} />);
+    fixture.events = [plan]; render(<LocaleProvider><DecisionTreeView onClose={vi.fn()} /></LocaleProvider>);
     fireEvent.click(screen.getByRole('button', { name: /Aplazado Reports/ }));
     expect(screen.getByRole('heading', { name: 'Reports' })).toBeVisible();
     expect(screen.getByLabelText('Detalle del hito seleccionado')).toHaveTextContent('No capacity');
@@ -30,9 +31,9 @@ describe('decision tree view', () => {
     await waitFor(() => expect(screen.getByText(/En directo/)).toBeVisible());
   });
   it('discards the old run when the incident resets', async () => {
-    fixture.events = [plan]; const view = render(<DecisionTreeView onClose={vi.fn()} />);
+    fixture.events = [plan]; const view = render(<LocaleProvider><DecisionTreeView onClose={vi.fn()} /></LocaleProvider>);
     await waitFor(() => expect(screen.getByText(/En directo/)).toBeVisible());
-    fixture.run = 'two'; view.rerender(<DecisionTreeView onClose={vi.fn()} />);
+    fixture.run = 'two'; view.rerender(<LocaleProvider><DecisionTreeView onClose={vi.fn()} /></LocaleProvider>);
     await screen.findByText('Esperando la primera decisión');
     expect(screen.queryByText('Reports')).not.toBeInTheDocument();
   });

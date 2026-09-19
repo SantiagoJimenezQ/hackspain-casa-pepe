@@ -1,4 +1,6 @@
 import { ActivityService } from "@activity/services/activity.service"
+import { AGENT_MESSAGES } from "@agent/constants/agent-messages.constant"
+import { AgentMessages } from "@agent/types/agent-messages.type"
 import { DOMAIN_EVENTS } from "@common/constants/domain-events.constant"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
 import { insertEntity, updateEntity } from "@common/database/persistence.helper"
@@ -396,7 +398,10 @@ export class IncidentsService {
 			runIdentifier: snapshot.runIdentifier,
 			simulated: true,
 			source: "harness",
-			summary: describeHarnessEvent(harnessEvent),
+			summary: describeHarnessEvent(
+				harnessEvent,
+				this.messagesFor(entity),
+			),
 			title: "Harness event applied",
 			type: "incident.event-applied",
 		})
@@ -483,7 +488,12 @@ export class IncidentsService {
 			runIdentifier: entity.runIdentifier,
 			simulated: true,
 			source: "harness",
-			summary: `${request.units} ${resource.unit} allocated to ${request.serviceIdentifier}, ${remaining - request.units} remaining`,
+			summary: this.messagesFor(entity).capacityAllocated(
+				request.units,
+				resource.unit,
+				nameOfService(entity, request.serviceIdentifier),
+				remaining - request.units,
+			),
 			title: "Capacity allocated",
 			type: "resource.capacity-changed",
 		})
@@ -599,7 +609,11 @@ export class IncidentsService {
 			runIdentifier,
 			simulated: false,
 			source: "agent",
-			summary: `${status}: ${statement} (${source})`,
+			summary: this.messagesFor(entity).factRecorded(
+				status,
+				statement,
+				source,
+			),
 			title: "Fact recorded",
 			type: "fact.recorded",
 		})
@@ -662,6 +676,33 @@ export class IncidentsService {
 		entity.updatedAt = nowISO()
 		await updateEntity(this.repository, entity)
 		return entity.agentCycles
+	}
+
+	/** Everything an operator reads about a run is written in the language of its scenario. */
+	async messagesForRun(runIdentifier: string): Promise<AgentMessages> {
+		return this.messagesFor(
+			await this.runsService.getEntityByRunIdentifier(runIdentifier),
+		)
+	}
+
+	/** The name an operator reads for a service; the identifier only when the run has no such service. */
+	async serviceNameOf(
+		runIdentifier: string,
+		serviceIdentifier: string,
+	): Promise<string> {
+		const entity =
+			await this.runsService.getEntityByRunIdentifier(runIdentifier)
+		const service = entity.services.find(
+			(candidate) => candidate.identifier === serviceIdentifier,
+		)
+		return service ? service.name : serviceIdentifier
+	}
+
+	private messagesFor(entity: IncidentEntity): AgentMessages {
+		return AGENT_MESSAGES[
+			this.scenariosService.getByIdentifier(entity.scenarioIdentifier)
+				.language
+		]
 	}
 
 	getScenario(scenarioIdentifier: string): ScenarioDefinition {
@@ -891,12 +932,25 @@ export class IncidentsService {
 	}
 }
 
-export function describeHarnessEvent(harnessEvent: HarnessEvent): string {
+function nameOfService(entity: IncidentEntity, serviceIdentifier: string) {
+	const service = entity.services.find(
+		(candidate) => candidate.identifier === serviceIdentifier,
+	)
+	return service ? service.name : serviceIdentifier
+}
+
+export function describeHarnessEvent(
+	harnessEvent: HarnessEvent,
+	messages: AgentMessages,
+): string {
 	switch (harnessEvent.type) {
 		case "meteorite-impact":
-			return "Meteorite impact: the primary region is offline"
+			return messages.harnessImpact
 		case "capacity-limited":
-			return `Backup capacity limited to ${harnessEvent.availableCapacity} units: ${harnessEvent.reason}`
+			return messages.harnessCapacityLimited(
+				harnessEvent.availableCapacity,
+				harnessEvent.reason,
+			)
 		case "service-health-changed":
 			return `${harnessEvent.serviceIdentifier} changed to ${harnessEvent.status}: ${harnessEvent.reason}`
 		case "fact-reported":

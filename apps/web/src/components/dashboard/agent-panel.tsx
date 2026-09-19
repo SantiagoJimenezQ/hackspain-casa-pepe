@@ -168,13 +168,17 @@ function ProposedTool({
   const input = call.arguments && typeof call.arguments === "object" && !Array.isArray(call.arguments)
     ? (call.arguments as Record<string, unknown>)
     : { arguments: call.arguments };
+  // A proposal the run already settled reads in the past: "waited for news", never
+  // "waiting for news" on a finished incident.
+  const settled = state === "output-available" || state === "output-error";
+  const status = settled ? "succeeded" : "running";
   return (
     <Tool>
       <ToolHeader
         type="dynamic-tool"
         toolName={call.name}
         state={state}
-        title={toolTitle({ name: call.name, input }, [], locale)}
+        title={toolTitle({ input, name: call.name, status }, [], locale)}
       />
       <ToolContent>
         <ToolInput input={input} />

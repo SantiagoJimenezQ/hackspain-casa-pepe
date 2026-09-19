@@ -14,9 +14,15 @@ import {
 } from "@scenarios/types/scenario.type"
 import { SimulationState } from "@scenarios/types/simulation.type"
 
+/**
+ * `requireOperatorApproval` false waives every scenario-mandated approval, so a deployment can
+ * run the recovery end to end without a human gate. The scenario still records which actions
+ * would need one, so turning it back on restores the gate.
+ */
 export function buildBaselineServices(
 	scenario: ScenarioDefinition,
 	timestamp: string,
+	requireOperatorApproval = true,
 ): ServiceState[] {
 	return scenario.services.map((service) => ({
 		businessImpact: service.businessImpact,
@@ -30,7 +36,8 @@ export function buildBaselineServices(
 		recoveryActionKind: service.recoveryAction.kind,
 		recoveryCapacityUnits: service.recoveryCapacityUnits,
 		recoveryConsequences: service.recoveryAction.consequences,
-		recoveryRequiresApproval: service.recoveryAction.requiresApproval,
+		recoveryRequiresApproval:
+			service.recoveryAction.requiresApproval && requireOperatorApproval,
 		simulatedOutcome: service.simulatedRecovery.outcome,
 		simulatedOutcomeDetail: service.simulatedRecovery.detail,
 		status: "healthy",

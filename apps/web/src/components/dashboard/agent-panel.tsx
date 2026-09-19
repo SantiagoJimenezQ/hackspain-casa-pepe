@@ -24,6 +24,7 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
 import {
+  agentSettled,
   approvalRemainderTitle,
   buildTranscript,
   completedReasoningLabel,
@@ -120,7 +121,7 @@ const PEPE_EYES = [
 ];
 
 /** A long dwell at each side, so he reads as watching the door rather than twitching. */
-const PUPIL_KEYFRAMES = ["0%", "62%", "62%", "-62%", "-62%", "0%"];
+const PUPIL_KEYFRAMES = ["0%", "-62%", "-62%", "62%", "62%", "0%"];
 const PUPIL_TIMES = [0, 0.16, 0.4, 0.56, 0.8, 1];
 
 /** Pepe waiting for something to happen: he looks from side to side until the incident starts. */
@@ -470,6 +471,7 @@ export function AgentPanel() {
   }, [overview, activity]);
 
   const plan = overview?.plan.kind === "plan" ? overview.plan.plan : null;
+  const runSettled = Boolean(overview && agentSettled(overview));
   const live = Boolean(overview && (overview.agent.cycleInProgress || (work?.kind === "tool" && work.state === "input-available")));
   const planStreaming = Boolean(
     overview?.agent.cycleInProgress && (
@@ -502,8 +504,8 @@ export function AgentPanel() {
       </div>
       {treeOpen ? <DecisionTreeView onClose={() => setTreeOpen(false)} /> : null}
       {plan ? (
-        <div className="shrink-0 px-4 pb-2">
-          <PlanTodosCard plan={plan} streaming={planStreaming} />
+        <div className="shrink-0 border-b border-border/60 px-4 pb-3">
+          <PlanTodosCard plan={plan} streaming={planStreaming} settled={runSettled} />
         </div>
       ) : null}
       {items.length ? null : (
@@ -515,8 +517,16 @@ export function AgentPanel() {
       )}
       <MessageScrollerProvider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={48}>
         <MessageScroller className={cn("min-h-0 flex-1", items.length ? "" : "hidden")}>
-          <MessageScrollerViewport className="px-4" aria-label={t("agent.workLabel")}>
-            <MessageScrollerContent className="gap-0.5 py-1 pb-4" aria-busy={live}>
+          <MessageScrollerViewport className="px-4" fade={false} aria-label={t("agent.workLabel")}>
+            {/*
+              While the run is live this is a chat: the newest row sits at the bottom, where the
+              auto-scroll keeps it. Once it is closed the list is the whole record of the run, so
+              it spreads over the panel instead of leaving a hole at one end.
+            */}
+            <MessageScrollerContent
+              className={cn("gap-0.5 py-2", runSettled ? "justify-between" : "justify-end")}
+              aria-busy={live}
+            >
               {items.map((item) => (
                 <MessageScrollerItem key={transcriptKey(item)} messageId={transcriptKey(item)} className="[content-visibility:visible]">
                   <TranscriptItemView

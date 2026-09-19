@@ -22,6 +22,17 @@ export function incidentImpacted(incident: Pick<Incident, "impactedAt" | "status
 }
 
 /**
+ * The companies attended first, in this exact order, mirroring CUSTOMER_PRIORITY_ORDER on the
+ * server. Anything not listed queues behind them.
+ */
+const COMPANY_PRIORITY: ReadonlyArray<string> = ["purehealth", "emirates-nbd", "happyrobot"];
+
+function companyRank(identifier: string) {
+  const place = COMPANY_PRIORITY.indexOf(identifier);
+  return place === -1 ? COMPANY_PRIORITY.length : place;
+}
+
+/**
  * The fixed recovery order by sector, mirroring CUSTOMER_SECTOR_PRIORITY on the server: health
  * first, then finance, then logistics, then every other sector. Names are listed in both
  * languages and compared without accents.
@@ -89,11 +100,16 @@ export function customerViewOrdered(overview: Overview, activity: ReadonlyArray<
       if (byAction !== 0) return byAction;
       if (left.recoveryStartedAt !== null && right.recoveryStartedAt !== null) {
         if (left.recoveryStartedAt !== right.recoveryStartedAt) return left.recoveryStartedAt - right.recoveryStartedAt;
+        // Companies that came back on the same recovery are tied, so the fixed order decides.
+        const tied = companyRank(left.customer.identifier) - companyRank(right.customer.identifier);
+        if (tied !== 0) return tied;
         return left.customer.identifier.localeCompare(right.customer.identifier);
       }
       if (left.recoveryStartedAt !== null) return -1;
       if (right.recoveryStartedAt !== null) return 1;
       // Nothing has started for either: they queue in the order recovery will take them.
+      const byCompany = companyRank(left.customer.identifier) - companyRank(right.customer.identifier);
+      if (byCompany !== 0) return byCompany;
       const bySector = sectorRank(left.customer.sector) - sectorRank(right.customer.sector);
       if (bySector !== 0) return bySector;
       return left.scenarioIndex - right.scenarioIndex;

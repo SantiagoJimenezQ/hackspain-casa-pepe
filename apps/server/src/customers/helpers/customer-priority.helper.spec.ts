@@ -1,3 +1,4 @@
+import { CUSTOMER_PRIORITY_ORDER } from "@customers/constants/customer-priority.constant"
 import {
 	prioritizeCustomers,
 	sectorRank,
@@ -36,16 +37,26 @@ function action(
 }
 
 describe("prioritizeCustomers", () => {
+	it("always attends PureHealth, then Emirates NBD, then HappyRobot", () => {
+		const report = prioritizeCustomers(createImpactedIncident(7), [], NOW)
+
+		expect(
+			report.customers.slice(0, 3).map((customer) => customer.identifier),
+		).toEqual(["purehealth", "emirates-nbd", "happyrobot"])
+		expect(
+			report.customers.slice(0, 3).map((customer) => customer.rank),
+		).toEqual([1, 2, 3])
+	})
+
 	it("recovers health, then finance, then logistics, before any other sector", () => {
 		const report = prioritizeCustomers(createImpactedIncident(7), [], NOW)
 
-		const tiers = report.customers.map((customer) =>
-			sectorRank(customer.sector),
-		)
+		// The three named companies already head the list; the rest follow by sector.
+		const rest = report.customers.slice(CUSTOMER_PRIORITY_ORDER.length)
+		const tiers = rest.map((customer) => sectorRank(customer.sector))
 		expect(tiers).toEqual(
 			[...tiers].sort((first, second) => first - second),
 		)
-		expect(sectorRank(report.customers[0].sector)).toBe(0)
 		expect(report.customers[0].sector).toBe("Healthcare")
 	})
 

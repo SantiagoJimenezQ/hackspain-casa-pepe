@@ -71,8 +71,10 @@ export function ActiveCallBanner() {
     <DraggableOverlay className="right-2 top-2 z-30">
       <AnimatePresence>
         {view ? (
+          // One card at a time, so the key never changes: the card stays exactly where it was
+          // dragged and never replays its entrance when the call moves from ringing to ended.
           <CallCard
-            key={view.identifier}
+            key="active-call"
             view={view}
             title={title}
             subtitle={subtitle}

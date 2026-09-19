@@ -8,7 +8,10 @@ import {
 	CUSTOMER_RANKING_SYSTEM_PROMPT,
 	CUSTOMER_RANKING_TOOL_NAME,
 } from "@customers/constants/customer-priority.constant"
-import { sectorRank } from "@customers/helpers/customer-priority.helper"
+import {
+	companyRank,
+	sectorRank,
+} from "@customers/helpers/customer-priority.helper"
 import {
 	CustomerPriority,
 	CustomerPriorityReport,
@@ -282,6 +285,8 @@ export class CustomerRankingLlmService {
 			})
 			.sort(
 				(left, right) =>
+					companyRank(left.identifier) -
+						companyRank(right.identifier) ||
 					sectorRank(left.sector) - sectorRank(right.sector) ||
 					left.rank - right.rank,
 			)

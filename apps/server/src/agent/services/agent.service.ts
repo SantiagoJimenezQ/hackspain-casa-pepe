@@ -423,6 +423,20 @@ export class AgentService {
 		return this.incidentsService.getScenario(incident.scenarioIdentifier)
 	}
 
+	/** A step the agent still owes: proposed and dispatchable, running, or waiting on approval. */
+	private async planHasOpenWork(runIdentifier: string): Promise<boolean> {
+		const plan = await this.plansService.findActivePlan(runIdentifier)
+		if (!plan) {
+			return false
+		}
+		return plan.steps.some(
+			(step) =>
+				step.status === "proposed" ||
+				step.status === "running" ||
+				step.status === "awaiting-approval",
+		)
+	}
+
 	private messagesFor(incident: IncidentSnapshot): AgentMessages {
 		return AGENT_MESSAGES[this.scenarioOf(incident).language]
 	}
@@ -455,15 +469,20 @@ export class AgentService {
 			}
 		}
 		// Every service is healthy again, so there is nothing left to investigate, plan or
-		// verify. A service that breaks again moves the incident out of this status and the
-		// agent wakes up with it.
-		if (incident.status === "recovered") {
+		// verify. The plan still gets to finish: a communication or a task the agent committed
+		// to outlives the last recovery, and leaving it open would strand the run showing work
+		// in progress on a closed incident. A service that breaks again moves the incident out
+		// of this status and the agent wakes up with it.
+		if (
+			incident.status === "recovered" &&
+			!(await this.planHasOpenWork(runIdentifier))
+		) {
 			this.logger.log(LOG_MESSAGES.AGENT.CYCLE_SKIPPED_RECOVERED, {
 				runIdentifier,
 			})
 			return {
 				kind: "skipped",
-				reason: "The incident is recovered; every service is healthy",
+				reason: "The incident is recovered and the plan is finished",
 			}
 		}
 		const messages = this.messagesFor(incident)

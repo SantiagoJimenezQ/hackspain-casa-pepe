@@ -776,26 +776,17 @@ describe("agent trace", () => {
       ...overview,
       incident: { ...overview.incident, status: "recovered", resolvedAt: "2026-09-19T10:02:00.000Z" },
     } as Overview;
-    const activity: ActivityRecord[] = [
-      {
+    const events = [
+      activity({
         identifier: "act-1",
-        runIdentifier: "run_1",
-        incidentIdentifier: "inc_1",
-        sequence: 1,
         occurredAt: "2026-09-19T10:00:30.000Z",
-        type: "agent.llm-decision",
-        title: "Decision",
-        summary: "Reviewing the capacity",
-        source: "agent",
-        simulated: false,
-        replayed: false,
         payload: { disposition: "accepted", text: "Reviewing the capacity" },
-        correlation: {},
-      } as unknown as ActivityRecord,
+        type: "agent.llm-decision",
+      }),
     ];
 
-    expect(buildTranscript(overview, activity).some((item) => item.kind === "thinking")).toBe(true);
-    expect(buildTranscript(settled, activity).every((item) => item.kind !== "thinking")).toBe(true);
-    expect(buildTranscript(settled, activity).map((item) => item.kind)).toEqual(["tool"]);
+    expect(buildTranscript(overview, events).some((item) => item.kind === "thinking")).toBe(true);
+    expect(buildTranscript(settled, events).every((item) => item.kind !== "thinking")).toBe(true);
+    expect(buildTranscript(settled, events).map((item) => item.kind)).toEqual(["tool"]);
   });
 });

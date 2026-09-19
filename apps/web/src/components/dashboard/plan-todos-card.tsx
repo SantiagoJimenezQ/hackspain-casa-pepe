@@ -43,21 +43,24 @@ function todoTextClass(kind: PlanTodoVisualKind) {
 export function PlanTodosCard({
   plan,
   streaming = false,
+  settled = false,
 }: {
   plan: Plan;
   streaming?: boolean;
+  /** The incident is closed, so nothing in the list is still in flight. */
+  settled?: boolean;
 }) {
   const { t } = useI18n();
   // Controlled on purpose: the computed default changes as the plan advances, and an
   // uncontrolled collapsible would ignore it after the first render.
-  const shouldOpen = planTodosDefaultOpen(plan, streaming);
+  const shouldOpen = settled ? false : planTodosDefaultOpen(plan, streaming);
   const [open, setOpen] = useState(shouldOpen);
   const [lastShouldOpen, setLastShouldOpen] = useState(shouldOpen);
   if (lastShouldOpen !== shouldOpen) {
     setLastShouldOpen(shouldOpen);
     setOpen(shouldOpen);
   }
-  const todos = planTodos(plan);
+  const todos = planTodos(plan, settled);
   if (todos.total === 0) return null;
 
   const label = t(todos.allComplete ? "plan.todos.completed" : "plan.todos.progress", {

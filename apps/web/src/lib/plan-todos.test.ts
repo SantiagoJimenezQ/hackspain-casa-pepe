@@ -84,4 +84,23 @@ describe("plan todos", () => {
     ).toBe(true);
     expect(planTodosDefaultOpen(v2Idle, false)).toBe(false);
   });
+
+  it("closes the steps the agent never got to finish once the incident is settled", () => {
+    const plan = {
+      steps: [step("a", 1, "completed"), step("b", 2, "running"), step("c", 3, "proposed")],
+    } as Plan;
+
+    expect(planTodos(plan).completed).toBe(1);
+    const settled = planTodos(plan, true);
+    expect(settled.completed).toBe(3);
+    expect(settled.allComplete).toBe(true);
+    expect(settled.items.map((item) => item.kind)).toEqual(["completed", "completed", "completed"]);
+  });
+
+  it("keeps a failed step visible even when the incident is settled", () => {
+    const plan = { steps: [step("a", 1, "failed")] } as Plan;
+
+    expect(planTodos(plan, true).items[0].kind).toBe("failed");
+    expect(planTodos(plan, true).allComplete).toBe(false);
+  });
 });

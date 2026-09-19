@@ -79,6 +79,64 @@ describe("agent replanning during execution", () => {
 			})
 		},
 	)
+
+	it("does not immediately rerun after a provider rate limit", async () => {
+		const cycleState = new AgentCycleStateService()
+		const service = new AgentService(
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			cycleState,
+			{} as never,
+			{} as never,
+			{} as never,
+		)
+		let release: () => void
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		const execute = jest
+			.spyOn(
+				service as unknown as {
+					executeCycle: (
+						run: string,
+						trigger: AgentTrigger,
+					) => Promise<unknown>
+				},
+				"executeCycle",
+			)
+			.mockImplementation(async () => {
+				await blocked
+				return {
+					kind: "failed",
+					reason: "LLM provider returned HTTP 429; autonomous decisions paused",
+				}
+			})
+		const first = service.requestCycle("run", { kind: "follow-up" })
+		await service.requestCycle("run", {
+			description: "Only seven units remain",
+			harnessEventIdentifier: "incoming-call",
+			kind: "conditions-changed",
+		})
+		release()
+		await first
+		await new Promise((resolve) => setImmediate(resolve))
+		expect(execute).toHaveBeenCalledTimes(1)
+		expect(cycleState.get("run")).toMatchObject({
+			inProgress: false,
+			lastOutcome: {
+				kind: "failed",
+				reason: "LLM provider returned HTTP 429; autonomous decisions paused",
+			},
+		})
+	})
 })
 
 describe("human task follow-up", () => {

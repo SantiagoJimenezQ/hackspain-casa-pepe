@@ -653,6 +653,7 @@ describe("feature-flagged public output streaming", () => {
 	})
 
 	it("moves a rate limited request to the relief provider", async () => {
+		jest.useFakeTimers()
 		jest.spyOn(Logger.prototype, "warn").mockImplementation(() => {})
 		const { client, post } = setup({
 			fallback: {
@@ -674,7 +675,9 @@ describe("feature-flagged public output streaming", () => {
 			return throwError(() => rateLimited)
 		})
 
-		const result = await client.complete([], [])
+		const pending = client.complete([], [])
+		await jest.advanceTimersByTimeAsync(20000)
+		const result = await pending
 
 		expect(result.message.content).toBe("Ready")
 		const [reliefEndpoint, reliefBody, reliefOptions] =
@@ -685,9 +688,11 @@ describe("feature-flagged public output streaming", () => {
 		expect(reliefBody.model).toBe("relief-model")
 		expect(reliefBody.reasoning_effort).toBe("low")
 		expect(reliefOptions.headers.Authorization).toBe("Bearer relief-key")
+		jest.useRealTimers()
 	})
 
 	it("surfaces a rate limit when no relief provider is configured", async () => {
+		jest.useFakeTimers()
 		jest.spyOn(Logger.prototype, "warn").mockImplementation(() => {})
 		const { client, post } = setup()
 		post.mockReturnValue(
@@ -697,9 +702,13 @@ describe("feature-flagged public output streaming", () => {
 			})),
 		)
 
-		await expect(client.complete([], [])).rejects.toThrow(
-			"LLM provider returned HTTP 429",
-		)
+		const pending = client
+			.complete([], [])
+			.catch((value: unknown) => value as Error)
+		await jest.advanceTimersByTimeAsync(20000)
+		const failure = await pending
+		expect(failure.message).toBe("LLM provider returned HTTP 429")
+		jest.useRealTimers()
 	})
 
 	it("accepts a tool call answered without a content field", async () => {
@@ -741,6 +750,7 @@ describe("feature-flagged public output streaming", () => {
 	})
 
 	it("keeps the next request on the relief provider instead of paying the retries again", async () => {
+		jest.useFakeTimers()
 		jest.spyOn(Logger.prototype, "warn").mockImplementation(() => {})
 		const { client, post } = setup({
 			fallback: {
@@ -761,13 +771,18 @@ describe("feature-flagged public output streaming", () => {
 			}))
 		})
 
-		await client.complete([], [])
+		const first = client.complete([], [])
+		await jest.advanceTimersByTimeAsync(20000)
+		await first
 		const callsAfterFirst = post.mock.calls.length
-		await client.complete([], [])
+		const second = client.complete([], [])
+		await jest.advanceTimersByTimeAsync(2000)
+		await second
 
 		expect(post.mock.calls.length).toBe(callsAfterFirst + 1)
 		expect(post.mock.calls[callsAfterFirst][0]).toBe(
 			"https://relief.example.test/v1/chat/completions",
 		)
+		jest.useRealTimers()
 	})
 })

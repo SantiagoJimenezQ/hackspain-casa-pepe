@@ -87,6 +87,12 @@ export class AgentService {
 		private readonly llmLoop: LlmLoopService,
 	) {}
 
+	@OnEvent(DOMAIN_EVENTS.INCIDENT_RUN_DEACTIVATED)
+	onRunDeactivated(event: { runIdentifier: string }): void {
+		this.pendingChanges.delete(event.runIdentifier)
+		this.cycleState.forget(event.runIdentifier)
+	}
+
 	@OnEvent(DOMAIN_EVENTS.INCOMING_CALL_CONFIRMED, {
 		async: true,
 		promisify: true,
@@ -467,6 +473,8 @@ export class AgentService {
 			},
 		})
 		const finalPlan = await this.plansService.findLatestPlan(runIdentifier)
+		if (!(await this.runsService.getByRunIdentifier(runIdentifier)).active)
+			return { kind: "skipped", reason: "The run is no longer active" }
 		if (
 			finalPlan?.status === "active" &&
 			!finalPlan.steps.some((step) => OPEN_STATUSES.includes(step.status))

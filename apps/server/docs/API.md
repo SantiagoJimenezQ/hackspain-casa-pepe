@@ -102,7 +102,7 @@ Arbitrary harness event.
 
 ### `POST /demo/reset`
 
-Marks the current run as `reset` and creates a new one from the same scenario. Late results from the previous run (calls, recoveries) are rejected with `409 Stale Run`. Events: `incident.run-reset`, `incident.run-started`.
+Marks the current run as `reset` and creates a new one from the same scenario. Clears the old agent cycle state and queued follow-ups; model responses arriving after reset are discarded before dispatch. The new agent starts with no plan or investigation history and a fresh cycle budget. Trigger impact to retry the agent path. Historical runs and saved learning are preserved; external actions already dispatched are not undone. Late results from the previous run (calls, recoveries) are rejected with `409 Stale Run`. Events: `incident.run-reset`, `incident.run-started`.
 
 ### `POST /demo/pause`
 

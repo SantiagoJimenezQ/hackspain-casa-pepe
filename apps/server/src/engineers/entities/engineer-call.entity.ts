@@ -1,4 +1,7 @@
-import { EngineerCallMode } from "@common/types/configuration.type"
+import {
+	EngineerCallMode,
+	EngineerCallProvider,
+} from "@common/types/configuration.type"
 import {
 	EngineerCallResult,
 	EngineerCallStatus,
@@ -6,6 +9,7 @@ import {
 	EngineerQuestion,
 } from "@engineers/types/engineer.type"
 import { Column, Entity, Index, PrimaryColumn } from "typeorm"
+import { EngineerCallIncidentContext } from "../../../../../packages/contracts/outbound-calls"
 
 @Entity({ name: "engineer_calls" })
 export class EngineerCallEntity {
@@ -37,11 +41,20 @@ export class EngineerCallEntity {
 	@Column({ type: "text" })
 	mode: EngineerCallMode
 
+	@Column({ nullable: true, type: "text" })
+	provider: EngineerCallProvider | null
+
 	@Column({ type: "text" })
 	status: EngineerCallStatus
 
 	@Column({ type: "text" })
 	providerReference: string
+
+	@Column({ nullable: true, type: "text" })
+	providerCallSid: string | null
+
+	@Column({ nullable: true, type: "jsonb" })
+	incidentContext: EngineerCallIncidentContext | null
 
 	@Column({ nullable: true, type: "jsonb" })
 	result: EngineerCallResult | null

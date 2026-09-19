@@ -3,6 +3,7 @@ import { Type } from "class-transformer"
 import {
 	IsIn,
 	IsInt,
+	IsOptional,
 	IsString,
 	IsUrl,
 	Matches,
@@ -58,6 +59,13 @@ export class EnvironmentVariables {
 	@Min(1)
 	WEBHOOK_MAXIMUM_ATTEMPTS: number = 5
 
+	@IsOptional()
+	@IsIn(["simulated", "live"])
+	ENGINEER_CALL_MODE: string | undefined = undefined
+
+	@IsIn(["elevenlabs", "happyrobot"])
+	ENGINEER_CALL_PROVIDER: string = "happyrobot"
+
 	@IsIn(["simulated", "live"])
 	HAPPYROBOT_MODE: string = "simulated"
 
@@ -70,6 +78,20 @@ export class EnvironmentVariables {
 	@IsString()
 	@MinLength(1)
 	HAPPYROBOT_WEBHOOK_SECRET: string = ""
+
+	@IsString()
+	ELEVENLABS_API_KEY: string = ""
+
+	@IsString()
+	ELEVENLABS_AGENT_ID: string = ""
+
+	@IsString()
+	ELEVENLABS_PHONE_NUMBER_ID: string = ""
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(100)
+	ELEVENLABS_POLL_INTERVAL_MILLISECONDS: number = 5000
 
 	@Type(() => Number)
 	@IsInt()

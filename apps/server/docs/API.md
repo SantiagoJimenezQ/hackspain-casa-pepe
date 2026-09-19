@@ -39,7 +39,7 @@ Common errors:
 | 409 | `No Active Run` | No active run; call `POST /demo/start` first |
 | 409 | `Invalid State Transition` | Deciding an approval that is already decided or superseded, duplicated call result |
 | 409 | `Stale Run` | Late result from a run that was reset |
-| 502 | `Integration Failure` | Unexpected response from HappyRobot or the recovery environment |
+| 502 | `Integration Failure` | Unexpected response from a voice provider or the recovery environment |
 
 ## Common parameter `runIdentifier`
 
@@ -381,6 +381,12 @@ Error codes: `TIMEOUT`, `CALL_FAILED`, `APPROVAL_INVALID`, `CAPACITY_INSUFFICIEN
 
 ---
 
+### Voice provider results
+
+Outbound records also carry `provider` (`elevenlabs` or `happyrobot`), `providerCallSid`, and `incidentContext { location, incidentDescription, servicesDown }`. For ElevenLabs, `providerReference` is the conversation ID and `providerCallSid` is Twilio's call SID. Legacy records may not have the new optional fields.
+
+`result.authorizations` contains `notifyAllClients` and `trafficFailoverAuthorized`, each with `{ value: boolean | null, rationale: string }`. These are voice evidence and never automatically change plan-specific approvals or incident capacity facts. They are also retained in the completed tool output. Missing extraction remains unknown. See [provider configuration and rehearsal](ELEVENLABS.md).
+
 ## Recovery (`/recovery/actions`)
 
 ### `GET /recovery/actions?runIdentifier=`
@@ -575,7 +581,7 @@ Header `x-recovery-signature: <RECOVERY_WEBHOOK_SECRET>`.
 | `tool-call.started`, `tool-call.completed`, `tool-call.failed` | tool | Tool execution |
 | `approval.requested`, `approval.decided`, `approval.superseded`, `approval.expired` | agent / operator | Approval lifecycle |
 | `task.assigned`, `task.updated` | agent / operator | Tasks |
-| `engineer-call.started`, `engineer-call.completed`, `engineer-call.failed` | tool / integration | HappyRobot call |
+| `engineer-call.started`, `engineer-call.completed`, `engineer-call.failed` | tool / integration | Outbound voice call through the configured provider |
 | `recovery.executed`, `recovery.verified` | integration / tool | Action and verification in the test environment |
 | `agent.cycle-finished` | agent | Summary: recovered, pending and next step |
 | `agent.limit-reached` | agent | Cycle limit reached |

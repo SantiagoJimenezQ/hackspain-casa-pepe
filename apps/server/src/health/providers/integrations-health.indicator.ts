@@ -10,7 +10,8 @@ export class IntegrationsHealthIndicator extends HealthIndicator {
 
 	describe(key: string): HealthIndicatorResult {
 		return this.getStatus(key, true, {
-			engineerCalls: this.configuration.happyRobot.mode,
+			engineerCallProvider: this.configuration.engineerCall.provider,
+			engineerCalls: this.configuration.engineerCall.mode,
 			recoveryEnvironment: this.configuration.recovery.mode,
 		})
 	}

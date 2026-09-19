@@ -1,4 +1,5 @@
 export const ACTIVITY_EVENT_TYPES = [
+	"agent.llm-output",
 	"agent.llm-decision",
 	"agent.llm-failed",
 	"agent.llm-stale",

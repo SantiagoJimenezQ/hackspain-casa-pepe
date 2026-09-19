@@ -145,6 +145,9 @@ export class EnvironmentVariables {
 	@IsString()
 	LLM_MODEL: string = ""
 
+	@IsIn(["true", "false"])
+	LLM_STREAM_OUTPUT: string = "false"
+
 	@Type(() => Number)
 	@IsInt()
 	@Min(100)

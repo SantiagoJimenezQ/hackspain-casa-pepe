@@ -1,3 +1,4 @@
+import { PassThrough, Readable } from "node:stream"
 import { LlmMessage, LlmToolDefinition } from "@agent/llm/llm.types"
 import { LlmClientService } from "@agent/llm/llm-client.service"
 import { ConfigurationService } from "@common/services/configuration.service"
@@ -325,5 +326,115 @@ describe("LlmClientService", () => {
 			),
 		).rejects.toThrow(/context byte budget/)
 		expect(post).not.toHaveBeenCalled()
+	})
+})
+
+describe("feature-flagged public output streaming", () => {
+	const event = (delta: unknown, finish_reason: string | null = null) =>
+		`data: ${JSON.stringify({ choices: [{ delta, finish_reason, index: 0 }], model: "provider-model" })}\r\n\r\n`
+	const ending = `${event({}, "tool_calls")}data: [DONE]\r\n\r\n`
+	const toolStart = {
+		tool_calls: [
+			{
+				function: { arguments: '{"step', name: "execute_step" },
+				id: "call-1",
+				index: 0,
+				type: "function",
+			},
+		],
+	}
+	const toolEnd = {
+		tool_calls: [
+			{ function: { arguments: 'Identifier":"abc"}' }, index: 0 },
+		],
+	}
+
+	it("streams public text before completion, reassembles fragmented tools, and ignores private reasoning", async () => {
+		const { client, post } = setup({ streamOutput: true })
+		const stream = new PassThrough()
+		post.mockReturnValue(of({ data: stream, status: 200 }))
+		let announce!: () => void
+		const emitted = new Promise<void>((resolve) => {
+			announce = resolve
+		})
+		const onText = jest.fn(async () => {
+			announce()
+		})
+		let settled = false
+		const response = client.complete([], [TOOL], onText).then((result) => {
+			settled = true
+			return result
+		})
+		const first = Buffer.from(
+			event({ content: "Verificación", reasoning_content: "PRIVATE" }),
+		)
+		for (const byte of first) stream.write(Buffer.from([byte]))
+		await emitted
+		expect(settled).toBe(false)
+		expect(onText).toHaveBeenCalledWith("Verificación")
+		stream.end(event(toolStart) + event(toolEnd) + ending)
+		const result = await response
+		expect(result.message.tool_calls?.[0].function.arguments).toBe(
+			'{"stepIdentifier":"abc"}',
+		)
+		expect(JSON.stringify(result)).not.toContain("PRIVATE")
+		expect(post.mock.calls[0][1].stream).toBe(true)
+	})
+
+	it("keeps the default JSON request and emits no fragments when disabled", async () => {
+		const { client, post } = setup()
+		const onText = jest.fn()
+		await client.complete([], [], onText)
+		expect(post.mock.calls[0][1].stream).toBeUndefined()
+		expect(onText).not.toHaveBeenCalled()
+	})
+
+	it.each([
+		["missing DONE", event({ content: "draft" }, "stop")],
+		["invalid JSON", "data: {bad}\n\n"],
+		[
+			"truncated",
+			`${event({ content: "draft" }, "length")}data: [DONE]\n\n`,
+		],
+		[
+			"invalid tool arguments",
+			event({
+				tool_calls: [
+					{
+						function: { arguments: "{", name: "execute_step" },
+						id: "call",
+						index: 0,
+						type: "function",
+					},
+				],
+			}) + ending,
+		],
+		["oversized", "x".repeat(1024 * 1024 + 1)],
+	])(
+		"rejects %s without returning a usable completion",
+		async (_label, input) => {
+			const { client, post } = setup({ streamOutput: true })
+			post.mockReturnValue(
+				of({ data: Readable.from([input]), status: 200 }),
+			)
+			await expect(client.complete([], [TOOL])).rejects.toThrow()
+		},
+	)
+
+	it("bounds public output and closes a stalled provider stream", async () => {
+		const { client, post } = setup({
+			streamOutput: true,
+			timeoutMilliseconds: 100,
+		})
+		const stream = new PassThrough()
+		post.mockReturnValue(of({ data: stream, status: 200 }))
+		const onText = jest.fn(async (_text: string) => {})
+		const response = client.complete([], [], onText)
+		stream.write(event({ content: "a".repeat(4000) }))
+		await expect(response).rejects.toThrow("timed out")
+		expect(onText.mock.calls.map((call) => call[0]).join("")).toHaveLength(
+			2000,
+		)
+		expect(stream.destroyed).toBe(true)
 	})
 })

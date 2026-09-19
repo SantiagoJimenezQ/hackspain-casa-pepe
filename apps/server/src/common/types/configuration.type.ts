@@ -58,6 +58,7 @@ export interface AgentConfiguration {
 }
 
 export interface LlmConfiguration {
+	readonly streamOutput?: boolean
 	readonly baseURL: string
 	readonly apiKey: string
 	readonly model: string

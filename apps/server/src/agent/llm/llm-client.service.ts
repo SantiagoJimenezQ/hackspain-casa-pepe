@@ -3,6 +3,7 @@ import {
 	LlmToolCall,
 	LlmToolDefinition,
 } from "@agent/llm/llm.types"
+import { readCompletionStream } from "@agent/llm/llm-stream"
 import { isAllowedLlmBaseURL } from "@common/configuration/configuration.factory"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { LlmConfiguration } from "@common/types/configuration.type"
@@ -31,9 +32,15 @@ export class LlmClientService {
 	async complete(
 		messages: LlmMessage[],
 		tools: LlmToolDefinition[],
+		onText?: (text: string) => Promise<void>,
 	): Promise<{ message: LlmMessage; usage: unknown; model: string }> {
 		const configuration = this.providerConfiguration()
-		const responseData = await this.request(configuration, messages, tools)
+		const responseData = await this.request(
+			configuration,
+			messages,
+			tools,
+			onText,
+		)
 		return parseCompletionResponse(
 			responseData,
 			configuration.maximumOutputTokens,
@@ -88,6 +95,7 @@ export class LlmClientService {
 			maximumOutputTokens: configured.maximumOutputTokens,
 			maximumTurns: configured.maximumTurns,
 			model,
+			streamOutput: configured.streamOutput === true,
 			timeoutMilliseconds: configured.timeoutMilliseconds,
 		}
 	}
@@ -96,9 +104,11 @@ export class LlmClientService {
 		configuration: LlmConfiguration,
 		messages: LlmMessage[],
 		tools: LlmToolDefinition[],
+		onText?: (text: string) => Promise<void>,
 	): Promise<unknown> {
 		const endpoint = `${configuration.baseURL.replace(/\/+$/, "")}/chat/completions`
 		const requestBody = {
+			...(configuration.streamOutput ? { stream: true } : {}),
 			max_tokens: configuration.maximumOutputTokens,
 			messages,
 			model: configuration.model,
@@ -131,6 +141,9 @@ export class LlmClientService {
 					maxBodyLength: MAXIMUM_REQUEST_BYTES,
 					maxContentLength: MAXIMUM_RESPONSE_BYTES,
 					maxRedirects: 0,
+					responseType: configuration.streamOutput
+						? "stream"
+						: "json",
 					timeout: configuration.timeoutMilliseconds,
 					validateStatus: (status) => status >= 200 && status < 300,
 				}),
@@ -144,6 +157,13 @@ export class LlmClientService {
 					: new LlmClientError(
 							`LLM provider returned HTTP ${response.status}`,
 						)
+			}
+			if (configuration.streamOutput) {
+				return await readCompletionStream(
+					response.data,
+					configuration.timeoutMilliseconds,
+					onText,
+				)
 			}
 			let serializedResponse: string
 			try {

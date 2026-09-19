@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { ActivityService } from "@activity/services/activity.service"
 import { LlmMessage, LlmToolDefinition } from "@agent/llm/llm.types"
 import { LlmClientError, LlmClientService } from "@agent/llm/llm-client.service"
@@ -171,9 +171,22 @@ export class LlmLoopService {
 					role: "user",
 				},
 			]
+			const outputIdentifier = randomUUID()
 			let response: Awaited<ReturnType<LlmClientService["complete"]>>
 			try {
-				response = await this.client.complete(messages, definitions())
+				response = await this.client.complete(
+					messages,
+					definitions(),
+					async (text) => {
+						await this.record(
+							state,
+							"agent.llm-output",
+							"Draft decision summary",
+							text,
+							{ outputIdentifier, provisional: true, text, turn },
+						)
+					},
+				)
 			} catch (error) {
 				const detail =
 					error instanceof LlmClientError
@@ -184,7 +197,7 @@ export class LlmLoopService {
 					"agent.llm-failed",
 					"LLM unavailable",
 					`${detail}. Autonomous decisions paused. Check provider configuration and retry using the agent cycle control.`,
-					{ turn },
+					{ outputIdentifier, turn },
 				)
 				return {
 					kind: "failed",
@@ -201,6 +214,7 @@ export class LlmLoopService {
 					{
 						fingerprint,
 						model: response.model,
+						outputIdentifier,
 						turn,
 						usage: response.usage,
 					},
@@ -218,6 +232,7 @@ export class LlmLoopService {
 				{
 					fingerprint,
 					model: response.model,
+					outputIdentifier,
 					tools: calls.map((call) => call.function.name),
 					turn,
 					usage: response.usage,
@@ -346,6 +361,7 @@ export class LlmLoopService {
 	private record(
 		state: LlmLoopState,
 		type:
+			| "agent.llm-output"
 			| "agent.llm-failed"
 			| "agent.llm-stale"
 			| "agent.llm-decision"

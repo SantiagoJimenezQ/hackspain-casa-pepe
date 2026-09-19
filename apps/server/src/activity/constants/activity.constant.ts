@@ -28,6 +28,7 @@ export const ACTIVITY_EVENT_TYPES = [
 	"task.updated",
 	"engineer-call.started",
 	"engineer-call.completed",
+	"engineer-call.authorization-received",
 	"engineer-call.failed",
 	"engineer-call.authorized",
 	"recovery.executed",

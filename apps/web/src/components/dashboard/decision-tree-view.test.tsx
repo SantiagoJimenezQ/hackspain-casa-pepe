@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DecisionTreeView from './decision-tree-view';
 import { LocaleProvider, useI18n } from '@/components/i18n/locale-provider';
+import { LOCALE_STORAGE_KEY } from '@/lib/i18n';
 import type { ActivityRecord } from '@/lib/casa-pepe-types';
 const fixture = vi.hoisted(() => ({ run: 'one', events: [] as ActivityRecord[] }));
 vi.mock('./dashboard-provider', () => ({ useDashboard: () => ({ overview: { incident: { runIdentifier: fixture.run, startedAt: '2026-09-19T10:00:00Z', title: 'Test incident' }, recentActivity: [] }, activity: fixture.events, decisionEvents: [] }) }));
@@ -9,6 +10,7 @@ vi.mock('@/lib/decision-tree-history', () => ({ loadTreeHistory: vi.fn().mockRes
 const plan = { identifier: 'e1', runIdentifier: 'one', sequence: 1, occurredAt: '2026-09-19T10:00:12Z', type: 'plan.revised', title: 'Replan', summary: 'Less capacity', source: 'agent', simulated: false, replayed: false, payload: { plan: { version: 2, reason: 'Capacity changed', priorities: [{ serviceName: 'Health', reason: 'Critical service', decision: 'recover-now' }, { serviceName: 'Reports', reason: 'No capacity', decision: 'postpone' }] } } };
 beforeEach(() => {
   fixture.run = 'one'; fixture.events = [];
+  window.localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
 });

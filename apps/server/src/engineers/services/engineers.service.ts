@@ -31,7 +31,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common"
 import { EventEmitter2 } from "@nestjs/event-emitter"
 import { Interval } from "@nestjs/schedule"
 import { InjectRepository } from "@nestjs/typeorm"
-import { Repository } from "typeorm"
+import { In, Repository } from "typeorm"
 import {
 	EngineerCallAuthorizations,
 	LiveAuthorizationReport,
@@ -276,6 +276,65 @@ export class EngineersService {
 				reason: "Result was rejected because the run is no longer active",
 			})
 		}
+	}
+
+	/** Store in-call evidence without finishing the call or approving recovery. */
+	async recordAuthorizations(
+		callIdentifier: string,
+		authorizations: EngineerCallResult["authorizations"],
+	): Promise<void> {
+		const entity = await this.getEntity(callIdentifier)
+		if (
+			!authorizations ||
+			entity.mode !== "live" ||
+			entity.provider !== "happyrobot"
+		) {
+			throw new InvalidStateTransitionException(
+				ENGINEER_CALL_ENTITY_NAME,
+				entity.provider ?? "unknown",
+				"record HappyRobot authorizations",
+			)
+		}
+		if (!(await this.runsService.isRunActive(entity.runIdentifier)))
+			throw new StaleRunException(entity.runIdentifier)
+		if (entity.status !== "dialing" && entity.status !== "in-progress")
+			return
+		if (
+			JSON.stringify(entity.result?.authorizations) ===
+			JSON.stringify(authorizations)
+		)
+			return
+		const result: EngineerCallResult = {
+			answers: [],
+			authorizations,
+			outcome: "completed",
+			summary: "Permissions received; call still in progress",
+			transcript: "",
+		}
+		const update = await this.repository.update(
+			{
+				identifier: callIdentifier,
+				status: In(["dialing", "in-progress"]),
+			},
+			{ result } as never,
+		)
+		if (update?.affected === 0) return
+		await this.activityService.record({
+			correlation: {
+				engineerCallIdentifier: callIdentifier,
+				planStepIdentifier: entity.planStepIdentifier,
+				toolCallIdentifier: entity.toolCallIdentifier,
+			},
+			incidentIdentifier: entity.incidentIdentifier,
+			payload: { authorizations, callIdentifier },
+			runIdentifier: entity.runIdentifier,
+			simulated: false,
+			source: "integration",
+			summary:
+				"Permissions recorded during the call; recovery still requires operator approval",
+			title: "Engineer permissions received",
+			type: "engineer-call.authorization-received",
+		})
 	}
 
 	/**

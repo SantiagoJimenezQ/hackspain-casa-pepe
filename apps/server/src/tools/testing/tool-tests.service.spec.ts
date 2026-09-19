@@ -443,9 +443,33 @@ describe("ToolTestsService", () => {
 					{ identifier: record.identifier },
 					{ timeoutAt: "2000-01-01T00:00:00.000Z" },
 				)
-			const result = await instance.completeCall(
-				completedCallback(record.identifier) as never,
-			)
+			const authorizations = {
+				notifyAllClients: {
+					rationale: "Approved notifications",
+					value: true,
+				},
+				trafficFailoverAuthorized: {
+					rationale: "Unanswered",
+					value: null,
+				},
+			}
+			if (!expired) {
+				const pending = await instance.completeCall({
+					authorizations,
+					callIdentifier: record.identifier,
+					outcome: "completed",
+					phase: "authorization",
+				})
+				expect(pending.status).toBe("accepted")
+				expect(pending.finishedAt).toBe("")
+				expect(pending.result).toEqual({ authorizations })
+			}
+			const result = await instance.completeCall({
+				...completedCallback(record.identifier),
+				authorizations,
+			} as never)
+			if (!expired)
+				expect(result.result).toMatchObject({ authorizations })
 			expect(result.status).toBe(expired ? "failed" : "succeeded")
 			if (expired) expect(result.error?.code).toBe("TIMEOUT")
 			const repeated = await instance.completeCall({

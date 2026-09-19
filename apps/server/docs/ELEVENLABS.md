@@ -192,6 +192,8 @@ Outbound POST requests are not retried inside the ElevenLabs adapter. If a start
 
 ## Switch to HappyRobot
 
+See [HappyRobot setup and permission parity](HAPPYROBOT.md) for the EU v2 workflow and callback contract.
+
 Set `ENGINEER_CALL_PROVIDER=happyrobot`, keep `ENGINEER_CALL_MODE=live`, and supply the existing `HAPPYROBOT_TRIGGER_URL`, `HAPPYROBOT_API_KEY`, `HAPPYROBOT_WEBHOOK_SECRET`, and publicly reachable `PUBLIC_BASE_URL`. Configure the workflow to return the existing `/api/webhooks/happyrobot` result contract. No tool or agent call-site changes are needed. Finish pending calls before changing provider configuration.
 
 To rehearse offline, set `ENGINEER_CALL_MODE=simulated`. For existing deployments that do not set it, `HAPPYROBOT_MODE` remains the compatibility fallback. Simulation does not call either provider.

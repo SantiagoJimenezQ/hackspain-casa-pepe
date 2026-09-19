@@ -91,6 +91,8 @@ export type CycleOutcome =
 	| { readonly kind: "failed"; readonly reason: string }
 
 export interface AgentStatus {
+	readonly engine: "llm"
+	readonly model: string
 	readonly runIdentifier: string
 	readonly incidentStatus: string
 	readonly cycles: number

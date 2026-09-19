@@ -37,6 +37,7 @@ type DashboardContextValue = {
 const DashboardContext = createContext<DashboardContextValue | null>(null);
 
 const ACTIVITY_EVENTS = [
+  "agent.llm-decision", "agent.llm-failed", "agent.llm-stale", "agent.llm-rejected",
   "engineer-call.incoming", "incident.run-started", "incident.impact-detected",
   "incident.event-applied", "incident.status-changed", "incident.run-reset",
   "service.health-changed", "resource.capacity-changed", "fact.recorded",

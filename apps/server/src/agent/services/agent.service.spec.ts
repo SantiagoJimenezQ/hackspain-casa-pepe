@@ -18,6 +18,7 @@ describe("agent replanning during execution", () => {
 			{} as never,
 			new AgentCycleStateService(),
 			{} as never,
+			{} as never,
 		)
 		let release: () => void
 		const blocked = new Promise<void>((resolve) => {

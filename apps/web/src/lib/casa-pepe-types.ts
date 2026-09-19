@@ -186,6 +186,8 @@ export type Overview = {
   toolCalls: ToolCall[];
   recentActivity: ActivityRecord[];
   agent: {
+    engine?: "llm";
+    model?: string;
     cycleInProgress: boolean;
     cycles: number;
     maximumCycles: number;

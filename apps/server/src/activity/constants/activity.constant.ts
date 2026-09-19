@@ -1,4 +1,8 @@
 export const ACTIVITY_EVENT_TYPES = [
+	"agent.llm-decision",
+	"agent.llm-failed",
+	"agent.llm-stale",
+	"agent.llm-rejected",
 	"engineer-call.incoming",
 	"incident.run-started",
 	"incident.impact-detected",

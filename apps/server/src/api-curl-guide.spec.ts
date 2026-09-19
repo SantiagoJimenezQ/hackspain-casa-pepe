@@ -3,6 +3,7 @@ import { ActivityModule } from "@activity/activity.module"
 import { ActivityEventEntity } from "@activity/entities/activity-event.entity"
 import { ActivityRecord } from "@activity/types/activity.type"
 import { AgentModule } from "@agent/agent.module"
+import { LlmClientService } from "@agent/llm/llm-client.service"
 import { ApprovalsModule } from "@approvals/approvals.module"
 import { ApprovalEntity } from "@approvals/entities/approval.entity"
 import { ApprovalRecord } from "@approvals/types/approval.type"
@@ -33,6 +34,10 @@ import { RecoveryActionEntity } from "@recovery/entities/recovery-action.entity"
 import { RecoveryModule } from "@recovery/recovery.module"
 import { ReplaysModule } from "@replays/replays.module"
 import { InMemoryRepository } from "@root/testing/in-memory-repository"
+import {
+	createScriptedLlmClient,
+	ScriptedLlmClient,
+} from "@root/testing/scripted-llm.helper"
 import { waitFor } from "@root/testing/wait-for.helper"
 import { ScenariosModule } from "@scenarios/scenarios.module"
 import {
@@ -160,6 +165,7 @@ async function startManualRun(baseURL: string): Promise<IncidentSnapshot> {
 describe("API curl walkthrough contract", () => {
 	let application: INestApplication
 	let baseURL: string
+	let scriptedLlm: ScriptedLlmClient
 
 	beforeAll(async () => {
 		let builder = Test.createTestingModule({
@@ -192,6 +198,10 @@ describe("API curl walkthrough contract", () => {
 				database: { status: "up" },
 			}),
 		})
+		scriptedLlm = createScriptedLlmClient()
+		builder = builder
+			.overrideProvider(LlmClientService)
+			.useValue(scriptedLlm)
 		const moduleReference = await builder.compile()
 
 		application = moduleReference.createNestApplication()
@@ -555,6 +565,20 @@ describe("API curl walkthrough contract", () => {
 		)
 		expect(activity.status).toBe(200)
 		expect(activity.body.items.length).toBeGreaterThan(0)
+		expect(scriptedLlm.calls.length).toBeGreaterThan(0)
+		expect(scriptedLlm.calls.map(({ call }) => call.function.name)).toEqual(
+			expect.arrayContaining(["propose_plan", "execute_step"]),
+		)
+		expect(
+			scriptedLlm.calls.some(({ messages }) =>
+				messages.some((message) => message.role === "tool"),
+			),
+		).toBe(true)
+		expect(
+			scriptedLlm.calls.every(({ call }) =>
+				call.id.startsWith("script-fixture"),
+			),
+		).toBe(true)
 	})
 
 	it("covers task updates, manual cycles, and invalid harness input", async () => {
@@ -688,5 +712,38 @@ describe("API curl walkthrough contract", () => {
 		)
 		expect(pausedAgain.status).toBe(200)
 		expect(pausedAgain.body.simulation.paused).toBe(true)
+	})
+
+	it("records a paused cycle when the configured LLM provider fails", async () => {
+		const started = await startManualRun(baseURL)
+		scriptedLlm.clear()
+		scriptedLlm.failNextCall()
+
+		const impact = await request(baseURL, "/api/demo/impact", {
+			method: "POST",
+		})
+		expect(impact.status).toBe(200)
+
+		const activity = await waitForJSON<Page<ActivityRecord>>(
+			baseURL,
+			`/api/activity?runIdentifier=${started.runIdentifier}&afterSequence=0&limit=500`,
+			(body) =>
+				body.items.some((item) => item.type === "agent.llm-failed"),
+			"LLM failure activity",
+		)
+		expect(
+			activity.items.some(
+				(item) =>
+					item.type === "agent.llm-failed" &&
+					item.summary.includes("Autonomous decisions paused"),
+			),
+		).toBe(true)
+
+		const plan = await request<CurrentPlanResponse>(
+			baseURL,
+			`/api/plans/current?runIdentifier=${started.runIdentifier}`,
+		)
+		expect(plan.status).toBe(200)
+		expect(plan.body.kind).toBe("none")
 	})
 })

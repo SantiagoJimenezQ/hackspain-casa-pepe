@@ -9,6 +9,7 @@ import {
 	ElevenLabsConfiguration,
 	EngineerCallConfiguration,
 	HappyRobotConfiguration,
+	LlmConfiguration,
 	RecoveryConfiguration,
 	RuntimeConfiguration,
 	WebhooksConfiguration,
@@ -77,5 +78,9 @@ export class ConfigurationService {
 
 	get agent(): AgentConfiguration {
 		return this.configuration.agent
+	}
+
+	get llm(): LlmConfiguration {
+		return this.configuration.llm
 	}
 }

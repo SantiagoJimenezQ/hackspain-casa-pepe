@@ -1,14 +1,13 @@
 import { ActivityService } from "@activity/services/activity.service"
-import {
-	AGENT_TICK_INTERVAL_MILLISECONDS,
-	CONTACT_ENGINEER_STEP_IDENTIFIER,
-} from "@agent/constants/agent.constant"
+import { AGENT_TICK_INTERVAL_MILLISECONDS } from "@agent/constants/agent.constant"
 import { AGENT_MESSAGES } from "@agent/constants/agent-messages.constant"
 import { interpretAnswer } from "@agent/helpers/answer-interpretation.helper"
+import { stepIdentifierFor } from "@agent/helpers/plan-builder.helper"
 import {
-	buildPlanDraft,
-	stepIdentifierFor,
-} from "@agent/helpers/plan-builder.helper"
+	LlmLoopService,
+	LlmLoopState,
+	stateFingerprint,
+} from "@agent/llm/llm-loop.service"
 import { AgentCycleStateService } from "@agent/services/agent-cycle-state.service"
 import {
 	AgentStatus,
@@ -16,6 +15,7 @@ import {
 	CapacityAssumption,
 	CycleOutcome,
 	PlanBuildInput,
+	PlanDraft,
 	ServiceConstraint,
 } from "@agent/types/agent.type"
 import { AgentMessages } from "@agent/types/agent-messages.type"
@@ -84,6 +84,7 @@ export class AgentService {
 		private readonly configuration: ConfigurationService,
 		private readonly cycleState: AgentCycleStateService,
 		private readonly incomingCalls: IncomingCallsService,
+		private readonly llmLoop: LlmLoopService,
 	) {}
 
 	@OnEvent(DOMAIN_EVENTS.INCOMING_CALL_CONFIRMED, {
@@ -287,11 +288,13 @@ export class AgentService {
 		return {
 			cycleInProgress: state.inProgress,
 			cycles: incident.agentCycles,
+			engine: "llm",
 			engineerCallMode: this.engineersService.mode,
 			incidentStatus: incident.status,
 			lastCycleAt: state.lastCycleAt,
 			lastCycleOutcome: state.lastOutcome,
 			maximumCycles: this.configuration.agent.maximumCyclesPerRun,
+			model: this.configuration.llm.model,
 			pendingApprovals: pendingApprovals.length,
 			planVersion: plan ? plan.version : 0,
 			recoveryMode: this.recoveryService.mode,
@@ -373,199 +376,152 @@ export class AgentService {
 			trigger: trigger.kind,
 		})
 
-		const observed = await this.toolsService.execute({
-			attempt: 1,
-			decisionIdentifier: "",
-			idempotencyKey: `observe:${cycles}`,
-			incidentIdentifier: incident.identifier,
-			invocation: { input: {}, name: "get_incident_context" },
-			planIdentifier: "",
-			planStepIdentifier: "observe",
-			planVersion: 0,
-			runIdentifier,
-		})
-		if (observed.toolCall.output?.kind !== "incident-context")
-			throw new Error("Could not observe incident context")
-		let plan = await this.ensurePlan(
-			observed.toolCall.output.incident,
-			trigger,
-			messages,
-		)
-		let executed = 0
-		let progressed = plan.status === "active"
-		while (
-			progressed &&
-			executed < this.configuration.agent.maximumStepsPerCycle
-		) {
-			progressed = false
-			if (this.pendingChanges.has(runIdentifier)) break
-			const step = this.nextRunnableStep(plan)
-			if (!step) {
-				break
-			}
-			const refreshedIncident =
-				await this.runsService.getByRunIdentifier(runIdentifier)
-			if (
-				(await this.incomingCalls.list(runIdentifier)).some(
-					(call) => call.status === "pending",
+		const outcome = await this.llmLoop.run({
+			execute: async (identifier, expected) => {
+				const fresh = await this.observeForLlm(runIdentifier, trigger)
+				if (
+					fresh.blocked ||
+					stateFingerprint(fresh) !== stateFingerprint(expected)
 				)
-			)
-				break
-			await this.executeStep(refreshedIncident, plan, step, messages)
-			executed += 1
-			progressed = true
-			const refreshed =
-				await this.plansService.findActivePlan(runIdentifier)
-			if (!refreshed) {
-				break
-			}
-			plan = refreshed
-		}
-
-		if (
-			executed >= this.configuration.agent.maximumStepsPerCycle &&
-			this.nextRunnableStep(plan)
-		)
-			this.cycleState.tryBegin(runIdentifier)
-		const finalIncident =
-			await this.runsService.getByRunIdentifier(runIdentifier)
-		const waitingFor = plan.steps
-			.filter(
-				(step) =>
-					step.status === "awaiting-approval" ||
-					step.status === "running",
-			)
-			.map((step) => messages.stepWaiting(step.title, step.status))
-		const openSteps = plan.steps.filter((step) =>
-			OPEN_STATUSES.includes(step.status),
-		)
-		if (!openSteps.length && plan.status === "active") {
-			await this.plansService.markCompleted(plan.identifier)
-		}
-		await this.recordCycleSummary(
-			finalIncident,
-			plan,
-			executed,
-			waitingFor,
-			!openSteps.length,
-			messages,
-		)
-		this.logger.log(LOG_MESSAGES.AGENT.CYCLE_FINISHED, {
-			executed,
-			planVersion: plan.version,
-			runIdentifier,
-			waiting: waitingFor.length,
-		})
-		return {
-			executedSteps: executed,
-			kind: "completed",
-			planVersion: plan.version,
-			waitingFor,
-		}
-	}
-
-	private async ensurePlan(
-		incident: IncidentSnapshot,
-		trigger: AgentTrigger,
-		messages: AgentMessages,
-	): Promise<PlanRecord> {
-		const latest = await this.plansService.findLatestPlan(
-			incident.runIdentifier,
-		)
-		if (!latest) {
-			await this.incidentsService.markResponding(incident.runIdentifier)
-			return this.createPlanVersion(
-				incident,
-				null,
-				describeTrigger(trigger, messages),
-				messages,
-			)
-		}
-		if (latest.status === "completed") {
-			if (
-				trigger.kind === "conditions-changed" ||
-				trigger.kind === "operator-requested"
-			) {
-				return this.createPlanVersion(
-					incident,
-					latest,
-					describeTrigger(trigger, messages),
+					throw new Error("State changed before dispatch; reassess")
+				const plan = fresh.input.previousPlan
+				const step = plan?.steps.find(
+					(candidate) => candidate.identifier === identifier,
+				)
+				if (
+					!plan ||
+					plan.status !== "active" ||
+					!step ||
+					!RUNNABLE_STATUSES.includes(step.status) ||
+					!step.dependsOn.every((id) =>
+						plan.steps.some(
+							(candidate) =>
+								candidate.identifier === id &&
+								candidate.status === "completed",
+						),
+					)
+				)
+					throw new Error(
+						"Selected step is not runnable in the active plan",
+					)
+				await this.executeStep(
+					fresh.input.incident,
+					plan,
+					step,
 					messages,
 				)
-			}
-			return latest
-		}
-		if (this.requiresRevision(latest, trigger)) {
-			return this.createPlanVersion(
-				incident,
-				latest,
-				describeTrigger(trigger, messages),
-				messages,
-			)
-		}
-		return latest
-	}
-
-	private callFailedWhileStepsWait(plan: PlanRecord): boolean {
-		const contact = plan.steps.find(
-			(step) => step.identifier === CONTACT_ENGINEER_STEP_IDENTIFIER,
-		)
-		if (!contact) {
-			return false
-		}
+				const updated =
+					await this.plansService.findLatestPlan(runIdentifier)
+				if (
+					updated?.status === "active" &&
+					!updated.steps.some((candidate) =>
+						OPEN_STATUSES.includes(candidate.status),
+					)
+				)
+					await this.plansService.markCompleted(updated.identifier)
+				return this.plansService.findLatestPlan(runIdentifier)
+			},
+			investigate: (invocation) =>
+				this.toolsService.execute({
+					attempt: 1,
+					decisionIdentifier: "",
+					idempotencyKey: createPrefixedIdentifier("investigate"),
+					incidentIdentifier: incident.identifier,
+					invocation,
+					planIdentifier: "",
+					planStepIdentifier: "investigate",
+					planVersion: 0,
+					runIdentifier,
+				}),
+			observe: () => this.observeForLlm(runIdentifier, trigger),
+			save: async (draft, expected) => {
+				const input = expected.input
+				const fresh = await this.observeForLlm(runIdentifier, trigger)
+				if (
+					fresh.blocked ||
+					stateFingerprint(fresh) !== stateFingerprint(expected)
+				)
+					throw new Error(
+						"State changed before plan persistence; investigate again",
+					)
+				if (!input.previousPlan)
+					await this.incidentsService.markResponding(runIdentifier)
+				return this.createPlanVersion(
+					fresh.input.incident,
+					fresh.input.previousPlan,
+					input.triggeredBy,
+					messages,
+					draft,
+				)
+			},
+		})
+		const finalPlan = await this.plansService.findLatestPlan(runIdentifier)
 		if (
-			contact.status !== "failed" ||
-			contact.attempts < this.configuration.agent.maximumStepAttempts
-		) {
-			return false
-		}
-		return plan.steps.some(
-			(step) =>
-				step.dependsOn.includes(CONTACT_ENGINEER_STEP_IDENTIFIER) &&
-				OPEN_STATUSES.includes(step.status),
+			finalPlan?.status === "active" &&
+			!finalPlan.steps.some((step) => OPEN_STATUSES.includes(step.status))
 		)
+			await this.plansService.markCompleted(finalPlan.identifier)
+		if (
+			outcome.kind === "completed" &&
+			outcome.executedSteps >=
+				this.configuration.agent.maximumStepsPerCycle &&
+			finalPlan?.status === "active" &&
+			finalPlan.steps.some(
+				(step) =>
+					RUNNABLE_STATUSES.includes(step.status) &&
+					step.dependsOn.every((id) =>
+						finalPlan.steps.some(
+							(dependency) =>
+								dependency.identifier === id &&
+								dependency.status === "completed",
+						),
+					),
+			)
+		)
+			this.cycleState.tryBegin(runIdentifier)
+		return outcome
 	}
 
-	private requiresRevision(plan: PlanRecord, trigger: AgentTrigger): boolean {
-		switch (trigger.kind) {
-			case "conditions-changed":
-				return true
-			case "approval-decided":
-			case "timeouts-expired":
-			case "tool-call-finished":
-			case "follow-up":
-			case "operator-requested":
-			case "impact-detected":
-				if (this.callFailedWhileStepsWait(plan)) {
-					return true
-				}
-				return plan.steps.some((step) => {
-					const priority = plan.priorities.find(
-						(candidate) =>
-							candidate.serviceIdentifier ===
-							step.serviceIdentifier,
-					)
-					const stillPlanned = priority
-						? priority.decision === "recover-now"
-						: false
-					return (
-						stillPlanned &&
-						(step.status === "rejected" ||
-							(step.status === "failed" &&
-								step.attempts >=
-									this.configuration.agent
-										.maximumStepAttempts))
-					)
-				})
+	private async observeForLlm(
+		runIdentifier: string,
+		trigger: AgentTrigger,
+	): Promise<LlmLoopState> {
+		const incident =
+			await this.runsService.getByRunIdentifier(runIdentifier)
+		const previous = await this.plansService.findLatestPlan(runIdentifier)
+		const input = await this.buildLlmInput(
+			incident,
+			previous,
+			describeTrigger(trigger, this.messagesFor(incident)),
+			this.messagesFor(incident),
+		)
+		const [approvals, incomingCalls, calls, toolCalls, learning] =
+			await Promise.all([
+				this.approvalsService.list(runIdentifier),
+				this.incomingCalls.list(runIdentifier),
+				this.engineersService.list(runIdentifier),
+				this.toolsService.list(runIdentifier),
+				this.learningService.list(this.scenarioOf(incident).family),
+			])
+		return {
+			blocked: incomingCalls.some((call) => call.status === "pending"),
+			evidence: {
+				approvals,
+				calls,
+				incomingCalls,
+				learning,
+				toolCalls: toolCalls.slice(-30),
+			},
+			input,
 		}
 	}
 
-	private async createPlanVersion(
+	private async buildLlmInput(
 		incident: IncidentSnapshot,
 		previous: PlanRecord | null,
 		triggeredBy: string,
 		messages: AgentMessages,
-	): Promise<PlanRecord> {
+	): Promise<PlanBuildInput> {
 		const scenario = this.scenarioOf(incident)
 		const rejectedApprovals = await this.approvalsService.list(
 			incident.runIdentifier,
@@ -616,7 +572,16 @@ export class AgentService {
 			supportContact: scenario.supportContact,
 			triggeredBy,
 		}
-		const draft = buildPlanDraft(input)
+		return input
+	}
+
+	private async createPlanVersion(
+		incident: IncidentSnapshot,
+		previous: PlanRecord | null,
+		triggeredBy: string,
+		messages: AgentMessages,
+		draft: PlanDraft,
+	): Promise<PlanRecord> {
 		const changes = previous
 			? diffPlans(
 					previous,
@@ -632,7 +597,7 @@ export class AgentService {
 		const saved = await this.toolsService.execute({
 			attempt: 1,
 			decisionIdentifier,
-			idempotencyKey: `save-plan:v${(previous?.version ?? 0) + 1}`,
+			idempotencyKey: `save-plan:${decisionIdentifier}`,
 			incidentIdentifier: incident.identifier,
 			invocation: {
 				input: {
@@ -724,23 +689,6 @@ export class AgentService {
 			observations: insight.observations,
 			reportedCapacity: insight.reportedCapacity,
 		}
-	}
-
-	private nextRunnableStep(plan: PlanRecord): PlanStep | null {
-		const completed = new Set(
-			plan.steps
-				.filter((step) => step.status === "completed")
-				.map((step) => step.identifier),
-		)
-		const candidate = plan.steps.find(
-			(step) =>
-				RUNNABLE_STATUSES.includes(step.status) &&
-				step.dependsOn.every((dependency) => completed.has(dependency)),
-		)
-		if (!candidate) {
-			return null
-		}
-		return candidate
 	}
 
 	private async executeStep(
@@ -1287,51 +1235,6 @@ export class AgentService {
 			case "pending":
 				return
 		}
-	}
-
-	private async recordCycleSummary(
-		incident: IncidentSnapshot,
-		plan: PlanRecord,
-		executed: number,
-		waitingFor: ReadonlyArray<string>,
-		planFinished: boolean,
-		messages: AgentMessages,
-	): Promise<void> {
-		const recovered = incident.services
-			.filter((service) => service.status === "healthy")
-			.map((service) => service.name)
-		const failing = incident.services
-			.filter((service) => service.status !== "healthy")
-			.map((service) => `${service.name} (${service.status})`)
-		const nextStep = this.nextRunnableStep(plan)
-		const nextDescription = waitingFor.length
-			? messages.waitingFor(waitingFor)
-			: nextStep
-				? messages.nextStep(nextStep.title)
-				: planFinished
-					? messages.planFinished
-					: messages.nothingRunnable
-		await this.activityService.record({
-			correlation: {
-				decisionIdentifier: plan.decisionIdentifier,
-				planIdentifier: plan.identifier,
-				planVersion: plan.version,
-			},
-			incidentIdentifier: incident.identifier,
-			payload: {
-				executedSteps: executed,
-				failing,
-				planFinished,
-				recovered,
-				waitingFor,
-			},
-			runIdentifier: incident.runIdentifier,
-			simulated: false,
-			source: "agent",
-			summary: messages.cycleSummary(recovered, failing, nextDescription),
-			title: "Agent cycle finished",
-			type: "agent.cycle-finished",
-		})
 	}
 }
 

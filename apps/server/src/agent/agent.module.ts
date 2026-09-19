@@ -1,12 +1,15 @@
 import { ActivityModule } from "@activity/activity.module"
 import { AgentController } from "@agent/controllers/agent.controller"
 import { OverviewController } from "@agent/controllers/overview.controller"
+import { LlmClientService } from "@agent/llm/llm-client.service"
+import { LlmLoopService } from "@agent/llm/llm-loop.service"
 import { AgentService } from "@agent/services/agent.service"
 import { AgentCycleStateService } from "@agent/services/agent-cycle-state.service"
 import { ApprovalsModule } from "@approvals/approvals.module"
 import { EngineersModule } from "@engineers/engineers.module"
 import { IncidentsModule } from "@incidents/incidents.module"
 import { LearningModule } from "@learning/learning.module"
+import { HttpModule } from "@nestjs/axios"
 import { Module } from "@nestjs/common"
 import { PlansModule } from "@plans/plans.module"
 import { RecoveryModule } from "@recovery/recovery.module"
@@ -17,6 +20,7 @@ import { ToolsModule } from "@tools/tools.module"
 	controllers: [AgentController, OverviewController],
 	exports: [AgentService],
 	imports: [
+		HttpModule,
 		IncidentsModule,
 		PlansModule,
 		ApprovalsModule,
@@ -27,6 +31,11 @@ import { ToolsModule } from "@tools/tools.module"
 		ActivityModule,
 		LearningModule,
 	],
-	providers: [AgentCycleStateService, AgentService],
+	providers: [
+		AgentCycleStateService,
+		AgentService,
+		LlmClientService,
+		LlmLoopService,
+	],
 })
 export class AgentModule {}

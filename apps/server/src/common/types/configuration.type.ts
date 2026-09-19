@@ -71,6 +71,15 @@ export interface AgentConfiguration {
 	readonly callTimeoutMilliseconds: number
 }
 
+export interface LlmConfiguration {
+	readonly baseURL: string
+	readonly apiKey: string
+	readonly model: string
+	readonly timeoutMilliseconds: number
+	readonly maximumTurns: number
+	readonly maximumOutputTokens: number
+}
+
 export interface EmailConfiguration {
 	readonly mode: "simulated" | "live"
 	readonly apiKey: string
@@ -90,4 +99,5 @@ export interface ApplicationConfiguration {
 	readonly recovery: RecoveryConfiguration
 	readonly demo: DemoConfiguration
 	readonly agent: AgentConfiguration
+	readonly llm: LlmConfiguration
 }

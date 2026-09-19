@@ -7,6 +7,7 @@ import {
 	IsString,
 	IsUrl,
 	Matches,
+	Max,
 	Min,
 	MinLength,
 } from "class-validator"
@@ -154,4 +155,33 @@ export class EnvironmentVariables {
 	@IsInt()
 	@Min(1000)
 	AGENT_CALL_TIMEOUT_MILLISECONDS: number = 300000
+
+	// The LLM is the default decision provider. Empty provider fields keep local
+	// startup possible; the client reports the missing configuration when called.
+	@IsString()
+	LLM_BASE_URL: string = ""
+
+	@IsString()
+	LLM_API_KEY: string = ""
+
+	@IsString()
+	LLM_MODEL: string = ""
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(100)
+	@Max(120000)
+	LLM_TIMEOUT_MILLISECONDS: number = 30000
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(1)
+	@Max(32)
+	LLM_MAXIMUM_TURNS: number = 24
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(1)
+	@Max(32768)
+	LLM_MAXIMUM_OUTPUT_TOKENS: number = 16384
 }

@@ -32,6 +32,7 @@ function customerOverview(options: {
     incident: {
       active: true,
       status: "active",
+      impactedAt: "2026-09-19T10:00:00.000Z",
       customers: options.customers.map((customer) => ({
         identifier: customer.identifier,
         name: customer.identifier,
@@ -56,7 +57,7 @@ function customerOverview(options: {
 
 describe("live dashboard adapter", () => {
   it("derives customer health from the authoritative service state", () => {
-    expect(customerView(overview.incident)[0]).toMatchObject({ status: "down", action: "queued", progress: 0 });
+    expect(customerView(overview.incident)[0]).toMatchObject({ status: "down", action: "offline", progress: 0 });
   });
   it("does not invent topology status in the browser", () => {
     expect(topologyView(overview)[0].status).toBe("down");
@@ -66,9 +67,57 @@ describe("live dashboard adapter", () => {
     expect(topologyView(incomplete)).toEqual([]);
     expect(customerView(incomplete.incident)).toEqual([]);
   });
-  it("treats recuperado as healthy green", () => {
+  it("keeps healthy companies online until impact", () => {
+    const idle = customerOverview({
+      services: [{ identifier: "database", status: "healthy" }],
+      customers: [{ identifier: "alpha", serviceIdentifiers: ["database"] }],
+    });
+    idle.incident.status = "normal";
+    idle.incident.impactedAt = "";
+    expect(customerView(idle.incident)[0]).toMatchObject({ action: "online", status: "up", progress: 100 });
+  });
+  it("marks down companies offline until a recovery is actually running", () => {
+    const impacted = customerOverview({
+      services: [{ identifier: "database", status: "down" }],
+      customers: [{ identifier: "alpha", serviceIdentifiers: ["database"] }],
+    });
+    impacted.incident.impactedAt = "2026-09-19T10:00:00.000Z";
+    expect(customerView(impacted.incident)[0]).toMatchObject({ action: "offline", status: "down", progress: 0 });
+  });
+  it("turns orange only while a company is migrating", () => {
+    const migrating = customerOverview({
+      services: [{ identifier: "database", status: "recovering" }],
+      customers: [{ identifier: "alpha", serviceIdentifiers: ["database"] }],
+    });
+    migrating.incident.impactedAt = "2026-09-19T10:00:00.000Z";
+    expect(customerView(migrating.incident)[0]).toMatchObject({ action: "migrating", status: "degraded" });
+  });
+  it("marks companies recovered only after impact restores every service", () => {
+    const restored = customerOverview({
+      services: [{ identifier: "database", status: "healthy" }],
+      customers: [{ identifier: "alpha", serviceIdentifiers: ["database"] }],
+    });
+    restored.incident.status = "partially-recovered";
+    restored.incident.impactedAt = "2026-09-19T10:00:00.000Z";
+    expect(customerView(restored.incident)[0]).toMatchObject({ action: "recovered", status: "up", progress: 100 });
+  });
+  it("keeps partial progress on the line even when the remaining work is still offline", () => {
+    const partial = customerOverview({
+      services: [
+        { identifier: "svc-a", status: "healthy" },
+        { identifier: "svc-b", status: "down" },
+      ],
+      customers: [{ identifier: "alpha", serviceIdentifiers: ["svc-a", "svc-b"] }],
+    });
+    partial.incident.impactedAt = "2026-09-19T10:00:00.000Z";
+    expect(customerView(partial.incident)[0]).toMatchObject({ action: "offline", status: "down", progress: 50 });
+  });
+  it("treats recuperado and migrado as healthy green", () => {
     expect(statusOf("recuperado")).toBe("up");
     expect(statusOf("recovered")).toBe("up");
+    expect(statusOf("migrado")).toBe("up");
+    expect(statusOf("operativo")).toBe("up");
+    expect(statusOf("sin conexión")).toBe("down");
     expect(statusOf("migrando")).toBe("degraded");
   });
   it("keeps unstarted companies in scenario order", () => {
@@ -121,6 +170,6 @@ describe("live dashboard adapter", () => {
       ],
     });
     expect(customerViewOrdered(later).map((customer) => customer.identifier)).toEqual(["beta", "alpha", "gamma"]);
-    expect(customerViewOrdered(later).map((customer) => customer.action)).toEqual(["recovered", "migrating", "queued"]);
+    expect(customerViewOrdered(later).map((customer) => customer.action)).toEqual(["recovered", "migrating", "offline"]);
   });
 });

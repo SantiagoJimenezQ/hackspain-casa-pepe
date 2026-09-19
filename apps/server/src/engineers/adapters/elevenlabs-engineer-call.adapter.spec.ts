@@ -149,6 +149,7 @@ describe("ElevenLabsEngineerCallAdapter", () => {
 					contact_name: "Lucía Responsable",
 					incident_description: "First sentence. Second sentence.",
 					location: "eu-west-1",
+					outage_time: "",
 					services_down: "orders, tracking",
 				},
 			},
@@ -156,6 +157,36 @@ describe("ElevenLabsEngineerCallAdapter", () => {
 		})
 		expect(init.signal).toBeInstanceOf(AbortSignal)
 	})
+
+	it.each([
+		["2026-09-19T14:30:00+02:00", "12:30 UTC"],
+		["2026-09-19T08:05:00Z", "08:05 UTC"],
+		[undefined, ""],
+		["invalid", ""],
+		["2026-09-19T14:30:00", ""],
+	])(
+		"sends outage time %s as %s without substituting call time",
+		async (outageStartedAt, expected) => {
+			const fetch = fetchMock()
+			fetch.mockResolvedValue(
+				response({
+					callSid: "CA_test",
+					conversation_id: "conv_test",
+					success: true,
+				}),
+			)
+			const adapter = new ElevenLabsEngineerCallAdapter(configuration())
+			await adapter.start(
+				request({ outageStartedAt }),
+				async () => undefined,
+			)
+			const payload = JSON.parse(String(fetch.mock.calls[0][1]?.body))
+			expect(
+				payload.conversation_initiation_client_data.dynamic_variables
+					.outage_time,
+			).toBe(expected)
+		},
+	)
 
 	it("fails safely when the provider rejects the start request without retrying", async () => {
 		const fetch = fetchMock()
@@ -385,6 +416,53 @@ describe("ElevenLabsEngineerCallAdapter", () => {
 			summary: "The responsible person answered both permissions.",
 			transcript:
 				"agent: Necesito contexto.\nuser: Sí, avisad a los clientes.",
+		})
+	})
+
+	it("preserves unanswered permissions when a successful call ends before the questions", async () => {
+		// Sanitized shape observed in the direct-provider rehearsal on 2026-09-19.
+		const fetch = fetchMock()
+		fetch.mockResolvedValue(
+			response({
+				agent_id: "agent_test",
+				analysis: {
+					call_successful: "success",
+					data_collection_results: {
+						notify_all_clients: {
+							rationale:
+								"The notification question was not asked.",
+							value: null,
+						},
+						traffic_failover_authorized: {
+							rationale: "The failover question was not asked.",
+							value: null,
+						},
+					},
+					transcript_summary:
+						"The call ended before the permission questions.",
+				},
+				conversation_id: "conv_test",
+				metadata: { termination_reason: "Call ended by remote party" },
+				status: "done",
+				transcript: [{ message: "Sí, sí.", role: "user" }],
+			}),
+		)
+		const adapter = new ElevenLabsEngineerCallAdapter(configuration())
+
+		await expect(adapter.getResult(call())).resolves.toMatchObject({
+			answers: [],
+			authorizations: {
+				notifyAllClients: {
+					rationale: "The notification question was not asked.",
+					value: null,
+				},
+				trafficFailoverAuthorized: {
+					rationale: "The failover question was not asked.",
+					value: null,
+				},
+			},
+			outcome: "completed",
+			transcript: "user: Sí, sí.",
 		})
 	})
 

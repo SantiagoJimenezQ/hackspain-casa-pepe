@@ -127,6 +127,7 @@ const es = {
   "status.map.down": "Sin conexión",
 
   "companies.title": "Empresas afectadas",
+  "companies.titleIdle": "Empresas",
   "companies.seeAll": "Ver todas",
   "companies.company": "Empresa",
   "companies.sector": "Sector",
@@ -136,6 +137,7 @@ const es = {
   "companies.migrating": "Migrando",
   "companies.queued": "En cola",
   "companies.offline": "Sin conexión",
+  "companies.migrated": "Migrado",
   "companies.open": "Abrir {name}",
 
   "sector.energy": "Energía",
@@ -148,6 +150,15 @@ const es = {
   "migration.doneOf": "{done} de {total} empresas",
   "migration.eta": "ETA {minutes} min",
   "migration.queued": "En cola",
+  "migration.waiting": "Esperando el primer ciclo del agente.",
+
+  "map.networkLive": "Red operativa",
+  "map.networkCrisis": "Golfo · failover activo",
+  "map.networkRestored": "Red restaurada",
+  "map.legendOnline": "operativo",
+  "map.legendMigrating": "migrando",
+  "map.legendOffline": "sin conexión",
+  "map.impactConfirmed": "impacto confirmado",
 
   "infra.title": "Estado de la infraestructura",
   "infra.seeAll": "Ver todo",
@@ -308,6 +319,7 @@ const en: { [K in keyof typeof es]: string } = {
   "status.map.down": "Offline",
 
   "companies.title": "Affected companies",
+  "companies.titleIdle": "Companies",
   "companies.seeAll": "View all",
   "companies.company": "Company",
   "companies.sector": "Sector",
@@ -317,6 +329,7 @@ const en: { [K in keyof typeof es]: string } = {
   "companies.migrating": "Migrating",
   "companies.queued": "Queued",
   "companies.offline": "Offline",
+  "companies.migrated": "Migrated",
   "companies.open": "Open {name}",
 
   "sector.energy": "Energy",
@@ -329,6 +342,15 @@ const en: { [K in keyof typeof es]: string } = {
   "migration.doneOf": "{done} of {total} companies",
   "migration.eta": "ETA {minutes} min",
   "migration.queued": "Queued",
+  "migration.waiting": "Waiting for the agent's first cycle.",
+
+  "map.networkLive": "Operational network",
+  "map.networkCrisis": "Gulf · failover active",
+  "map.networkRestored": "Network restored",
+  "map.legendOnline": "operational",
+  "map.legendMigrating": "migrating",
+  "map.legendOffline": "offline",
+  "map.impactConfirmed": "impact confirmed",
 
   "infra.title": "Infrastructure status",
   "infra.seeAll": "View all",

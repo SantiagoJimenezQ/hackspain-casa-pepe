@@ -3,6 +3,8 @@ export type EngineerCallProvider = 'happyrobot' | 'elevenlabs'
 export type OutboundCallProvider = EngineerCallProvider
 
 export interface EngineerCallIncidentContext {
+  /** ISO timestamp of the outage, not the call start; absent for legacy calls. */
+  readonly outageStartedAt?: string
   readonly location: string
   readonly incidentDescription: string
   readonly servicesDown: ReadonlyArray<string>

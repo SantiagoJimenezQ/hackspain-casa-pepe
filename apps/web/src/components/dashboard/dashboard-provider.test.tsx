@@ -262,7 +262,7 @@ describe("live dashboard chrome", () => {
     expect(screen.queryByRole("button", { name: "Iniciar demo" })).not.toBeInTheDocument();
     expect(screen.queryByText("La simulación está preparada")).not.toBeInTheDocument();
     expect(screen.getByText("EN ESPERA")).toBeInTheDocument();
-    expect(screen.getByText("En espera del impacto")).toBeInTheDocument();
+    expect(screen.getByText("Red operativa")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Ciclo" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Demo" })).not.toBeInTheDocument();
   });
@@ -325,7 +325,7 @@ describe("live dashboard chrome", () => {
     expect(screen.getByText("Tiempo de incidente")).toBeInTheDocument();
     expect(screen.getAllByText("Recuperando Flujo de eventos").length).toBeGreaterThan(0);
     expect(screen.getByText("Leyó el contexto del incidente")).toBeInTheDocument();
-    expect(screen.getByText("recuperando")).toBeInTheDocument();
+    expect(screen.getByText("Migrando")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Trabajo del agente" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ir al último" })).toBeInTheDocument();
     expect(screen.queryByText("Completado")).not.toBeInTheDocument();

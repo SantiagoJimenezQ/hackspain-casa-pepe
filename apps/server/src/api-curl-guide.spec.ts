@@ -33,6 +33,7 @@ import { CurrentPlanResponse, PlanRecord } from "@plans/types/plan.type"
 import { RecoveryActionEntity } from "@recovery/entities/recovery-action.entity"
 import { RecoveryModule } from "@recovery/recovery.module"
 import { ReplaysModule } from "@replays/replays.module"
+import { ApprovalScenariosFixture } from "@root/testing/approval-scenarios.fixture"
 import { InMemoryRepository } from "@root/testing/in-memory-repository"
 import {
 	createScriptedLlmClient,
@@ -40,6 +41,7 @@ import {
 } from "@root/testing/scripted-llm.helper"
 import { waitFor } from "@root/testing/wait-for.helper"
 import { ScenariosModule } from "@scenarios/scenarios.module"
+import { ScenariosService } from "@scenarios/services/scenarios.service"
 import {
 	ScenarioDefinition,
 	ScenarioSummary,
@@ -189,6 +191,9 @@ describe("API curl walkthrough contract", () => {
 				ReplaysModule,
 			],
 		})
+		builder = builder
+			.overrideProvider(ScenariosService)
+			.useClass(ApprovalScenariosFixture)
 		for (const entity of ENTITIES) {
 			builder = builder
 				.overrideProvider(getRepositoryToken(entity))

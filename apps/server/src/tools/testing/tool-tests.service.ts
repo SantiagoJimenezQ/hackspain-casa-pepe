@@ -49,6 +49,8 @@ const SYNTHETIC_CALL_ANSWER =
 type ToolTestCallOutcome = "completed" | "failed" | "no-answer"
 
 export interface ToolTestCallCallback {
+	readonly phase?: "authorization" | "completed"
+	readonly authorizations?: EngineerCallResult["authorizations"]
 	readonly callIdentifier: string
 	readonly outcome: ToolTestCallOutcome
 	readonly summary?: string
@@ -192,6 +194,24 @@ export class ToolTestsService {
 			return toToolTestResult(entity)
 		}
 
+		if (body.phase === "authorization") {
+			if (!body.authorizations)
+				throw new DomainException(
+					HttpStatus.BAD_REQUEST,
+					"Missing Authorizations",
+					"In-call evidence requires both authorization records",
+				)
+			return toToolTestResult(
+				await this.updateIfStatus(
+					entity.identifier,
+					["running", "accepted"],
+					{
+						detail: "Permissions received; waiting for HappyRobot call completion",
+						result: { authorizations: body.authorizations },
+					},
+				),
+			)
+		}
 		const outcome = normalizeOutcome(body.outcome)
 		const answers = (body.answers ?? []).map((answer) => ({
 			answer: answer.answer,
@@ -204,6 +224,7 @@ export class ToolTestsService {
 		}))
 		const result: EngineerCallResult = {
 			answers,
+			authorizations: body.authorizations,
 			outcome,
 			summary: body.summary ?? "",
 			transcript: body.transcript ?? "",

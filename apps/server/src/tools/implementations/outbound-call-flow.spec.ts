@@ -129,6 +129,51 @@ describe("outbound engineer call flow", () => {
 		expect(output).not.toHaveProperty("capacity")
 	})
 
+	it("retains HappyRobot permissions and routes in-call evidence separately", async () => {
+		const completeCall = jest.fn()
+		const recordAuthorizations = jest.fn()
+		const controller = new InboundWebhooksController(
+			{} as never,
+			{
+				completeCall,
+				getByIdentifier: jest
+					.fn()
+					.mockResolvedValue({
+						provider: "happyrobot",
+						questions: [],
+					}),
+				recordAuthorizations,
+			} as never,
+			{} as never,
+		)
+		const authorizations = {
+			notifyAllClients: { rationale: "Yes", value: true },
+			trafficFailoverAuthorized: { rationale: "Unanswered", value: null },
+		}
+		const body = {
+			answers: [],
+			authorizations,
+			callIdentifier: "call_hr",
+			outcome: "completed" as const,
+			summary: "Permissions",
+			transcript: "Transcript",
+		}
+		await controller.happyRobot({ ...body, phase: "authorization" })
+		expect(recordAuthorizations).toHaveBeenCalledWith(
+			"call_hr",
+			authorizations,
+		)
+		expect(completeCall).not.toHaveBeenCalled()
+		await controller.happyRobot(body)
+		expect(completeCall).toHaveBeenCalledWith(
+			"call_hr",
+			expect.objectContaining({
+				authorizations,
+				transcript: "Transcript",
+			}),
+		)
+	})
+
 	it("does not let a HappyRobot callback complete an ElevenLabs call", async () => {
 		const call = {
 			identifier: "call_elevenlabs",

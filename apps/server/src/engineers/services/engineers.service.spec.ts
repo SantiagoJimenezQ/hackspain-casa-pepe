@@ -128,6 +128,68 @@ describe("EngineersService outbound call runtime", () => {
 		)
 	})
 
+	it("records HappyRobot permissions without completing the call or emitting a recovery event", async () => {
+		const state = setup()
+		const started = await state.service.startCall(command())
+		await state.repository.update(
+			{ identifier: started.identifier },
+			{ provider: "happyrobot" },
+		)
+		await state.service.recordAuthorizations(
+			started.identifier,
+			result.authorizations,
+		)
+		const pending = await state.service.getByIdentifier(started.identifier)
+		expect(pending.status).toBe("in-progress")
+		expect(pending.finishedAt).toBe("")
+		expect(pending.result?.authorizations).toEqual(result.authorizations)
+		expect(state.events.emit).not.toHaveBeenCalled()
+		expect(state.activity.record).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				type: "engineer-call.authorization-received",
+			}),
+		)
+		const count = state.activity.record.mock.calls.length
+		await state.service.recordAuthorizations(
+			started.identifier,
+			result.authorizations,
+		)
+		expect(state.activity.record).toHaveBeenCalledTimes(count)
+		await state.service.completeCall(started.identifier, result)
+		await state.service.recordAuthorizations(started.identifier, {
+			notifyAllClients: { rationale: "Late update", value: false },
+			trafficFailoverAuthorized: {
+				rationale: "Existing refusal",
+				value: false,
+			},
+		})
+		expect(
+			(await state.service.getByIdentifier(started.identifier)).result,
+		).toEqual(result)
+	})
+
+	it("rejects in-call evidence for another provider or an inactive incident", async () => {
+		const state = setup()
+		const started = await state.service.startCall(command())
+		await expect(
+			state.service.recordAuthorizations(
+				started.identifier,
+				result.authorizations,
+			),
+		).rejects.toThrow()
+		await state.repository.update(
+			{ identifier: started.identifier },
+			{ provider: "happyrobot" },
+		)
+		state.runs.isRunActive.mockResolvedValue(false)
+		await expect(
+			state.service.recordAuthorizations(
+				started.identifier,
+				result.authorizations,
+			),
+		).rejects.toThrow("no longer active")
+	})
+
 	it("rejects late results from an inactive run without completing the call", async () => {
 		const setupState = setup()
 		const started = await setupState.service.startCall(command())

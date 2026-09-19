@@ -83,6 +83,9 @@ export class EnvironmentVariables {
 	HAPPYROBOT_API_KEY: string = ""
 
 	@IsString()
+	HAPPY_ROBOT_API_KEY: string = ""
+
+	@IsString()
 	@MinLength(1)
 	HAPPYROBOT_WEBHOOK_SECRET: string = ""
 

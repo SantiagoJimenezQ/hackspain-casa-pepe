@@ -5,9 +5,11 @@ import { Type } from "class-transformer"
 import {
 	IsArray,
 	IsBoolean,
+	IsDefined,
 	IsIn,
 	IsOptional,
 	IsString,
+	ValidateIf,
 	ValidateNested,
 } from "class-validator"
 
@@ -29,7 +31,37 @@ export class HappyRobotAnswerDTO {
 	confirmed?: boolean
 }
 
+export class HappyRobotAuthorizationDTO {
+	@ApiProperty({ nullable: true, type: Boolean })
+	@ValidateIf((_object, value) => value !== null)
+	@IsBoolean()
+	value: boolean | null
+
+	@ApiProperty()
+	@IsString()
+	rationale: string
+}
+
+export class HappyRobotAuthorizationsDTO {
+	@ApiProperty({ type: HappyRobotAuthorizationDTO })
+	@IsDefined()
+	@ValidateNested()
+	@Type(() => HappyRobotAuthorizationDTO)
+	notifyAllClients: HappyRobotAuthorizationDTO
+
+	@ApiProperty({ type: HappyRobotAuthorizationDTO })
+	@IsDefined()
+	@ValidateNested()
+	@Type(() => HappyRobotAuthorizationDTO)
+	trafficFailoverAuthorized: HappyRobotAuthorizationDTO
+}
+
 export class HappyRobotCallResultDTO {
+	@ApiPropertyOptional({ enum: ["authorization", "completed"] })
+	@IsOptional()
+	@IsIn(["authorization", "completed"])
+	phase?: "authorization" | "completed"
+
 	@ApiProperty({
 		description: "Identifier sent by Casa Pepe when the call was triggered",
 	})
@@ -56,4 +88,10 @@ export class HappyRobotCallResultDTO {
 	@ValidateNested({ each: true })
 	@Type(() => HappyRobotAnswerDTO)
 	answers: HappyRobotAnswerDTO[] = []
+
+	@ApiPropertyOptional({ type: HappyRobotAuthorizationsDTO })
+	@IsOptional()
+	@ValidateNested()
+	@Type(() => HappyRobotAuthorizationsDTO)
+	authorizations?: HappyRobotAuthorizationsDTO
 }

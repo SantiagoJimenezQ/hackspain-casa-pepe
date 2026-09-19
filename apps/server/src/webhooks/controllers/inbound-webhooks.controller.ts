@@ -80,6 +80,13 @@ export class InboundWebhooksController {
 				"receive a HappyRobot result",
 			)
 		}
+		if (body.phase === "authorization") {
+			await this.engineersService.recordAuthorizations(
+				body.callIdentifier,
+				body.authorizations,
+			)
+			return { accepted: true }
+		}
 		const questionsByKey = new Map(
 			call.questions.map((question) => [question.key, question.question]),
 		)
@@ -93,6 +100,7 @@ export class InboundWebhooksController {
 					question: question ? question : answer.key,
 				}
 			}),
+			authorizations: body.authorizations,
 			outcome: body.outcome,
 			summary: body.summary,
 			transcript: body.transcript,

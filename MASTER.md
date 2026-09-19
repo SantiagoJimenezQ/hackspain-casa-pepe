@@ -204,6 +204,14 @@ Si somos tres desarrollando, podemos unir integración con el frente de harness.
 
 Dejamos como extras más escenarios y las estadísticas históricas.
 
-**Estado actual:** tenemos el repositorio privado y el `AGENTS.md` con el resumen del reto. El harness, el agente, las integraciones y la UI están pendientes de implementación. La presentación todavía no está terminada.
+## Estado de implementación en `main`
+
+La arquitectura descrita en este documento ya tiene una implementación funcional en `apps/server`: NestJS es el único backend y reúne el estado persistido del incidente, la simulación manual y aleatoria reproducible mediante semilla, el ciclo de decisión basado en reglas, los planes versionados, las aprobaciones, las tareas, las herramientas, las integraciones, la actividad, el aprendizaje y las reproducciones. `apps/web` consume el backend mediante rutas proxy del servidor y recibe la actividad por SSE.
+
+El recorrido principal está cubierto en modo simulado: iniciar una ejecución, aplicar el impacto, crear y revisar el plan, contactar al ingeniero, introducir la limitación de capacidad, solicitar una aprobación, ejecutar y verificar la recuperación y consultar el informe. HappyRobot, Resend y el entorno HTTP de recuperación requieren configuración y validación de extremo a extremo; por defecto no se contacta a proveedores externos.
+
+El aprendizaje persistido actual cubre observaciones de capacidad sobreestimada y resultados de recuperación, y la capacidad histórica puede influir en planes posteriores. La revisión e invalidación manual de aprendizajes y la validación pública de proveedores siguen siendo trabajo de demo/despliegue, no deben darse por resueltas solo porque pasen las pruebas locales.
+
+La presentación todavía no está terminada.
 
 Referencias: [repositorio](https://github.com/SantiagoJimenezQ/hackspain-casa-pepe) · [reto oficial](https://hackspain2026.happyrobot.ai/)

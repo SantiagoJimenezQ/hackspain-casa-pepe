@@ -2,6 +2,10 @@ import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { EngineerCallMode } from "@common/types/configuration.type"
 import {
+	HAPPYROBOT_DEFAULT_AFFECTED_SERVICES,
+	HAPPYROBOT_DEFAULT_SEVERITY,
+} from "@engineers/constants/engineer.constant"
+import {
 	AdapterCallOutcome,
 	AdapterCallRequest,
 	DeliverCallResult,
@@ -33,19 +37,22 @@ export class HappyRobotEngineerCallAdapter implements EngineerCallAdapter {
 				reason: "HAPPYROBOT_TRIGGER_URL is not configured",
 			}
 		}
+		const askAbout = request.call.questions
+			.map(
+				(question, index) =>
+					`${index + 1}. [${question.key}] ${question.question}`,
+			)
+			.join("\n")
 		const payload = {
+			affected_services: HAPPYROBOT_DEFAULT_AFFECTED_SERVICES,
+			ask_about: askAbout,
 			call_identifier: request.call.identifier,
 			callback_url: request.callbackURL,
 			engineer_name: request.call.engineer.name,
 			engineer_phone: request.call.engineer.phone,
-			engineer_role: request.call.engineer.role,
-			incident_identifier: request.call.incidentIdentifier,
-			purpose: request.call.purpose,
-			questions: request.call.questions.map((question) => ({
-				key: question.key,
-				question: question.question,
-			})),
-			run_identifier: request.call.runIdentifier,
+			incident_id: request.call.incidentIdentifier,
+			incident_summary: request.call.purpose,
+			severity: HAPPYROBOT_DEFAULT_SEVERITY,
 		}
 		try {
 			await firstValueFrom(

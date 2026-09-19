@@ -44,12 +44,6 @@ const ACTION_ROW: Record<CustomerAction, string> = {
   migrating: "border-[color-mix(in_srgb,var(--status-degraded)_40%,transparent)] bg-[color-mix(in_srgb,var(--status-degraded)_10%,transparent)]",
   offline: "border-[color-mix(in_srgb,var(--status-down)_28%,transparent)] bg-[color-mix(in_srgb,var(--status-down)_7%,transparent)]",
 };
-const ACTION_ACCENT: Record<CustomerAction, string> = {
-  online: "var(--status-up)",
-  recovered: "var(--status-up)",
-  migrating: "var(--status-degraded)",
-  offline: "var(--status-down)",
-};
 const PHASE_ROW: Record<RecoveryPhase, string> = {
   recovered: "border-[color-mix(in_srgb,var(--status-up)_35%,transparent)] bg-[color-mix(in_srgb,var(--status-up)_10%,transparent)]",
   recovering: "border-[color-mix(in_srgb,var(--status-degraded)_40%,transparent)] bg-[color-mix(in_srgb,var(--status-degraded)_10%,transparent)]",
@@ -169,10 +163,9 @@ function Companies() {
                 transition={{ duration: 0.4, layout: { duration: 0.35, ease: [0.23, 1, 0.32, 1] } }}
                 className={cn(
                   COMPANY_GRID,
-                  "min-h-11 shrink-0 items-center rounded-lg border border-l-2 px-2.5 py-1.5 text-[11px]",
+                  "min-h-11 shrink-0 items-center rounded-lg border px-2.5 py-1.5 text-[11px]",
                   ACTION_ROW[customer.action],
                 )}
-                style={{ borderLeftColor: ACTION_ACCENT[customer.action] }}
               >
                 <div className="flex min-w-0 items-center gap-2">
                   <CompanyLogo

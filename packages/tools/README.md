@@ -27,6 +27,8 @@ The authenticated `/api/engineers/incoming-calls/simulate` endpoint provides the
 
 `INCIDENT_EMAIL_MODE=simulated` never contacts a provider. Live sending requires server-side `RESEND_API_KEY`, `INCIDENT_EMAIL_FROM` and `INCIDENT_EMAIL_TO`. The agent cannot choose arbitrary recipients. The generated email is explicitly labelled as a demo.
 
+The authenticated `/api/tools/tests` routes expose the same email and engineer-call boundaries for provider checks that do not depend on an incident. They default to synthetic simulated requests, persist idempotent results, and keep HappyRobot callbacks isolated from incident records and agent events.
+
 ## Operational boundary
 
 This is a single coordinator hackathon runtime. It uses the existing database-backed tool log and per-run cycle serialization. It does not provide distributed scheduling or exactly-once side effects across crashes; email also relies on the provider's idempotency retention window. Unknown outcomes must be reconciled before retrying after that window. Deployments must configure the HappyRobot workflow and a reachable callback URL; adding these tools does not provision phone numbers or provider accounts.

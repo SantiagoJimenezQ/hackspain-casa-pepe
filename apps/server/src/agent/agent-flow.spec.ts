@@ -38,9 +38,11 @@ import { TasksService } from "@tasks/services/tasks.service"
 import { TasksModule } from "@tasks/tasks.module"
 import { StatusPublicationEntity } from "@tools/entities/status-publication.entity"
 import { ToolCallEntity } from "@tools/entities/tool-call.entity"
+import { ToolTestEntity } from "@tools/testing/tool-test.entity"
 import { ToolsModule } from "@tools/tools.module"
 
 const ENTITIES = [
+	ToolTestEntity,
 	IncomingCallEntity,
 	StatusPublicationEntity,
 	IncidentEntity,

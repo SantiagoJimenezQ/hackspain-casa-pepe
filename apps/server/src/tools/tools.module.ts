@@ -1,7 +1,9 @@
 import { ActivityModule } from "@activity/activity.module"
 import { ApprovalsModule } from "@approvals/approvals.module"
+import { HappyRobotEngineerCallAdapter } from "@engineers/adapters/happyrobot-engineer-call.adapter"
 import { EngineersModule } from "@engineers/engineers.module"
 import { IncidentsModule } from "@incidents/incidents.module"
+import { HttpModule } from "@nestjs/axios"
 import { Module } from "@nestjs/common"
 import { TypeOrmModule } from "@nestjs/typeorm"
 import { PlansModule } from "@plans/plans.module"
@@ -35,12 +37,21 @@ import {
 } from "@tools/implementations/state-tools"
 import { ToolRegistryService } from "@tools/services/tool-registry.service"
 import { ToolsService } from "@tools/services/tools.service"
+import { ToolTestEntity } from "@tools/testing/tool-test.entity"
+import { ToolTestsController } from "@tools/testing/tool-tests.controller"
+import { ToolTestsService } from "@tools/testing/tool-tests.service"
+import { HappyRobotSecretGuard } from "@webhooks/guards/inbound-secret.guard"
 
 @Module({
-	controllers: [ToolsController, PublicStatusController],
+	controllers: [ToolsController, PublicStatusController, ToolTestsController],
 	exports: [ToolsService, ToolRegistryService],
 	imports: [
-		TypeOrmModule.forFeature([ToolCallEntity, StatusPublicationEntity]),
+		TypeOrmModule.forFeature([
+			ToolCallEntity,
+			StatusPublicationEntity,
+			ToolTestEntity,
+		]),
+		HttpModule,
 		PlansModule,
 		ActivityModule,
 		IncidentsModule,
@@ -64,6 +75,9 @@ import { ToolsService } from "@tools/services/tools.service"
 		RequestApprovalTool,
 		ExecuteRecoveryTool,
 		VerifyRecoveryTool,
+		HappyRobotEngineerCallAdapter,
+		HappyRobotSecretGuard,
+		ToolTestsService,
 		ToolRegistryService,
 		ToolsService,
 	],

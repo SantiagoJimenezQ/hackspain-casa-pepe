@@ -371,6 +371,64 @@ The eight tools with `name`, `description`, `interaction` (`harness` \| `simulat
 
 Error codes: `TIMEOUT`, `CALL_FAILED`, `APPROVAL_INVALID`, `CAPACITY_INSUFFICIENT`, `EXECUTION_FAILED`, `UNEXPECTED_ERROR`, `CANCELLED`.
 
+## Standalone tool tests (`/tools/tests`)
+
+These routes exercise the outbound email and engineer-call integrations without creating, resetting or advancing an incident. They use fixed synthetic content and persist results in a dedicated table; they do not create agent tool calls or activity events.
+
+### `GET /tools/tests`
+
+Returns one catalog entry per supported test. Each entry has `tool` (`send_incident_email` or `call_engineer`), `modes` (`simulated` and/or `live`), `liveAvailable`, and a description. The catalog never includes credentials or provider URLs.
+
+### `POST /tools/tests`
+
+Requires the operator API key. The body is:
+
+```json
+{
+  "tool": "send_incident_email",
+  "mode": "simulated",
+  "idempotencyKey": "tool-test-email-001"
+}
+```
+
+For an engineer-call test, include an E.164 phone number. The engineer is required for a live call and is accepted for simulated calls as well:
+
+```json
+{
+  "tool": "call_engineer",
+  "mode": "simulated",
+  "idempotencyKey": "tool-test-call-001",
+  "engineer": { "name": "Marta Ruiz", "phone": "+34600000000" }
+}
+```
+
+`mode` defaults to `simulated`. Simulated tests finish immediately and never contact a provider. Live email uses the configured `RESEND_API_KEY`, `INCIDENT_EMAIL_FROM` and `INCIDENT_EMAIL_TO`; the caller cannot choose recipients. Live calls use the configured HappyRobot trigger and remain `accepted` until the provider callback arrives. A live request is rejected when its integration mode or required configuration is unavailable. Reusing an idempotency key with the same normalized request returns the original result; a different request with that key returns `409`.
+
+### `GET /tools/tests/:identifier`
+
+Returns the durable standalone result:
+
+```json
+{
+  "identifier": "tool-test_…",
+  "tool": "send_incident_email",
+  "mode": "simulated",
+  "status": "succeeded",
+  "createdAt": "2026-09-19T12:00:00.000Z",
+  "finishedAt": "2026-09-19T12:00:00.001Z",
+  "providerReference": "simulated:tool-test:tool-test_…",
+  "detail": "Email simulated; nothing was sent",
+  "error": null,
+  "result": { "channel": "email", "mode": "simulated", "reference": "simulated:tool-test:tool-test_…" }
+}
+```
+
+Call results are `accepted` while the provider is processing them. Reading an overdue accepted call marks it `failed` with a timeout error. A completed callback changes it to `succeeded` or `failed`; duplicate and late callbacks leave the terminal result unchanged.
+
+### `POST /tools/tests/callbacks/happyrobot`
+
+Public route protected by `x-happyrobot-signature: <HAPPYROBOT_WEBHOOK_SECRET>`, separately from the operator API key. It accepts the same `HappyRobotCallResultDTO` as `/webhooks/happyrobot`, including `callIdentifier`, `outcome`, `summary`, `transcript` and `answers`. The callback only completes a standalone `call_engineer` result and never updates incident state, engineer-call records or the agent.
+
 ---
 
 ## Engineer calls (`/engineers/calls`)

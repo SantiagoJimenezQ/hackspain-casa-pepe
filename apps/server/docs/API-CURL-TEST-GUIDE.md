@@ -68,6 +68,77 @@ curl "${CURL[@]}" "$BASE_URL/tools" | jq .
 
 The scheme is `Authorization: API …`, not `Bearer …`. These commands do not print the key; avoid shell tracing (`set -x`).
 
+## Optional: standalone tool checks
+
+These checks run without starting or changing an incident. They use a dedicated result table and synthetic content. Simulated requests finish immediately and never contact Resend or HappyRobot.
+
+```bash
+# Discover the available test tools and whether live mode is configured.
+curl "${CURL[@]}" "$BASE_URL/tools/tests" | jq .
+
+# Synthetic email: the server's configured recipient is used only in live mode.
+EMAIL_TEST=$(curl "${CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
+  "tool":"send_incident_email",
+  "mode":"simulated",
+  "idempotencyKey":"curl-tool-test-email-1"
+}')
+EMAIL_ID=$(jq -er '.identifier' <<<"$EMAIL_TEST")
+jq -e '.tool == "send_incident_email" and .mode == "simulated" and .status == "succeeded"' <<<"$EMAIL_TEST"
+
+# Synthetic engineer call: simulated mode accepts the same engineer shape as live mode.
+CALL_TEST=$(curl "${CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
+  "tool":"call_engineer",
+  "mode":"simulated",
+  "idempotencyKey":"curl-tool-test-call-1",
+  "engineer":{"name":"Marta Ruiz","phone":"+34600000000"}
+}')
+CALL_ID=$(jq -er '.identifier' <<<"$CALL_TEST")
+jq -e '.tool == "call_engineer" and .mode == "simulated" and .status == "succeeded"' <<<"$CALL_TEST"
+curl "${CURL[@]}" "$BASE_URL/tools/tests/$EMAIL_ID" | jq .
+curl "${CURL[@]}" "$BASE_URL/tools/tests/$CALL_ID" | jq .
+```
+
+Live mode is opt-in and can contact external providers. Run these commands only with a test recipient and engineer number, and only after confirming `liveAvailable` in the catalog:
+
+```bash
+# Live email reports provider acceptance; it does not prove inbox delivery.
+LIVE_EMAIL=$(curl "${CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
+  "tool":"send_incident_email",
+  "mode":"live",
+  "idempotencyKey":"curl-tool-test-live-email-1"
+}')
+jq -e '.tool == "send_incident_email" and .mode == "live" and (.status == "accepted" or .status == "succeeded")' <<<"$LIVE_EMAIL"
+
+# Live calls remain accepted until the HappyRobot workflow posts its callback.
+LIVE_CALL=$(curl "${CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
+  "tool":"call_engineer",
+  "mode":"live",
+  "idempotencyKey":"curl-tool-test-live-call-1",
+  "engineer":{"name":"Test engineer","phone":"+34600000000"}
+}')
+LIVE_CALL_ID=$(jq -er '.identifier' <<<"$LIVE_CALL")
+# Keep polling until HappyRobot posts its callback, or until the server marks
+# the accepted call as failed after its configured timeout.
+wait_for "/tools/tests/$LIVE_CALL_ID" '.status == "succeeded" or .status == "failed"' | jq .
+```
+
+If you need to exercise the callback route itself, start a separate live check and immediately post a provider-signed synthetic callback. This verifies authentication and result handling; it does not prove that a phone call was answered:
+
+```bash
+CALLBACK_TEST=$(curl "${CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
+  "tool":"call_engineer",
+  "mode":"live",
+  "idempotencyKey":"curl-tool-test-live-callback-1",
+  "engineer":{"name":"Test engineer","phone":"+34600000000"}
+}')
+CALLBACK_ID=$(jq -er '.identifier' <<<"$CALLBACK_TEST")
+CALLBACK='{"callIdentifier":"'"$CALLBACK_ID"'","outcome":"completed","summary":"Synthetic callback received","transcript":"","answers":[]}'
+curl --silent --show-error --fail-with-body --max-time 60 --header "x-happyrobot-signature: ${HAPPYROBOT_WEBHOOK_SECRET:?Set the callback secret}" --header 'Content-Type: application/json' -X POST "$BASE_URL/tools/tests/callbacks/happyrobot" --data "$CALLBACK" | jq -e '.accepted == true'
+curl "${CURL[@]}" "$BASE_URL/tools/tests/$CALLBACK_ID" | jq -e '.status == "succeeded"'
+```
+
+Polling a result is safe and does not retry a provider request. Reusing an idempotency key with identical normalized input returns the same identifier; changing the tool, mode or engineer under that key returns `409`.
+
 ## 3. Start a clean manual run
 
 The learning deletion below is intentional and global. Omitting it preserves prior knowledge, which can change the initial plan. `/demo/reset` alone does not clear learning.

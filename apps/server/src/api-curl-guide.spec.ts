@@ -44,10 +44,12 @@ import { TasksModule } from "@tasks/tasks.module"
 import { TaskRecord } from "@tasks/types/task.type"
 import { StatusPublicationEntity } from "@tools/entities/status-publication.entity"
 import { ToolCallEntity } from "@tools/entities/tool-call.entity"
+import { ToolTestEntity } from "@tools/testing/tool-test.entity"
 import { ToolsModule } from "@tools/tools.module"
 import { ToolDefinitionView } from "@tools/types/tool.type"
 
 const ENTITIES = [
+	ToolTestEntity,
 	IncomingCallEntity,
 	StatusPublicationEntity,
 	IncidentEntity,
@@ -262,6 +264,55 @@ describe("API curl walkthrough contract", () => {
 				"verify_recovery",
 			]),
 		)
+	})
+
+	it("tests communication tools without creating or changing an incident", async () => {
+		const runsBefore = await request(baseURL, "/api/incidents/runs")
+		for (const tool of ["send_incident_email", "call_engineer"]) {
+			const response = await request<{
+				identifier: string
+				status: string
+				mode: string
+			}>(baseURL, "/api/tools/tests", {
+				body: { idempotencyKey: `no-incident-${tool}`, tool },
+				method: "POST",
+			})
+			expect(response.status).toBe(201)
+			expect(response.body.status).toBe("succeeded")
+			expect(response.body.mode).toBe("simulated")
+			const polled = await request(
+				baseURL,
+				`/api/tools/tests/${response.body.identifier}`,
+			)
+			expect(polled.body).toEqual(response.body)
+		}
+		expect((await request(baseURL, "/api/incidents/runs")).body).toEqual(
+			runsBefore.body,
+		)
+
+		await startManualRun(baseURL)
+		const paths = [
+			"/api/incidents/current",
+			"/api/plans",
+			"/api/activity",
+			"/api/tools/calls",
+			"/api/engineers/calls",
+			"/api/agent/status",
+		]
+		const before = await Promise.all(
+			paths.map((path) => request(baseURL, path)),
+		)
+		for (const tool of ["send_incident_email", "call_engineer"]) {
+			const response = await request(baseURL, "/api/tools/tests", {
+				body: { idempotencyKey: `active-incident-${tool}`, tool },
+				method: "POST",
+			})
+			expect(response.status).toBe(201)
+		}
+		const after = await Promise.all(
+			paths.map((path) => request(baseURL, path)),
+		)
+		expect(after).toEqual(before)
 	})
 
 	it("runs the mandatory curl walkthrough through the real HTTP boundary", async () => {

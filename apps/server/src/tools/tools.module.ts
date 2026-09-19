@@ -35,12 +35,20 @@ import {
 } from "@tools/implementations/state-tools"
 import { ToolRegistryService } from "@tools/services/tool-registry.service"
 import { ToolsService } from "@tools/services/tools.service"
+import { ToolTestEntity } from "@tools/testing/tool-test.entity"
+import { ToolTestsController } from "@tools/testing/tool-tests.controller"
+import { ToolTestsService } from "@tools/testing/tool-tests.service"
+import { HappyRobotSecretGuard } from "@webhooks/guards/inbound-secret.guard"
 
 @Module({
-	controllers: [ToolsController, PublicStatusController],
+	controllers: [ToolsController, PublicStatusController, ToolTestsController],
 	exports: [ToolsService, ToolRegistryService],
 	imports: [
-		TypeOrmModule.forFeature([ToolCallEntity, StatusPublicationEntity]),
+		TypeOrmModule.forFeature([
+			ToolCallEntity,
+			StatusPublicationEntity,
+			ToolTestEntity,
+		]),
 		PlansModule,
 		ActivityModule,
 		IncidentsModule,
@@ -64,6 +72,8 @@ import { ToolsService } from "@tools/services/tools.service"
 		RequestApprovalTool,
 		ExecuteRecoveryTool,
 		VerifyRecoveryTool,
+		HappyRobotSecretGuard,
+		ToolTestsService,
 		ToolRegistryService,
 		ToolsService,
 	],

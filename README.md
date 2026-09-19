@@ -32,6 +32,7 @@ This is a hackathon prototype under active development.
 | Backend | NestJS API with incident state, simulation controls, recovery planning, approvals, and activity records |
 | Simulation | Manual and seeded randomized runs in NestJS, with the seed and draw state persisted per run |
 | Engineer contact | Simulated mode, ElevenLabs/HappyRobot adapters, and operator-confirmed incoming reports |
+| Standalone tool checks | Authenticated synthetic email and engineer-call checks with durable results, idempotency, and isolated provider results |
 | Recovery | Simulated mode and an HTTP adapter for a test environment |
 | Learning | Persisted capacity and recovery-outcome insights, plus per-run reports |
 | Dashboard–backend integration | Implemented through authenticated Next.js server-side proxy routes |

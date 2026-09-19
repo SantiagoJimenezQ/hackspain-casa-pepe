@@ -41,6 +41,21 @@ Only literal booleans count as answers; missing, malformed, or textual values re
 
 The hosted prompt's promise to email a report does not send one. This integration does not add an email webhook to ElevenLabs. Casa Pepe's separate `send_incident_email` tool still requires its own provider configuration and execution.
 
+## Standalone API test
+
+With the settings above, use `POST /api/tools/tests` without starting an incident:
+
+```json
+{
+  "tool": "call_engineer",
+  "mode": "live",
+  "idempotencyKey": "elevenlabs-check-001",
+  "engineer": { "name": "Test engineer", "phone": "+34600000000" }
+}
+```
+
+Use an intended test recipient. The adapter sends synthetic incident context to the existing hosted agent. Poll `GET /api/tools/tests/<identifier>` every five seconds until `succeeded` or `failed`; each pending ElevenLabs GET checks conversation details. No public callback or incident scheduler is needed for these standalone tests. Results retain conversation ID, call SID, transcript, summary and authorization evidence, but never create incident approvals or start recovery. `GET /api/tools/tests` reports the selected provider and whether its live configuration is present. Reuse the same idempotency key to retrieve the original execution without redialing.
+
 ## Rehearsal
 
 1. Start the backend with the above settings and a working database. Confirm its health response reports the chosen mode/provider.

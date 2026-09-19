@@ -88,7 +88,8 @@ With 12 reported units the initial plan recovers the four failing services. Afte
 | Approvals | `GET /approvals`, `POST /approvals/:identifier/decision` | Proposed action, consequences and operator decision |
 | Tasks | `GET /tasks`, `PATCH /tasks/:identifier/status` | Tasks with owner and status |
 | Activity | `GET /activity?afterSequence=&types=` | Full log, correlated across event, decision, tool call and approval |
-| Tools | `GET /tools`, `/tools/calls`, `/tools/calls/:identifier` | Available tools, which ones are simulated, and every execution |
+| Tools | `GET /tools`, `/tools/calls`, `/tools/calls/:identifier` | Available agent tools, which ones are simulated, and every execution |
+| Standalone tool tests | `GET/POST /tools/tests`, `GET /tools/tests/:identifier`, `POST /tools/tests/callbacks/happyrobot` | Authenticated synthetic email/call checks with durable polling; callback uses the HappyRobot shared secret and never touches an incident |
 | Calls | `GET /engineers/calls` | Engineer calls with questions and answers |
 | Recovery | `GET /recovery/actions` | Actions executed in the test environment |
 | Agent | `GET /agent/status`, `POST /agent/cycle` | Agent status and on-demand cycle |
@@ -101,6 +102,8 @@ With 12 reported units the initial plan recovers the four failing services. Afte
 | Health | `GET /health` | Postgres and integration modes |
 
 The full reference of every endpoint, body, response and the event catalog is in [docs/API.md](docs/API.md). Interactive OpenAPI documentation is served at `/documentation`.
+
+For provider-independent checks of outbound email and engineer calls, use the standalone tool-test routes. `POST /tools/tests` defaults to simulated mode and accepts fixed synthetic content; live calls use `ENGINEER_CALL_PROVIDER` and remain `accepted` until an ElevenLabs conversation lookup or HappyRobot callback completes them. Poll the result endpoint to fetch ElevenLabs completion; no public callback is needed for ElevenLabs. The copyable requests and polling examples are in [docs/API-CURL-TEST-GUIDE.md](docs/API-CURL-TEST-GUIDE.md#optional-standalone-tool-checks).
 
 For repeatable API testing with an environment-provided API key, use the [curl test guide](docs/API-CURL-TEST-GUIDE.md). It includes an ordered incident walkthrough, asynchronous polling, approval checks, and optional endpoint exercises.
 

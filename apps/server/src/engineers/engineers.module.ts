@@ -19,7 +19,12 @@ import { TypeOrmModule } from "@nestjs/typeorm"
 
 @Module({
 	controllers: [EngineersController, IncomingCallsController],
-	exports: [EngineersService, IncomingCallsService],
+	exports: [
+		EngineersService,
+		IncomingCallsService,
+		ENGINEER_CALL_ADAPTER,
+		ElevenLabsEngineerCallAdapter,
+	],
 	imports: [
 		TypeOrmModule.forFeature([EngineerCallEntity, IncomingCallEntity]),
 		IncidentsModule,

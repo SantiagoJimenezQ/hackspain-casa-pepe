@@ -6,6 +6,7 @@ import {
 } from "@common/exceptions/domain.exception"
 import { addMilliseconds, nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
+import { sanitizeProviderDiagnostic } from "@common/helpers/provider-diagnostic.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { ElevenLabsEngineerCallAdapter } from "@engineers/adapters/elevenlabs-engineer-call.adapter"
 import { ENGINEER_CALL_ADAPTER } from "@engineers/constants/engineer.constant"
@@ -16,7 +17,7 @@ import {
 	EngineerContact,
 	EngineerQuestion,
 } from "@engineers/types/engineer.type"
-import { HttpStatus, Inject, Injectable } from "@nestjs/common"
+import { HttpStatus, Inject, Injectable, Logger } from "@nestjs/common"
 import { InjectRepository } from "@nestjs/typeorm"
 import { ToolTestEntity } from "@tools/testing/tool-test.entity"
 import { In, Repository } from "typeorm"
@@ -70,6 +71,7 @@ type EntityPatch = Partial<ToolTestEntity>
 
 @Injectable()
 export class ToolTestsService {
+	private readonly logger = new Logger(ToolTestsService.name)
 	constructor(
 		@InjectRepository(ToolTestEntity)
 		private readonly repository: Repository<ToolTestEntity>,
@@ -285,7 +287,8 @@ export class ToolTestsService {
 				},
 			)
 			return toToolTestResult(updated)
-		} catch {
+		} catch (error) {
+			this.logFailure(entity, error)
 			return toToolTestResult(
 				await this.updateIfStatus(entity.identifier, ["running"], {
 					detail: "Email request failed or timed out; check the provider before retrying",
@@ -342,6 +345,7 @@ export class ToolTestsService {
 				},
 			)
 			if (outcome.kind === "failed") {
+				this.logFailure(entity, { reason: outcome.reason })
 				return toToolTestResult(
 					await this.updateIfStatus(entity.identifier, ["running"], {
 						detail: "Engineer call request failed or timed out; check the provider before retrying",
@@ -371,7 +375,8 @@ export class ToolTestsService {
 					status: "accepted",
 				}),
 			)
-		} catch {
+		} catch (error) {
+			this.logFailure(entity, error)
 			return toToolTestResult(
 				await this.updateIfStatus(entity.identifier, ["running"], {
 					detail: "Engineer call request failed or timed out; check the provider before retrying",
@@ -385,6 +390,33 @@ export class ToolTestsService {
 				}),
 			)
 		}
+	}
+
+	private logFailure(entity: ToolTestEntity, error: unknown): void {
+		this.logger.error(
+			sanitizeProviderDiagnostic(
+				{
+					error,
+					event: "tool_test_provider_failure",
+					mode: entity.mode,
+					provider: entity.provider,
+					testIdentifier: entity.identifier,
+					tool: entity.tool,
+				},
+				[
+					this.configuration.authentication?.apiKey,
+					this.configuration.email?.apiKey,
+					this.configuration.email?.from,
+					this.configuration.email?.to,
+					this.configuration.elevenLabs?.apiKey,
+					this.configuration.happyRobot?.apiKey,
+					this.configuration.happyRobot?.webhookSecret,
+					this.configuration.happyRobot?.triggerURL,
+					entity.engineer?.name,
+					entity.engineer?.phone,
+				].filter((value): value is string => typeof value === "string"),
+			),
+		)
 	}
 
 	private normalizeInput(input: ToolTestExecuteInput): NormalizedInput {

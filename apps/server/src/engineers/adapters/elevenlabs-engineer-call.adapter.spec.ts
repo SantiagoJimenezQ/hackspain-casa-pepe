@@ -8,6 +8,7 @@ import {
 	EngineerCallRecord,
 	EngineerCallResult,
 } from "@engineers/types/engineer.type"
+import { Logger } from "@nestjs/common"
 import { EngineerCallIncidentContext } from "../../../../../packages/contracts/outbound-calls"
 
 type FetchMock = jest.MockedFunction<typeof fetch>
@@ -21,9 +22,11 @@ const fetchMock = (): FetchMock => {
 
 function response(body: unknown, status = 200): Response {
 	return {
+		headers: new Headers({ "x-request-id": "req_test" }),
 		json: async () => body,
 		ok: status >= 200 && status < 300,
 		status,
+		text: async () => JSON.stringify(body),
 	} as Response
 }
 
@@ -95,6 +98,7 @@ describe("ElevenLabsEngineerCallAdapter", () => {
 	afterEach(() => {
 		global.fetch = originalFetch
 		jest.useRealTimers()
+		jest.restoreAllMocks()
 	})
 
 	it("starts a call with the documented endpoint and dynamic variables", async () => {
@@ -233,6 +237,9 @@ describe("ElevenLabsEngineerCallAdapter", () => {
 	})
 
 	it("aborts a stalled response body at the configured timeout", async () => {
+		const log = jest
+			.spyOn(Logger.prototype, "error")
+			.mockImplementation(() => {})
 		jest.useFakeTimers()
 		const fetch = fetchMock()
 		fetch.mockImplementation(async (_input, init) => {
@@ -259,9 +266,19 @@ describe("ElevenLabsEngineerCallAdapter", () => {
 			kind: "failed",
 			reason: "ElevenLabs start request timed out",
 		})
+		expect(log).toHaveBeenCalledWith(
+			expect.objectContaining({
+				elapsedMilliseconds: 100,
+				stage: "request",
+				timeoutMilliseconds: 100,
+			}),
+		)
 	})
 
 	it("does not accept a successful response without both provider identifiers", async () => {
+		const log = jest
+			.spyOn(Logger.prototype, "error")
+			.mockImplementation(() => {})
 		const fetch = fetchMock()
 		fetch.mockResolvedValue(
 			response({ conversation_id: "conv_test", success: true }),
@@ -274,6 +291,12 @@ describe("ElevenLabsEngineerCallAdapter", () => {
 			kind: "failed",
 			reason: "ElevenLabs returned an invalid outbound call response",
 		})
+		expect(log).toHaveBeenCalledWith(
+			expect.objectContaining({
+				httpStatus: 200,
+				stage: "invalid_response",
+			}),
+		)
 	})
 
 	it("keeps the result pending until the call is done and analyzed", async () => {
@@ -406,5 +429,90 @@ describe("ElevenLabsEngineerCallAdapter", () => {
 		await expect(adapter.getResult(call())).resolves.toBeNull()
 		fetch.mockResolvedValue(response("not-json"))
 		await expect(adapter.getResult(call())).resolves.toBeNull()
+	})
+})
+
+describe("ElevenLabs provider diagnostics", () => {
+	afterEach(() => {
+		global.fetch = originalFetch
+		jest.restoreAllMocks()
+	})
+
+	it("logs HTTP diagnostics and correlation while redacting echoed secrets and recipient data", async () => {
+		const log = jest
+			.spyOn(Logger.prototype, "error")
+			.mockImplementation(() => {})
+		fetchMock().mockResolvedValue(
+			response(
+				{
+					detail: {
+						authorization: "Bearer hidden",
+						message: "Rejected secret-key for +34600111222",
+						status: "invalid_api_key",
+					},
+				},
+				401,
+			),
+		)
+		const outcome = await new ElevenLabsEngineerCallAdapter(
+			configuration(),
+		).start(request(), async () => {})
+		expect(outcome.kind).toBe("failed")
+		expect(log).toHaveBeenCalledWith(
+			expect.objectContaining({
+				callIdentifier: "call_test",
+				event: "elevenlabs_provider_failure",
+				httpStatus: 401,
+				operation: "start",
+				requestIds: { "x-request-id": "req_test" },
+			}),
+		)
+		const logged = JSON.stringify(log.mock.calls)
+		expect(logged).toContain("invalid_api_key")
+		for (const secret of ["secret-key", "+34600111222", "Bearer hidden"])
+			expect(logged).not.toContain(secret)
+	})
+
+	it("retains non-JSON polling errors and request IDs", async () => {
+		const log = jest
+			.spyOn(Logger.prototype, "error")
+			.mockImplementation(() => {})
+		fetchMock().mockResolvedValue(
+			new Response("Upstream unavailable", {
+				headers: { "request-id": "req_poll" },
+				status: 502,
+			}),
+		)
+		expect(
+			await new ElevenLabsEngineerCallAdapter(configuration()).getResult(
+				call(),
+			),
+		).toBeNull()
+		expect(log).toHaveBeenCalledWith(
+			expect.objectContaining({
+				body: "Upstream unavailable",
+				httpStatus: 502,
+				operation: "result",
+				requestIds: { "request-id": "req_poll" },
+			}),
+		)
+	})
+
+	it("logs network error causes without exposing credentials", async () => {
+		const log = jest
+			.spyOn(Logger.prototype, "error")
+			.mockImplementation(() => {})
+		fetchMock().mockRejectedValue(
+			Object.assign(new Error("secret-key connection failed"), {
+				cause: new Error("ECONNRESET"),
+			}),
+		)
+		await new ElevenLabsEngineerCallAdapter(configuration()).start(
+			request(),
+			async () => {},
+		)
+		const logged = JSON.stringify(log.mock.calls)
+		expect(logged).toContain("ECONNRESET")
+		expect(logged).not.toContain("secret-key")
 	})
 })

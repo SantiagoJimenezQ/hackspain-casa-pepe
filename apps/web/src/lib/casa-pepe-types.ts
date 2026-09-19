@@ -23,6 +23,19 @@ export type ActivityRecord = {
   payload?: Record<string, unknown>;
 };
 
+export type LlmDisposition = "pending" | "accepted" | "rejected" | "stale" | "incomplete";
+
+export type LlmPublicToolCall = {
+  id: string;
+  name: string;
+  arguments: unknown;
+};
+
+export type LlmHistoryPage = {
+  items: ActivityRecord[];
+  nextBeforeSequence: number | null;
+};
+
 export type Service = {
   identifier: string;
   name: string;

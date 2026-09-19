@@ -26,7 +26,7 @@ import {
 import { SubagentRunnerService } from "@agent/llm/subagent-runner.service"
 import { isText } from "@agent/llm/subagent-tools"
 import { CycleOutcome } from "@agent/types/agent.type"
-import { LlmLoopActions, LlmLoopState } from "@agent/types/llm-loop.type"
+import type { LlmLoopActions, LlmLoopState } from "@agent/types/llm-loop.type"
 import { SubagentOutcome } from "@agent/types/subagent.type"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { Injectable } from "@nestjs/common"
@@ -34,7 +34,7 @@ import type { LlmPublicTurn } from "../../../../../packages/contracts/agent"
 import { PublicOutput } from "./public-output"
 
 export { modelVisible, stateFingerprint } from "@agent/llm/llm-state"
-export { LlmLoopActions, LlmLoopState } from "@agent/types/llm-loop.type"
+export type { LlmLoopActions, LlmLoopState } from "@agent/types/llm-loop.type"
 
 const SYSTEM = `You are Casa Pepe's incident commander. You own investigation, prioritization, coordination and adaptation.
 Delegate investigation and human contact to your specialists, create or revise a plan, select one next step, then reassess its result.

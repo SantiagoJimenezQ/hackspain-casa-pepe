@@ -44,10 +44,10 @@ export class LlmClientService {
 		model: string
 		finishReason?: string | null
 	}> {
-		const configuration = {
-			...this.providerConfiguration(),
-			...overrides,
-		}
+		const configuration = mergeCompletionOverrides(
+			this.providerConfiguration(),
+			overrides,
+		)
 		const responseData = await this.request(
 			configuration,
 			messages,
@@ -73,11 +73,7 @@ export class LlmClientService {
 		}
 	}
 
-	private providerConfiguration(
-		onTextOrOverrides?:
-			| ((text: string) => Promise<void>)
-			| LlmCompletionOverrides,
-	): LlmConfiguration {
+	private providerConfiguration(): LlmConfiguration {
 		const configured = this.configuration.llm
 		if (!configured || typeof configured !== "object") {
 			throw new LlmClientError(

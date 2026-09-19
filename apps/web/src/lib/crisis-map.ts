@@ -5,6 +5,8 @@ import countries from "@/data/countries-110m.json";
 import type { Overview, ToolCall } from "@/lib/casa-pepe-types";
 import { topologyView, type CustomerAction } from "@/lib/live-dashboard";
 
+export { agentSettled } from "@/lib/agent-trace";
+
 export const MAP_PADDING = 24;
 export const MIN_CAMERA_K = 1;
 export const MAX_CAMERA_K = 7;
@@ -58,13 +60,6 @@ export function worldPath(projection: GeoProjection) {
 
 export function spherePath(projection: GeoProjection) {
   return geoPath(projection)({ type: "Sphere" } as GeoPermissibleObjects) ?? "";
-}
-
-export function agentSettled(overview: Pick<Overview, "incident" | "plan" | "agent">): boolean {
-  const recovered = overview.incident.status === "recovered";
-  const planCompleted = overview.plan?.kind === "plan" && overview.plan.plan.status === "completed";
-  if (!recovered && !planCompleted) return false;
-  return !overview.agent?.cycleInProgress && (overview.agent?.runningToolCalls ?? 0) === 0;
 }
 
 export function mapViewForTools(impacted: boolean, toolNames: readonly string[], settled = false): MapView {

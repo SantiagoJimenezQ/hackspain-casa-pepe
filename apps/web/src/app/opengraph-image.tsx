@@ -46,7 +46,7 @@ export default function OpenGraphImage() {
           }}
         />
 
-        <div style={{ display: "flex", height: 8 }}>
+        <div style={{ display: "flex", height: 28 }}>
           {STATUS.map((status) => (
             <div key={status.label} style={{ display: "flex", flex: 1, background: status.color }} />
           ))}

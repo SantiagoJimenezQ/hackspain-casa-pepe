@@ -156,6 +156,7 @@ const es = {
   "migration.queued": "En cola",
   "migration.waiting": "Esperando el primer ciclo del agente.",
   "migration.servicesDone": "{done} de {total} servicios",
+  "agent.work.settled": "Incidente resuelto",
 
   "map.networkLive": "Red operativa",
   "map.networkCrisis": "Golfo · failover activo",
@@ -412,6 +413,7 @@ const en: { [K in keyof typeof es]: string } = {
   "migration.queued": "Queued",
   "migration.waiting": "Waiting for the agent's first cycle.",
   "migration.servicesDone": "{done} of {total} services",
+  "agent.work.settled": "Incident resolved",
 
   "map.networkLive": "Operational network",
   "map.networkCrisis": "Gulf · failover active",

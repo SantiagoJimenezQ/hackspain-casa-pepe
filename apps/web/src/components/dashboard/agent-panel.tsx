@@ -33,11 +33,13 @@ import {
   reasoningDefaultOpen,
   summarizeToolOutput,
   toolTitle,
+  type CurrentWork,
   type TranscriptItem,
 } from "@/lib/agent-trace";
 import { formatChatDebugDump } from "@/lib/agent-chat-debug";
 import type { Approval, LlmPublicToolCall, ToolCall } from "@/lib/casa-pepe-types";
 import type { VisualStatus } from "@/lib/live-dashboard";
+import { cn } from "@/lib/utils";
 
 const DecisionTreeView = dynamic(() => import("./decision-tree-view"), { ssr: false });
 
@@ -326,6 +328,19 @@ function transcriptKey(item: TranscriptItem) {
   return item.id;
 }
 
+function headerStatus(work: CurrentWork, live: boolean): VisualStatus {
+  if (work.kind === "settled") return "up";
+  if (live) return "degraded";
+  if (work.kind === "idle") return "up";
+  return "degraded";
+}
+
+function headerToneClass(work: CurrentWork, live: boolean): string {
+  if (work.kind === "settled") return "text-status-up";
+  if (live || work.kind === "thinking") return "text-foreground";
+  return "text-muted-foreground";
+}
+
 export function AgentPanel() {
   const { overview, activity, busyAction, decideApproval } = useDashboard();
   const { locale, t } = useI18n();
@@ -382,16 +397,8 @@ export function AgentPanel() {
           <h2 className="text-[14px] font-medium">Pepe</h2>
         </div>
         <span className="ml-auto flex min-w-0 max-w-[60%] items-center gap-1.5 text-[11px]">
-          <Dot status={live ? "degraded" : work.kind === "idle" ? "up" : "degraded"} />
-          <span
-            className={
-              live || work.kind === "thinking"
-                ? "min-w-0 truncate text-foreground"
-                : "min-w-0 truncate text-muted-foreground"
-            }
-          >
-            {work.title}
-          </span>
+          <Dot status={headerStatus(work, live)} />
+          <span className={cn("min-w-0 truncate", headerToneClass(work, live))}>{work.title}</span>
         </span>
         <button type="button" title="Árbol de decisiones" aria-label="Abrir árbol de decisiones" onClick={() => setTreeOpen(true)} className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-status-up"><GitBranch className="size-4" /></button>
         <Button

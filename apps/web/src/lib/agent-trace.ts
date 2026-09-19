@@ -38,6 +38,7 @@ export type CurrentWork =
   | { kind: "tool"; tool: ToolCall; title: string; state: ElementsToolState }
   | { kind: "approval"; title: string; reason: string }
   | { kind: "thinking"; title: string }
+  | { kind: "settled"; title: string }
   | { kind: "idle"; title: string };
 
 export type DecidedApproval = {
@@ -289,6 +290,17 @@ function decidedApprovalFromActivity(activity: ActivityRecord): DecidedApproval 
   };
 }
 
+/**
+ * The run is over: the incident is recovered (or the plan completed) and the server reports no cycle
+ * and no running tool call.
+ */
+export function agentSettled(overview: Pick<Overview, "incident" | "plan" | "agent">): boolean {
+  const recovered = overview.incident.status === "recovered";
+  const planCompleted = overview.plan?.kind === "plan" && overview.plan.plan.status === "completed";
+  if (!recovered && !planCompleted) return false;
+  return !overview.agent?.cycleInProgress && (overview.agent?.runningToolCalls ?? 0) === 0;
+}
+
 export function mergedToolCalls(overview: Overview, activity: ReadonlyArray<ActivityRecord> = []) {
   const byId = new Map<string, ToolCall>();
   for (const tool of overview.toolCalls) {
@@ -308,7 +320,16 @@ export function mergedToolCalls(overview: Overview, activity: ReadonlyArray<Acti
       subagent: tool.subagent ?? existing.subagent,
     } : tool);
   }
-  return sortedToolCalls([...byId.values()]);
+  const merged = [...byId.values()];
+  if (agentSettled(overview)) {
+    return sortedToolCalls(merged.map(settledToolCall));
+  }
+  return sortedToolCalls(merged);
+}
+
+function settledToolCall(tool: ToolCall): ToolCall {
+  if (tool.status !== "running" && tool.status !== "pending") return tool;
+  return { ...tool, status: "succeeded", finishedAt: tool.finishedAt || tool.startedAt };
 }
 
 export function decidedApprovals(activity: ReadonlyArray<ActivityRecord> = []) {
@@ -335,6 +356,9 @@ export function currentWork(
   locale: Locale = DEFAULT_LOCALE,
 ): CurrentWork {
   const events = [...overview.recentActivity, ...activity];
+  if (agentSettled(overview)) {
+    return { kind: "settled", title: translate(locale, "agent.work.settled") };
+  }
   const tools = mergedToolCalls(overview, events);
   const running = [...tools].reverse().find((tool) => tool.status === "running" || tool.status === "pending");
   if (running) {

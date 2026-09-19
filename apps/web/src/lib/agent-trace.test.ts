@@ -676,6 +676,36 @@ describe("agent trace", () => {
     ]);
   });
 
+  it("reports the run as resolved instead of a tool the activity stream left mid-flight", () => {
+    const stale = tool({
+      identifier: "call_recover",
+      name: "execute_recovery",
+      status: "running",
+      input: { serviceIdentifier: "package-tracking" },
+    });
+    const overview = overviewWith([stale], [
+      { identifier: "package-tracking", name: "Seguimiento de paquetes", status: "healthy", statusReason: "ok", lastChangedAt: "2026-09-19T10:05:00.000Z", recoveryCapacityUnits: 3 },
+    ]);
+    // The run is over as far as the server is concerned: recovered, no cycle, nothing running.
+    overview.incident.status = "recovered";
+    overview.agent.runningToolCalls = 0;
+
+    expect(currentWork(overview)).toMatchObject({ kind: "settled", title: "Incidente resuelto" });
+    expect(mergedToolCalls(overview).map((item) => item.status)).toEqual(["succeeded"]);
+  });
+
+  it("still surfaces a running tool while the run is live", () => {
+    const running = tool({
+      identifier: "call_recover",
+      name: "execute_recovery",
+      status: "running",
+      input: { serviceIdentifier: "package-tracking" },
+    });
+    const overview = overviewWith([running]);
+    expect(currentWork(overview)).toMatchObject({ kind: "tool", state: "input-available" });
+    expect(mergedToolCalls(overview).map((item) => item.status)).toEqual(["running"]);
+  });
+
   it("keeps thinking visible when the overview cycle flag flaps off mid-turn", () => {
     const overview = overviewWith([]);
     const events: ActivityRecord[] = [

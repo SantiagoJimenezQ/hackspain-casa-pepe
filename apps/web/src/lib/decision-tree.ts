@@ -15,13 +15,24 @@ const record = (value: unknown): Record<string, unknown> => value && typeof valu
 const string = (value: unknown, fallback = '') => typeof value === 'string' ? value : fallback;
 const list = (value: unknown) => Array.isArray(value) ? value : [];
 
+/**
+ * When it happened decides the order, and the sequence only breaks a tie. Two servers writing to
+ * the same database each number their own events, so a sequence alone puts a later plan before an
+ * earlier one; the recorded instant never does that.
+ */
+function inTimeOrder(a: ActivityRecord, b: ActivityRecord) {
+  if (a.occurredAt !== b.occurredAt) return a.occurredAt < b.occurredAt ? -1 : 1;
+  if (a.sequence !== b.sequence) return a.sequence - b.sequence;
+  return a.identifier < b.identifier ? -1 : 1;
+}
+
 export function mergeTreeEvents(current: readonly ActivityRecord[], incoming: readonly ActivityRecord[], run: string) {
   const events = new Map<string, ActivityRecord>();
   for (const event of [...current, ...incoming]) {
     if (event.runIdentifier !== run || !supported.has(event.type)) continue;
     events.set(event.identifier, event);
   }
-  return [...events.values()].sort((a, b) => a.sequence - b.sequence);
+  return [...events.values()].sort(inTimeOrder);
 }
 
 export function buildDecisionTree(events: readonly ActivityRecord[], run: string): DecisionTreeNode[] {
@@ -31,7 +42,7 @@ export function buildDecisionTree(events: readonly ActivityRecord[], run: string
     const key = event.type.startsWith('agent.llm-') ? string(event.payload?.outputIdentifier, event.identifier) : event.identifier;
     turns.set(key, event);
   }
-  return [...turns.values()].sort((a, b) => a.sequence - b.sequence).map((event): DecisionTreeNode => {
+  return [...turns.values()].sort(inTimeOrder).map((event): DecisionTreeNode => {
     const payload = event.payload ?? {};
     const node: DecisionTreeNode = {
       id: event.identifier, sequence: event.sequence, occurredAt: event.occurredAt,

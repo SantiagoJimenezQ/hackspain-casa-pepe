@@ -271,9 +271,11 @@ function repairCapacity(
 			return total + (service ? service.recoveryCapacityUnits : 0)
 		}, 0)
 	const plannedUnits = resource.allocatedCapacity + newRecoveryUnits
-	const assumedCapacity = Math.max(
-		numberOf(value, "assumedCapacity"),
-		plannedUnits,
+	// Committed work survives a capacity drop: the assumption is never raised past the real
+	// total, so remainingUnits is allowed to go negative instead of inventing capacity.
+	const assumedCapacity = Math.min(
+		numberOrDefault(value, "assumedCapacity", resource.totalCapacity),
+		resource.totalCapacity,
 	)
 	return {
 		...totals,
@@ -283,12 +285,16 @@ function repairCapacity(
 	}
 }
 
-function numberOf(value: UnknownRecord, key: string): number {
+function numberOrDefault(
+	value: UnknownRecord,
+	key: string,
+	fallback: number,
+): number {
 	const candidate = value[key]
 	return Object.prototype.toString.call(candidate) === "[object Number]" &&
 		Number.isFinite(candidate)
 		? (candidate as number)
-		: 0
+		: fallback
 }
 
 function repairStep(

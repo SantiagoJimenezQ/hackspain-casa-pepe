@@ -854,14 +854,10 @@ function validatePriorities(
 			priority.capacityUnits,
 			`${path}.capacityUnits`,
 		)
-		if (service.status === "healthy") {
-			if (capacityUnits !== 0) {
-				fail(
-					`${path}.capacityUnits`,
-					"healthy services consume 0 capacityUnits",
-				)
-			}
-		} else if (capacityUnits !== service.recoveryCapacityUnits) {
+		if (
+			capacityUnits !==
+			(service.status === "healthy" ? 0 : service.recoveryCapacityUnits)
+		) {
 			fail(
 				`${path}.capacityUnits`,
 				service.status === "healthy"

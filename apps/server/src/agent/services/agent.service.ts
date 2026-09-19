@@ -647,9 +647,10 @@ export class AgentService {
 				engineerCall: {
 					mode: this.engineersService.mode,
 					provider: this.engineersService.provider,
-					technicalQuestionsSupported:
-						this.engineersService.mode === "simulated" ||
-						this.engineersService.provider === "happyrobot",
+					// Every configured provider asks the questions the server sends and
+					// reports one collected entry per question key, so the commander may
+					// plan technical questions whichever one is dialing.
+					technicalQuestionsSupported: true,
 				},
 				incomingCalls,
 				learning,

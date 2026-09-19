@@ -187,10 +187,19 @@ export class EngineersService {
 		if (!result) return
 		try {
 			await this.completeCall(entity.identifier, result)
-		} catch {
+		} catch (error) {
+			// A provider that answers two polls with the same finished conversation is normal:
+			// the first result settled the call and this one adds nothing, so it is not a fault.
+			if (error instanceof InvalidStateTransitionException) {
+				this.logger.log(
+					LOG_MESSAGES.ENGINEERS.CALL_RESULT_ALREADY_SETTLED,
+					{ callIdentifier: entity.identifier },
+				)
+				return
+			}
 			this.logger.warn(LOG_MESSAGES.ENGINEERS.CALL_RESULT_IGNORED, {
 				callIdentifier: entity.identifier,
-				reason: "Result was rejected because the run or call state changed",
+				reason: "Result was rejected because the run is no longer active",
 			})
 		}
 	}

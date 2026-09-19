@@ -365,12 +365,20 @@ function repairStep(
 				serviceIdentifier: "",
 			}
 		case "assign_task": {
-			const assigneeName = textOf(toolInput, "assigneeName")
+			const assignee = trustedAssignee(toolInput, input)
 			return {
 				...base,
 				capacityUnits: 0,
-				owner: assigneeName.length
-					? { kind: "engineer", name: assigneeName }
+				invocation: {
+					input: {
+						...toolInput,
+						assigneeName: assignee.name,
+						assigneeRole: assignee.role,
+					},
+					name,
+				},
+				owner: assignee.name.length
+					? { kind: "engineer", name: assignee.name }
 					: base.owner,
 				requiresApproval: false,
 				serviceIdentifier: textOf(toolInput, "serviceIdentifier"),
@@ -416,6 +424,28 @@ function repairStep(
 		default:
 			return base
 	}
+}
+
+/**
+ * A task recipient is a copy of trusted configuration, and the validator demands the exact
+ * name and role pair. The model often translates the role or writes the title it read in the
+ * briefing, so the pair is restored from the configured contact the name points at. A name
+ * that matches neither contact is left untouched: inventing a recipient is a real mistake and
+ * the validator must still reject it.
+ */
+function trustedAssignee(
+	toolInput: UnknownRecord,
+	input: PlanBuildInput,
+): { readonly name: string; readonly role: string } {
+	const name = textOf(toolInput, "assigneeName")
+	const contact = [input.engineer, input.supportContact].find(
+		(candidate) =>
+			candidate.name.trim().toLowerCase() === name.trim().toLowerCase(),
+	)
+	if (contact) {
+		return { name: contact.name, role: contact.role }
+	}
+	return { name, role: textOf(toolInput, "assigneeRole") }
 }
 
 /**

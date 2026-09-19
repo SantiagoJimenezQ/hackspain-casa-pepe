@@ -159,7 +159,7 @@ describe("human task follow-up", () => {
 		expect(before.evidence.engineerCall).toEqual({
 			mode: "live",
 			provider: "elevenlabs",
-			technicalQuestionsSupported: false,
+			technicalQuestionsSupported: true,
 		})
 		const updated = {
 			...task,

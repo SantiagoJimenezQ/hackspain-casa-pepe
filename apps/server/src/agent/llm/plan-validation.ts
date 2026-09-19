@@ -524,9 +524,13 @@ export function validateLlmPlan(
 		}
 	}
 
-	validateStepOrders(steps.map(({ step }) => step))
-	validateDependencyGraph(steps.map(({ step }) => step))
-	validateRecoverySteps(steps, priorities, capacity, context, input)
+	// The model is told to omit running and completed work, so it cannot know which numbers
+	// are already taken. Sequencing the merged list here keeps a carried step ahead of the work
+	// that depends on it, instead of sinking a plan over a number the model never saw.
+	const sequenced = sequenceSteps(steps)
+	validateStepOrders(sequenced.map(({ step }) => step))
+	validateDependencyGraph(sequenced.map(({ step }) => step))
+	validateRecoverySteps(sequenced, priorities, capacity, context, input)
 
 	const reason = nonEmptyString(rawPlan.reason, "plan.reason")
 	const summary = nonEmptyString(rawPlan.summary, "plan.summary")
@@ -535,9 +539,50 @@ export function validateLlmPlan(
 		capacity,
 		priorities,
 		reason,
-		steps: steps.map(({ step }) => step),
+		steps: sequenced.map(({ step }) => step),
 		summary,
 	}
+}
+
+/**
+ * `order` is bookkeeping the server owns: dependencies first, then the sequence the plan
+ * proposed. A step whose dependencies never resolve keeps its proposed position so the
+ * dependency check still reports the real problem.
+ */
+function sequenceSteps(
+	steps: ReadonlyArray<ParsedStep>,
+): ReadonlyArray<ParsedStep> {
+	const known = new Set(steps.map((parsed) => parsed.step.identifier))
+	const emitted = new Set<string>()
+	const sequenced: ParsedStep[] = []
+	let progressed = true
+	while (progressed) {
+		progressed = false
+		for (const parsed of steps) {
+			if (emitted.has(parsed.step.identifier)) {
+				continue
+			}
+			const ready = parsed.step.dependsOn.every(
+				(dependency) =>
+					!known.has(dependency) || emitted.has(dependency),
+			)
+			if (!ready) {
+				continue
+			}
+			emitted.add(parsed.step.identifier)
+			sequenced.push(parsed)
+			progressed = true
+		}
+	}
+	for (const parsed of steps) {
+		if (!emitted.has(parsed.step.identifier)) {
+			sequenced.push(parsed)
+		}
+	}
+	return sequenced.map((parsed, index) => ({
+		...parsed,
+		step: { ...parsed.step, order: index + 1 },
+	}))
 }
 
 function createValidationContext(input: PlanBuildInput): ValidationContext {

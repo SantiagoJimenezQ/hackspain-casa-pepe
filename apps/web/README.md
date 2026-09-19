@@ -10,7 +10,7 @@ Copy the example file and use the team deployment values:
 cp .env.example .env.local
 ```
 
-`CASA_PEPE_API_BASE_URL` may be either the deployment origin or its `/api` URL. `CASA_PEPE_API_KEY` stays server-side in Next.js; it is never sent to the browser.
+`CASA_PEPE_API_BASE_URL` may be either the deployment origin or its `/api` URL, with or without a trailing slash. `CASA_PEPE_API_KEY` stays server-side in Next.js; it is never sent to the browser.
 
 ## Run
 

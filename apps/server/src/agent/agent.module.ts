@@ -5,6 +5,7 @@ import { OverviewController } from "@agent/controllers/overview.controller"
 import { LlmClientService } from "@agent/llm/llm-client.service"
 import { LlmLoopService } from "@agent/llm/llm-loop.service"
 import { ModelTestsService } from "@agent/llm/model-tests.service"
+import { SubagentRunnerService } from "@agent/llm/subagent-runner.service"
 import { AgentService } from "@agent/services/agent.service"
 import { AgentCycleStateService } from "@agent/services/agent-cycle-state.service"
 import { ApprovalsModule } from "@approvals/approvals.module"
@@ -39,6 +40,7 @@ import { ToolsModule } from "@tools/tools.module"
 		AgentService,
 		LlmClientService,
 		LlmLoopService,
+		SubagentRunnerService,
 	],
 })
 export class AgentModule {}

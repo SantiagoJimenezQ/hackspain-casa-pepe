@@ -13,6 +13,7 @@ import {
 	Logger,
 	UseGuards,
 } from "@nestjs/common"
+import { InboundEmailsService } from "@webhooks/services/inbound-emails.service"
 import { Request } from "express"
 
 @Injectable()
@@ -63,6 +64,28 @@ export class RecoverySecretGuard implements CanActivate {
 	}
 }
 
+@Injectable()
+export class ResendWebhookSecretGuard implements CanActivate {
+	constructor(private readonly inboundEmails: InboundEmailsService) {}
+
+	canActivate(context: ExecutionContext): boolean {
+		const request = context.switchToHttp().getRequest<Request>()
+		const rawBody = (
+			(request as Request & { rawBody?: Buffer }).rawBody ??
+			Buffer.from(JSON.stringify(request.body))
+		).toString()
+		if (
+			!this.inboundEmails.verifySignature(rawBody, {
+				id: readHeader(request, "svix-id"),
+				signature: readHeader(request, "svix-signature"),
+				timestamp: readHeader(request, "svix-timestamp"),
+			})
+		)
+			throw new InvalidSignatureException()
+		return true
+	}
+}
+
 export function HappyRobotInbound() {
 	return applyDecorators(
 		Authorization("public"),
@@ -74,5 +97,12 @@ export function RecoveryInbound() {
 	return applyDecorators(
 		Authorization("public"),
 		UseGuards(RecoverySecretGuard),
+	)
+}
+
+export function ResendInbound() {
+	return applyDecorators(
+		Authorization("public"),
+		UseGuards(ResendWebhookSecretGuard),
 	)
 }

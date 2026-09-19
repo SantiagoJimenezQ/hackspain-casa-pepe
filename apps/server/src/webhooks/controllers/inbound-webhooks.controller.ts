@@ -10,6 +10,7 @@ import {
 	HttpCode,
 	HttpStatus,
 	Logger,
+	Optional,
 	Post,
 } from "@nestjs/common"
 import { ApiHeader, ApiOperation, ApiTags } from "@nestjs/swagger"
@@ -18,7 +19,12 @@ import { RecoveryService } from "@recovery/services/recovery.service"
 import {
 	HappyRobotInbound,
 	RecoveryInbound,
+	ResendInbound,
 } from "@webhooks/guards/inbound-secret.guard"
+import {
+	InboundEmailsService,
+	ResendEmailReceivedEvent,
+} from "@webhooks/services/inbound-emails.service"
 
 @ApiTags("Inbound webhooks")
 @Controller("webhooks")
@@ -29,7 +35,16 @@ export class InboundWebhooksController {
 		private readonly incomingCalls: IncomingCallsService,
 		private readonly engineersService: EngineersService,
 		private readonly recoveryService: RecoveryService,
+		@Optional() private readonly inboundEmails?: InboundEmailsService,
 	) {}
+
+	@Post("resend/incoming")
+	@HttpCode(HttpStatus.ACCEPTED)
+	@ResendInbound()
+	@ApiOperation({ summary: "Receive Resend email.received events" })
+	async resendIncoming(@Body() body: ResendEmailReceivedEvent) {
+		return this.inboundEmails?.receive(body)
+	}
 
 	@Post("happyrobot/incoming")
 	@HttpCode(HttpStatus.ACCEPTED)

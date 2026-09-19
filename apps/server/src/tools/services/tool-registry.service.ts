@@ -9,6 +9,7 @@ import {
 	SendIncidentEmailTool,
 } from "@tools/implementations/communication-tools"
 import { ContactEngineerTool } from "@tools/implementations/contact-engineer.tool"
+import { ReadIncomingEmailsTool } from "@tools/implementations/inbound-emails.tool"
 import {
 	CallEngineerTool,
 	GetIncidentContextTool,
@@ -50,6 +51,7 @@ export class ToolRegistryService {
 		requestApproval: RequestApprovalTool,
 		executeRecovery: ExecuteRecoveryTool,
 		verifyRecovery: VerifyRecoveryTool,
+		readIncomingEmails: ReadIncomingEmailsTool,
 		private readonly engineersService: EngineersService,
 		private readonly recoveryService: RecoveryService,
 	) {
@@ -67,6 +69,7 @@ export class ToolRegistryService {
 			requestApproval,
 			executeRecovery,
 			verifyRecovery,
+			readIncomingEmails,
 		]
 		this.tools = new Map(registered.map((tool) => [tool.name, tool]))
 	}
@@ -104,6 +107,8 @@ export class ToolRegistryService {
 				return this.recoveryService.mode === "simulated"
 			case "send_incident_email":
 				return this.communications.emailSimulated
+			case "read_incoming_emails":
+				return false
 			case "save_recovery_plan":
 			case "publish_status_update":
 			case "assign_task":

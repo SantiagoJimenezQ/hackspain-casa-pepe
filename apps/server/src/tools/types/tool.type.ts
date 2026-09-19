@@ -65,6 +65,13 @@ export type ToolInvocation =
 			readonly input: ContactEngineerInput
 	  }
 	| { readonly name: "assign_task"; readonly input: AssignTaskInput }
+	| {
+			readonly name: "read_incoming_emails"
+			readonly input: {
+				readonly limit?: number
+				readonly emailId?: string
+			}
+	  }
 
 export interface EngineerAnswer {
 	readonly key: string
@@ -119,6 +126,11 @@ export type ToolOutput =
 			readonly verified: boolean
 			readonly detail: string
 			readonly mode: "simulated" | "http"
+	  }
+	| {
+			readonly kind: "inbound-emails"
+			readonly emails: ReadonlyArray<Record<string, unknown>>
+			readonly selected: Record<string, unknown> | null
 	  }
 
 export interface ToolError {

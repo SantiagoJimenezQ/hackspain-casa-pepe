@@ -11,12 +11,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useI18n } from "@/components/i18n/locale-provider";
 import { CasaPepeClientError, casaPepeClient } from "@/lib/casa-pepe-client";
 import { isLlmActivityType } from "@/lib/agent-trace";
 import type { ActivityRecord, LearningInsight, Overview, RunReport } from "@/lib/casa-pepe-types";
+import type { Locale } from "@/lib/i18n";
 
 type DashboardStatus = "loading" | "active" | "error";
-type DemoAction = "start" | "impact" | "twist" | "reset" | "reset-learnings" | "cycle" | null;
+type DemoAction = "start" | "impact" | "twist" | "reset" | "reset-learnings" | "cycle" | "language" | null;
 
 type DashboardContextValue = {
   status: DashboardStatus;
@@ -31,6 +33,7 @@ type DashboardContextValue = {
   triggerImpact: () => Promise<void>;
   triggerTwist: () => Promise<void>;
   resetDemo: () => Promise<void>;
+  switchLanguage: (locale: Locale) => Promise<void>;
   resetLearnings: () => Promise<void>;
   learningResetMessage: string | null;
   runAgentCycle: () => Promise<void>;
@@ -99,6 +102,7 @@ function mergeActivityList(current: ActivityRecord[], incoming: ActivityRecord[]
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<DashboardStatus>("loading");
+  const { locale, setLocale } = useI18n();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [insights, setInsights] = useState<LearningInsight[]>([]);
   const [learningResetMessage, setLearningResetMessage] = useState<string | null>(null);
@@ -255,6 +259,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     };
   }, [overview?.incident.runIdentifier, scheduleRefresh, status]);
 
+  // The run decides the language: its scenario, its plans and everything the agent already
+  // wrote are in it. The interface follows so no screen ever mixes two languages.
+  const runLanguage = overview?.agent.language;
+  useEffect(() => {
+    if (runLanguage !== undefined && runLanguage !== locale) setLocale(runLanguage);
+  }, [locale, runLanguage, setLocale]);
+
   const execute = useCallback(async (action: Exclude<DemoAction, null>, work: () => Promise<unknown>) => {
     setBusyAction(action);
     setError(null);
@@ -280,7 +291,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setBusyAction("start");
     setError(null);
     try {
-      await casaPepeClient.start();
+      await casaPepeClient.start(locale);
       await refreshOverview();
     } catch (cause) {
       const known = cause instanceof CasaPepeClientError ? cause : null;
@@ -289,7 +300,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     } finally {
       if (generation === startGeneration.current) setBusyAction(null);
     }
-  }, [refreshOverview]);
+  }, [locale, refreshOverview]);
 
   const triggerImpact = useCallback(() => execute("impact", casaPepeClient.impact), [execute]);
   const triggerTwist = useCallback(() => execute("twist", casaPepeClient.twist), [execute]);
@@ -298,6 +309,17 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     learningLoaded.current = false;
     await execute("reset", casaPepeClient.reset);
   }, [execute]);
+  /**
+   * The agent writes in the language of its scenario, so the selector moves the run to the
+   * scenario written in the chosen language. The interface switches first, and the run that
+   * comes back confirms it.
+   */
+  const switchLanguage = useCallback(async (next: Locale) => {
+    setLocale(next);
+    startGeneration.current += 1;
+    learningLoaded.current = false;
+    await execute("language", () => casaPepeClient.switchLanguage(next));
+  }, [execute, setLocale]);
   const resetLearnings = useCallback(() => execute("reset-learnings", async () => {
     setLearningResetMessage(null);
     const { removed } = await casaPepeClient.resetLearnings();
@@ -318,9 +340,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact,
-      triggerTwist, resetDemo, resetLearnings, learningResetMessage, runAgentCycle, decideApproval,
+      triggerTwist, resetDemo, switchLanguage, resetLearnings, learningResetMessage, runAgentCycle, decideApproval,
     }),
-    [status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact, triggerTwist, resetDemo, resetLearnings, learningResetMessage, runAgentCycle, decideApproval],
+    [status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact, triggerTwist, resetDemo, switchLanguage, resetLearnings, learningResetMessage, runAgentCycle, decideApproval],
   );
 
   return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>;

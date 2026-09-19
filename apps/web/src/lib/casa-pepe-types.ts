@@ -1,3 +1,5 @@
+import type { Locale } from "@/lib/i18n";
+
 export type ServiceHealth = "healthy" | "degraded" | "down" | "recovering";
 export type PlanStepStatus =
   | "proposed"
@@ -231,6 +233,8 @@ export type Overview = {
   agent: {
     engine?: "llm";
     model?: string;
+    /** Language the run is written in; the interface follows it so nothing appears half translated. */
+    language?: Locale;
     cycleInProgress: boolean;
     cycles: number;
     maximumCycles: number;

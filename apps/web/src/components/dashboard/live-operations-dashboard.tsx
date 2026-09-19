@@ -9,7 +9,7 @@ import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { Panel } from "@/components/dashboard/panel";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/components/i18n/locale-provider";
-import { recoveryTimeline } from "@/lib/agent-trace";
+import { recoveryTimeline, type RecoveryPhase } from "@/lib/agent-trace";
 import { agentSettled } from "@/lib/crisis-map";
 import {
   customerActionStatus,
@@ -36,6 +36,16 @@ const PHASE_LABEL = {
   recovered: "companies.migrated",
   offline: "companies.offline",
 } as const satisfies Record<string, MessageKey>;
+const PHASE_ROW: Record<RecoveryPhase, string> = {
+  recovered: "border-[color-mix(in_srgb,var(--status-up)_35%,transparent)] bg-[color-mix(in_srgb,var(--status-up)_10%,transparent)]",
+  recovering: "border-[color-mix(in_srgb,var(--status-degraded)_40%,transparent)] bg-[color-mix(in_srgb,var(--status-degraded)_10%,transparent)]",
+  offline: "border-[color-mix(in_srgb,var(--status-down)_28%,transparent)] bg-[color-mix(in_srgb,var(--status-down)_7%,transparent)]",
+};
+const PHASE_ACCENT: Record<RecoveryPhase, string> = {
+  recovered: "var(--status-up)",
+  recovering: "var(--status-degraded)",
+  offline: "var(--status-down)",
+};
 
 function Dot({ status }: { status: VisualStatus }) {
   return (
@@ -116,18 +126,24 @@ function Companies() {
   return (
     <Panel className="min-h-0">
       <div className="px-4 pt-3">
-        <Title meta={<span className="text-[10px] text-muted-foreground">{customers.length} cuentas</span>}>
+        <Title
+          meta={
+            <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+              {t("companies.accounts", { count: customers.length })}
+            </span>
+          }
+        >
           {impacted ? t("companies.title") : t("companies.titleIdle")}
         </Title>
       </div>
       <div ref={scrollRef} className={cn(scrollFadeClass, "min-h-0 flex-1 overflow-auto px-2 pb-2")}>
         <table className="w-full text-left text-[11px]">
-          <thead className="text-[10px] text-muted-foreground">
+          <thead className="sticky top-0 z-10 bg-card text-[9px] tracking-[.12em] text-muted-foreground uppercase">
             <tr>
-              <th className="px-2 pb-2">Empresa</th>
-              <th className="px-2 pb-2">Sector</th>
-              <th className="px-2 pb-2">Estado</th>
-              <th className="px-2 pb-2 text-right">Usuarios</th>
+              <th className="px-2 pb-2 font-medium">{t("companies.company")}</th>
+              <th className="px-2 pb-2 font-medium">{t("companies.sector")}</th>
+              <th className="px-2 pb-2 font-medium">{t("companies.status")}</th>
+              <th className="px-2 pb-2 text-right font-medium">{t("companies.users")}</th>
             </tr>
           </thead>
           <tbody>
@@ -141,9 +157,10 @@ function Companies() {
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.4, layout: { duration: 0.35, ease: [0.23, 1, 0.32, 1] } }}
                     className={cn(
-                      "border-t border-border",
-                      customer.action === "recovered" && "bg-[color-mix(in_srgb,var(--status-up)_8%,transparent)]",
-                      customer.action === "offline" && "bg-[color-mix(in_srgb,var(--status-down)_10%,transparent)]",
+                      "border-t border-border border-l-2 border-l-transparent",
+                      customer.action === "recovered" && "border-l-[var(--status-up)] bg-[color-mix(in_srgb,var(--status-up)_9%,transparent)]",
+                      customer.action === "migrating" && "border-l-[var(--status-degraded)] bg-[color-mix(in_srgb,var(--status-degraded)_9%,transparent)]",
+                      customer.action === "offline" && "border-l-[var(--status-down)] bg-[color-mix(in_srgb,var(--status-down)_10%,transparent)]",
                     )}
                   >
                     <td className="px-2 py-2">
@@ -196,33 +213,80 @@ function Recovery() {
   if (!overview) return null;
   const recovery = recoveryProgress(overview);
   const items = recoveryTimeline(overview, activity);
+  const complete = recovery.total > 0 && recovery.completed === recovery.total;
   return (
-    <Panel className="min-h-0 p-4">
-      <Title meta={<span className="text-[10px] text-muted-foreground">{recovery.completed}/{recovery.total}</span>}>{t("migration.title")}</Title>
-      <div className="mb-4 flex items-center gap-3">
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-          <motion.div className="h-full rounded-full bg-status-up" animate={{ width: `${recovery.percent}%` }} transition={{ duration: 0.5 }} />
-        </div>
-        <span className="text-[12px] font-medium">{recovery.percent}%</span>
+    <Panel className="min-h-0">
+      <div className="px-4 pt-3">
+        <Title
+          meta={
+            <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+              {recovery.completed}/{recovery.total}
+            </span>
+          }
+        >
+          {t("migration.title")}
+        </Title>
       </div>
-      <ol ref={scrollRef} className={cn(scrollFadeClass, "min-h-0 flex-1 space-y-2.5 overflow-y-auto py-1 pr-1")}>
-        <AnimatePresence initial={false}>
-          {items.length ? items.map((item) => (
-            <motion.li
-              key={item.identifier}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              className="flex items-center gap-2"
-            >
-              <Status label={t(PHASE_LABEL[item.phase])} status={item.status} />
-              <span className="min-w-0 flex-1 truncate text-[11px]">{item.name}</span>
-              <span className="font-mono text-[9px] text-muted-foreground">{item.capacityUnits}u</span>
-            </motion.li>
-          )) : (
-            <li className="text-[11px] text-muted-foreground">{t("migration.waiting")}</li>
-          )}
-        </AnimatePresence>
+      <div className="px-4 pb-3">
+        <div className="flex items-baseline gap-2">
+          <motion.span
+            className="font-mono text-[26px] leading-none font-semibold tabular-nums"
+            animate={{ color: complete ? COLORS.up : "var(--foreground)" }}
+            transition={{ duration: 0.4 }}
+          >
+            {recovery.percent}%
+          </motion.span>
+          <span className="text-[10px] text-muted-foreground">
+            {t("migration.servicesDone", { done: recovery.completed, total: recovery.total })}
+          </span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+          <motion.div
+            className="h-full rounded-full"
+            style={{ background: `linear-gradient(90deg, color-mix(in srgb, ${COLORS.up} 55%, transparent), ${COLORS.up})` }}
+            animate={{ width: `${recovery.percent}%` }}
+            transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+          />
+        </div>
+      </div>
+      <ol ref={scrollRef} className={cn(scrollFadeClass, "flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 pb-3")}>
+        <LayoutGroup>
+          <AnimatePresence initial={false}>
+            {items.map((item) => (
+              <motion.li
+                key={item.identifier}
+                layout
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.3, layout: { duration: 0.35, ease: [0.23, 1, 0.32, 1] } }}
+                className={cn(
+                  "flex min-h-9 flex-1 basis-0 items-center gap-2.5 overflow-hidden rounded-md border border-l-2 px-2.5 py-1.5",
+                  PHASE_ROW[item.phase],
+                )}
+                style={{ borderLeftColor: PHASE_ACCENT[item.phase] }}
+              >
+                <Dot status={item.status} />
+                <span className="min-w-0 flex-1 truncate text-[11px] font-medium">{item.name}</span>
+                <motion.span
+                  className="shrink-0 text-[10px] font-medium"
+                  animate={{ color: COLORS[item.status] }}
+                  transition={{ duration: 0.35 }}
+                >
+                  {t(PHASE_LABEL[item.phase])}
+                </motion.span>
+                <span className="shrink-0 rounded border border-border/70 bg-background/40 px-1.5 py-0.5 font-mono text-[9px] tabular-nums text-muted-foreground">
+                  {item.capacityUnits}u
+                </span>
+              </motion.li>
+            ))}
+          </AnimatePresence>
+        </LayoutGroup>
+        {items.length ? null : (
+          <li className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border px-3 text-[11px] text-muted-foreground">
+            {t("migration.waiting")}
+          </li>
+        )}
       </ol>
     </Panel>
   );

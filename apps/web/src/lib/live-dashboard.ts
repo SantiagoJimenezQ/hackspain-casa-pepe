@@ -21,6 +21,14 @@ export function incidentImpacted(incident: Pick<Incident, "impactedAt" | "status
   return Boolean(status) && status !== "normal" && status !== "reset";
 }
 
+/** Recovered companies climb to the top of the board, still-offline ones sink to the bottom. */
+const CUSTOMER_ACTION_RANK: Record<CustomerAction, number> = {
+  recovered: 0,
+  migrating: 1,
+  online: 2,
+  offline: 3,
+};
+
 export function customerActionStatus(action: CustomerAction): VisualStatus {
   if (action === "online" || action === "recovered") return "up";
   if (action === "migrating") return "degraded";
@@ -60,6 +68,8 @@ export function customerViewOrdered(overview: Overview, activity: ReadonlyArray<
       };
     })
     .toSorted((left, right) => {
+      const byAction = CUSTOMER_ACTION_RANK[left.customer.action] - CUSTOMER_ACTION_RANK[right.customer.action];
+      if (byAction !== 0) return byAction;
       if (left.recoveryStartedAt !== null && right.recoveryStartedAt !== null) {
         if (left.recoveryStartedAt !== right.recoveryStartedAt) return left.recoveryStartedAt - right.recoveryStartedAt;
         return left.customer.identifier.localeCompare(right.customer.identifier);

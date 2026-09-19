@@ -140,6 +140,7 @@ const es = {
   "companies.offline": "Sin conexión",
   "companies.migrated": "Migrado",
   "companies.open": "Abrir {name}",
+  "companies.accounts": "{count} cuentas",
 
   "sector.energy": "Energía",
   "sector.banking": "Banca",
@@ -152,6 +153,7 @@ const es = {
   "migration.eta": "ETA {minutes} min",
   "migration.queued": "En cola",
   "migration.waiting": "Esperando el primer ciclo del agente.",
+  "migration.servicesDone": "{done} de {total} servicios",
 
   "map.networkLive": "Red operativa",
   "map.networkCrisis": "Golfo · failover activo",
@@ -259,6 +261,7 @@ const es = {
   "tool.report_result.done": "Informó al coordinador",
 
   "language.label": "Idioma",
+  "language.hint": "Cambia el idioma de la demo. La ejecución actual se sustituye por el mismo escenario escrito en ese idioma.",
   "language.es": "ES",
   "language.en": "EN",
 
@@ -391,6 +394,7 @@ const en: { [K in keyof typeof es]: string } = {
   "companies.offline": "Offline",
   "companies.migrated": "Migrated",
   "companies.open": "Open {name}",
+  "companies.accounts": "{count} accounts",
 
   "sector.energy": "Energy",
   "sector.banking": "Banking",
@@ -403,6 +407,7 @@ const en: { [K in keyof typeof es]: string } = {
   "migration.eta": "ETA {minutes} min",
   "migration.queued": "Queued",
   "migration.waiting": "Waiting for the agent's first cycle.",
+  "migration.servicesDone": "{done} of {total} services",
 
   "map.networkLive": "Operational network",
   "map.networkCrisis": "Gulf · failover active",
@@ -510,6 +515,7 @@ const en: { [K in keyof typeof es]: string } = {
   "tool.report_result.done": "Reported back to the commander",
 
   "language.label": "Language",
+  "language.hint": "Changes the language of the demo. The current run is replaced by the same scenario written in that language.",
   "language.es": "ES",
   "language.en": "EN",
 

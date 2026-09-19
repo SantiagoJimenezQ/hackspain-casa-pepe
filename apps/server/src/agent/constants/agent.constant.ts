@@ -17,6 +17,12 @@ export const AGENT_TICK_INTERVAL_MILLISECONDS = 5000
  */
 export const RUN_IDLE_TIMEOUT_MILLISECONDS = 1800000
 
+/**
+ * How long an idle run with runnable work waits before the agent is nudged again. A cycle
+ * can be lost to a restart or to a provider failure, and nothing else would resume it.
+ */
+export const AGENT_STALLED_RUN_MILLISECONDS = 30000
+
 /** Step statuses the agent may still dispatch. */
 export const RUNNABLE_STEP_STATUSES = ["proposed", "approved"] as const
 

@@ -388,9 +388,8 @@ function repairStep(
 			if (!service) {
 				return base
 			}
-			const requiresApproval =
-				service.recoveryRequiresApproval ||
-				base.requiresApproval === true
+			// The scenario decides: a plan cannot add an approval the service does not mandate.
+			const requiresApproval = service.recoveryRequiresApproval
 			return {
 				...base,
 				capacityUnits: service.recoveryCapacityUnits,

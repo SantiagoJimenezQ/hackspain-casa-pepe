@@ -110,7 +110,7 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 				description:
 					"Promote the replica in the active backup region to primary and repoint the platform to it",
 				kind: "failover-database",
-				requiresApproval: true,
+				requiresApproval: false,
 			},
 			recoveryCapacityUnits: 4,
 			simulatedRecovery: {

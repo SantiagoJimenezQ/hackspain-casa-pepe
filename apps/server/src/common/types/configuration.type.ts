@@ -1,5 +1,6 @@
 import {
 	ENVIRONMENTS,
+	LLM_PROVIDERS,
 	LLM_REASONING_EFFORTS,
 } from "@common/constants/application.constant"
 
@@ -74,6 +75,8 @@ export interface AgentConfiguration {
 	readonly toolTimeoutMilliseconds: number
 	readonly callTimeoutMilliseconds: number
 }
+
+export type LlmProvider = (typeof LLM_PROVIDERS)[number]
 
 export type LlmReasoningEffort = (typeof LLM_REASONING_EFFORTS)[number]
 

@@ -1,9 +1,11 @@
 import { EnvironmentVariables } from "@common/configuration/environment-variables.class"
+import { LLM_PROVIDER_DEFAULT_BASE_URLS } from "@common/constants/application.constant"
 import {
 	ApplicationConfiguration,
 	EngineerCallMode,
 	EngineerCallProvider,
 	Environment,
+	LlmReasoningEffort,
 	RecoveryMode,
 } from "@common/types/configuration.type"
 import { plainToInstance } from "class-transformer"
@@ -26,15 +28,70 @@ export function validateEnvironmentVariables(
 			`Invalid environment configuration -> ${descriptions.join(" | ")}`,
 		)
 	}
-	if (
-		variables.LLM_BASE_URL.length > 0 &&
-		!isAllowedLlmBaseURL(variables.LLM_BASE_URL)
-	) {
+	const resolvedBaseURL = resolveLlmProvider(variables).baseURL
+	if (resolvedBaseURL.length > 0 && !isAllowedLlmBaseURL(resolvedBaseURL)) {
 		throw new Error(
-			"Invalid environment configuration -> LLM_BASE_URL: use an HTTPS URL; HTTP is only allowed for loopback tests",
+			"Invalid environment configuration -> LLM base URL: use an HTTPS URL; HTTP is only allowed for loopback tests",
 		)
 	}
 	return variables
+}
+
+/**
+ * Resolves the active provider. `LLM_PROVIDER` picks a preset (openai, deepseek) and each
+ * preset falls back to the plain LLM_* variables for anything it leaves empty, so switching
+ * provider is a single variable and both sets of credentials can live side by side.
+ */
+export function resolveLlmProvider(variables: EnvironmentVariables): {
+	readonly apiKey: string
+	readonly baseURL: string
+	readonly model: string
+	readonly fastModel: string
+	readonly reasoningEffort: LlmReasoningEffort
+} {
+	const preset = {
+		deepseek: {
+			apiKey: variables.LLM_DEEPSEEK_API_KEY,
+			baseURL: variables.LLM_DEEPSEEK_BASE_URL,
+			fastModel: variables.LLM_DEEPSEEK_FAST_MODEL,
+			model: variables.LLM_DEEPSEEK_MODEL,
+			reasoningEffort: variables.LLM_DEEPSEEK_REASONING_EFFORT,
+		},
+		openai: {
+			apiKey: variables.LLM_OPENAI_API_KEY,
+			baseURL: variables.LLM_OPENAI_BASE_URL,
+			fastModel: variables.LLM_OPENAI_FAST_MODEL,
+			model: variables.LLM_OPENAI_MODEL,
+			reasoningEffort: variables.LLM_OPENAI_REASONING_EFFORT,
+		},
+	}[variables.LLM_PROVIDER]
+	if (!preset) {
+		return {
+			apiKey: variables.LLM_API_KEY,
+			baseURL: variables.LLM_BASE_URL,
+			fastModel: variables.LLM_FAST_MODEL,
+			model: variables.LLM_MODEL,
+			reasoningEffort: variables.LLM_REASONING_EFFORT,
+		}
+	}
+	const defaultBaseURL =
+		LLM_PROVIDER_DEFAULT_BASE_URLS[variables.LLM_PROVIDER] ?? ""
+	return {
+		apiKey: preset.apiKey.length ? preset.apiKey : variables.LLM_API_KEY,
+		baseURL: preset.baseURL.length
+			? preset.baseURL
+			: defaultBaseURL.length
+				? defaultBaseURL
+				: variables.LLM_BASE_URL,
+		fastModel: preset.fastModel.length
+			? preset.fastModel
+			: variables.LLM_FAST_MODEL,
+		model: preset.model.length ? preset.model : variables.LLM_MODEL,
+		reasoningEffort:
+			preset.reasoningEffort === ""
+				? variables.LLM_REASONING_EFFORT
+				: preset.reasoningEffort,
+	}
 }
 
 export function isAllowedLlmBaseURL(baseURL: string): boolean {
@@ -125,14 +182,10 @@ export function createApplicationConfiguration(
 			webhookSecret: variables.HAPPYROBOT_WEBHOOK_SECRET,
 		},
 		llm: {
-			apiKey: variables.LLM_API_KEY,
-			baseURL: variables.LLM_BASE_URL,
-			fastModel: variables.LLM_FAST_MODEL,
+			...resolveLlmProvider(variables),
 			fastTimeoutMilliseconds: variables.LLM_FAST_TIMEOUT_MILLISECONDS,
 			maximumOutputTokens: variables.LLM_MAXIMUM_OUTPUT_TOKENS,
 			maximumTurns: variables.LLM_MAXIMUM_TURNS,
-			model: variables.LLM_MODEL,
-			reasoningEffort: variables.LLM_REASONING_EFFORT,
 			streamOutput: variables.LLM_STREAM_OUTPUT === "true",
 			timeoutMilliseconds: variables.LLM_TIMEOUT_MILLISECONDS,
 		},

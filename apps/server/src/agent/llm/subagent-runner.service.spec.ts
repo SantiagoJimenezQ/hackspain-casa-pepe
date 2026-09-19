@@ -477,6 +477,33 @@ describe("SubagentRunnerService", () => {
 		})
 	})
 
+	it("does not echo malformed specialist arguments into the audit trail", async () => {
+		const { activity, client, service } = createHarness()
+		const state = createState()
+		const actions = createActions(state)
+		client.complete
+			.mockResolvedValueOnce(
+				completion([
+					rawToolCall(
+						"report_result",
+						'{"summary":"hidden-json-token"',
+					),
+				]),
+			)
+			.mockResolvedValueOnce(reportCall("Recovered after the bad call"))
+
+		const outcome = await service.run(
+			createRequest("investigator", state),
+			actions as never,
+		)
+
+		expect(outcome).toMatchObject({ kind: "reported" })
+		expect(actions.investigate).not.toHaveBeenCalled()
+		const audit = JSON.stringify(activityInputs(activity))
+		expect(audit).not.toContain("hidden-json-token")
+		expect(audit).toContain('"validJson":false')
+	})
+
 	it("reports a provider failure without dispatching anything", async () => {
 		const { client, service } = createHarness()
 		const state = createState()

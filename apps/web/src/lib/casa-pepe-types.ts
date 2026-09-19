@@ -11,6 +11,7 @@ export type PlanStepStatus =
   | "postponed";
 
 export type ActivityRecord = {
+  runIdentifier?: string;
   identifier: string;
   sequence: number;
   occurredAt: string;
@@ -236,6 +237,6 @@ export type Overview = {
     planVersion: number;
     pendingApprovals: number;
     runningToolCalls: number;
-    lastCycleOutcome: { kind: string; reason?: string; executedSteps?: number } | null;
+    lastCycleOutcome: { kind: string; reason?: string; executedSteps?: number; waitingFor?: string[] } | null;
   };
 };

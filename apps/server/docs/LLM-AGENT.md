@@ -53,7 +53,7 @@ Unit and integration tests use explicitly injected scripted model responses. The
 
 Set `LLM_STREAM_OUTPUT=true` on the backend and restart to request provider SSE streaming. Default `false` preserves the non-streaming request. The provider must support OpenAI-compatible chat completion streaming; failures pause the cycle rather than retrying and risking duplicate decisions.
 
-The existing authenticated `/api/activity/stream` and Next.js proxy deliver `agent.llm-output` activity records as the model emits public assistant content. These are **provisional summaries**, not private chain of thought or executed actions. Reasoning fields and partial tool arguments are never forwarded. The existing dashboard receives these events but does not render their text in the agent transcript. Frontend behavior is unchanged; the frontend team can use the additive payload fields to customize presentation.
+The existing authenticated `/api/activity/stream` and Next.js proxy deliver `agent.llm-output` activity records as the model emits public assistant content. These are **provisional summaries**, not private chain of thought or executed actions. Reasoning fields and partial tool arguments are never forwarded. The dashboard renders these events as provisional decision cards and replaces them with completed public turns.
 
 The implementation and acceptance criteria are documented in [Full LLM response visibility](../../../docs/LLM-RESPONSE-VISIBILITY-PLAN.md).
 
@@ -61,7 +61,7 @@ Payload: `{ outputIdentifier, turn, text, provisional: true, redacted }`. Append
 
 Completed decisions carry the `LlmPublicTurn` fields from `packages/contracts/agent.d.ts`: full public text, redacted tool-call IDs/names/arguments, model, finish reason, optional allowlisted usage metrics, and disposition. A `pending` record precedes validation; an `accepted` or `rejected` update shares its `outputIdentifier`. Stale responses retain their public explanation with `stale`; failed completions are marked `incomplete`. Accepted proposals are not proof of successful external execution. Consumers should replace draft text with completed text and retain rejected, stale, and incomplete entries with their labels.
 
-`GET /api/activity/llm?runIdentifier=...&limit=100&beforeSequence=...` returns newest-first records and `nextBeforeSequence` (null at the end). The frontend team can add a server-side proxy and history UI when integrating this endpoint. The existing dashboard retains its 100-event activity window. SSE drains all backlog pages and buffers live events during catch-up. Existing historical records are not reconstructed or retroactively enriched.
+`GET /api/activity/llm?runIdentifier=...&limit=100&beforeSequence=...` returns newest-first records and `nextBeforeSequence` (null at the end). The frontend proxies this endpoint and loads older decision history independently of its 100-event activity window. SSE drains all backlog pages and buffers live events during catch-up. Existing historical records are not reconstructed or retroactively enriched.
 
 Tools execute only after the stream terminates, the complete response is validated, and current incident state is rechecked. Missing termination, malformed or oversized output, truncation, and timeouts pause autonomous decisions. Disable the flag to roll back without frontend changes.
 
@@ -112,3 +112,20 @@ Raw provider messages, request/response bodies, prompts, tool arguments,
 authorization headers and credentials are never logged. Unknown provider codes
 are omitted. Malformed or truncated completions emit `LLM response validation
 failed`. Public diagnostic errors remain sanitized.
+
+## Response speed and operator clarity
+
+The dashboard now renders public model decisions with draft/validation/accepted/rejected/stale/incomplete labels, full text, redacted tool details and paginated history. The current-plan view exposes reasons, capacity, assumptions, facts, owners and changes. Accepted proposals remain distinct from action dispatch and independent verification.
+
+Two backend flags are off by default for independent rollout:
+
+- `AGENT_COMBINED_PLAN_ACTION_ENABLED=true` adds `propose_plan_and_execute({plan, firstStepIdentifier})`. The server validates the whole proposal, saves it, allows only its own persistence effects in the freshness comparison, and executes the selected runnable step through existing approval/dependency/capacity/idempotency checks. New evidence between save and dispatch returns a visible blocked result. A saved plan is not rolled back if subsequent execution fails.
+- `AGENT_COMPACT_PLAN_ENABLED=true` adds `propose_plan_intent({intent, firstStepKey})`. Intent contains priorities/reasons, resource choice and conservative capacity, action keys/dependencies and semantic inputs. The server supplies contacts, approval requirements, IDs, counters and totals, retains dispatched work, then runs the existing complete-plan validator. An empty first step saves only; a nonempty key also requires the combined flag.
+
+Neither flag enables automatic approvals or parallel dispatch. Disabling them restores the original model tools; stored plans remain compatible. The single-process coordinator/idempotency guarantees are unchanged; distributed exactly-once execution is not claimed.
+
+Observation reads now run concurrently where independent, reuse approval/learning results and detach snapshot data from mutable repository objects. The loop still checks freshness after each model request and immediately before mutation. Model prompts explicitly permit acting from current evidence instead of repeatedly reading unchanged state. No model provider/profile has been changed automatically.
+
+Each commander model request produces one `agent.decision-timing` event with cycle/output correlation, outcome, UTC start, monotonic model/total/action durations and loop observation duration/count. Observations inside mutation callbacks are included in action time, not the loop-observation counter. Total time starts immediately before requesting the model; it does not include the first observation. Specialist requests are included in commander action time; they do not emit separate decision-timing samples. Stage times can overlap and must not be summed to infer incident wall time. `tool-call.dispatched` is emitted when a nonfailed external-action adapter returns acceptance; it is distinct from `tool-call.started` (before adapter invocation), completion and verification. Simulated actions retain their simulation flag.
+
+See [latency measurement instructions](../../../demo/AGENT-LATENCY.md). Local scripted tests prove behavior and removal of a model round trip, not a percentage improvement with a live model. Live provider benchmarking and deployed/browser verification remain separate release checks.

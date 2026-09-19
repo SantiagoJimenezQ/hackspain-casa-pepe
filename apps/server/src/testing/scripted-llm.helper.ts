@@ -138,7 +138,114 @@ export class ScriptedLlmClient {
 		}
 
 		const { budget, currentState } = readCurrentState(messages)
-		const decision = chooseDecision(currentState, budget)
+		let decision = chooseDecision(currentState, budget)
+		if (
+			decision.name === "propose_plan" &&
+			tools.some((t) => t.function.name === "propose_plan_and_execute")
+		) {
+			const plan = decision.arguments as unknown as PlanDraft
+			const first = plan.steps.find(
+				(s) =>
+					s.status === "proposed" &&
+					s.dependsOn.every((id) =>
+						plan.steps.some(
+							(d) =>
+								d.identifier === id && d.status === "completed",
+						),
+					),
+			)
+			if (first)
+				decision = {
+					arguments: { firstStepIdentifier: first.identifier, plan },
+					name: "propose_plan_and_execute",
+				}
+		}
+		if (
+			(decision.name === "propose_plan" ||
+				decision.name === "propose_plan_and_execute") &&
+			tools.some((t) => t.function.name === "propose_plan_intent")
+		) {
+			const draft = (decision.name === "propose_plan"
+				? decision.arguments
+				: decision.arguments.plan) as unknown as PlanDraft
+			const first =
+				decision.name === "propose_plan_and_execute"
+					? decision.arguments.firstStepIdentifier
+					: ""
+			decision = {
+				arguments: {
+					firstStepKey: first,
+					intent: {
+						assumedCapacity: draft.capacity.assumedCapacity,
+						assumptions: draft.assumptions,
+						priorities: draft.priorities.map(
+							({
+								serviceIdentifier,
+								rank,
+								score,
+								decision,
+								reason,
+								blockedBy,
+							}) => ({
+								blockedBy,
+								decision,
+								rank,
+								reason,
+								score,
+								serviceIdentifier,
+							}),
+						),
+						reason: draft.reason,
+						resourceIdentifier: draft.capacity.resourceIdentifier,
+						steps: draft.steps
+							.filter(
+								(s) =>
+									!["running", "completed"].includes(
+										s.status,
+									),
+							)
+							.map((s) => ({
+								dependsOn: s.dependsOn,
+								input:
+									s.invocation.name === "call_engineer"
+										? {
+												purpose:
+													s.invocation.input.purpose,
+												questions:
+													s.invocation.input
+														.questions,
+											}
+										: s.invocation.name === "assign_task"
+											? {
+													assignee:
+														s.invocation.input
+															.assigneeName ===
+														currentState.input
+															.engineer.name
+															? "engineer"
+															: "support",
+													description:
+														s.invocation.input
+															.description,
+													priority:
+														s.invocation.input
+															.priority,
+													title: s.invocation.input
+														.title,
+												}
+											: {},
+								key: s.identifier,
+								reason: s.reason,
+								serviceIdentifier: s.serviceIdentifier,
+								title: s.title,
+								tool: s.invocation.name,
+							})),
+						summary: draft.summary,
+					},
+				},
+				name: "propose_plan_intent",
+			}
+		}
 		const call: LlmToolCall = {
 			function: {
 				arguments: JSON.stringify(decision.arguments),

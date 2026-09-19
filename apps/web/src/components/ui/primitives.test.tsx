@@ -5,6 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "@/components/ui/message-scroller";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
@@ -62,5 +70,27 @@ describe("ui primitives", () => {
     expect(screen.getByText("Cuerpo")).toBeInTheDocument();
     expect(screen.getByText("mitad")).toBeInTheDocument();
     expect(screen.getByText("N")).toBeInTheDocument();
+  });
+
+  it("renders a follow-output message scroller", () => {
+    renderWithProviders(
+      <div className="h-40">
+        <MessageScrollerProvider autoScroll>
+          <MessageScroller>
+            <MessageScrollerViewport aria-label="Trabajo del agente">
+              <MessageScrollerContent>
+                <MessageScrollerItem messageId="one">Paso uno</MessageScrollerItem>
+              </MessageScrollerContent>
+            </MessageScrollerViewport>
+            <MessageScrollerButton>
+              <span className="sr-only">Ir al último</span>
+            </MessageScrollerButton>
+          </MessageScroller>
+        </MessageScrollerProvider>
+      </div>,
+    );
+    expect(screen.getByRole("region", { name: "Trabajo del agente" })).toBeInTheDocument();
+    expect(screen.getByText("Paso uno")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ir al último" })).toBeInTheDocument();
   });
 });

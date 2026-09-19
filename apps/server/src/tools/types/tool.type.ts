@@ -106,6 +106,14 @@ export type ToolOutput =
 			readonly resources: ReadonlyArray<ResourceState>
 			readonly remainingCapacity: number
 			readonly confirmed: boolean
+			readonly nearbyRegions: ReadonlyArray<{
+				readonly identifier: string
+				readonly label: string
+				readonly region: string
+				readonly distanceKm: number
+				readonly remaining: number
+				readonly confirmed: boolean
+			}>
 	  }
 	| {
 			readonly kind: "engineer-call"

@@ -5,7 +5,13 @@ import {
 	ResourceState,
 	RunKind,
 	ServiceState,
+	// Scenario visual data is persisted with the run for replay/audit fidelity.
 } from "@incidents/types/incident.type"
+import {
+	ScenarioCustomer,
+	ScenarioTopologyLink,
+	ScenarioTopologyNode,
+} from "@scenarios/types/scenario.type"
 import { SimulationState } from "@scenarios/types/simulation.type"
 import { Column, Entity, Index, PrimaryColumn } from "typeorm"
 
@@ -63,6 +69,15 @@ export class IncidentEntity {
 
 	@Column({ type: "jsonb" })
 	services: ServiceState[]
+
+	@Column({ default: () => "'[]'", type: "jsonb" })
+	topologyNodes: ScenarioTopologyNode[]
+
+	@Column({ default: () => "'[]'", type: "jsonb" })
+	topologyLinks: ScenarioTopologyLink[]
+
+	@Column({ default: () => "'[]'", type: "jsonb" })
+	customers: ScenarioCustomer[]
 
 	@Column({ type: "jsonb" })
 	resources: ResourceState[]

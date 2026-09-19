@@ -84,6 +84,22 @@ window.scrollTo = vi.fn();
 HTMLElement.prototype.scrollTo = vi.fn();
 HTMLElement.prototype.scrollIntoView = vi.fn();
 
+class LayoutObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+  takeRecords() {
+    return [];
+  }
+}
+
+if (!window.ResizeObserver) {
+  window.ResizeObserver = LayoutObserver as unknown as typeof ResizeObserver;
+}
+if (!window.IntersectionObserver) {
+  window.IntersectionObserver = LayoutObserver as unknown as typeof IntersectionObserver;
+}
+
 if (!HTMLElement.prototype.hasPointerCapture) {
   HTMLElement.prototype.hasPointerCapture = () => false;
 }

@@ -1,4 +1,7 @@
-import { buildPlanDraft } from "@agent/helpers/plan-builder.helper"
+import {
+	buildPlanDraft,
+	effectiveCapacity,
+} from "@agent/helpers/plan-builder.helper"
 import {
 	LlmMessage,
 	LlmToolCall,
@@ -9,6 +12,7 @@ import {
 	PlanDraft,
 	ServiceConstraint,
 } from "@agent/types/agent.type"
+import { selectBackupResource } from "@incidents/helpers/incident-state.helper"
 import { PlanRecord, PlanStep } from "@plans/types/plan.type"
 
 const SCRIPTED_MODEL = "script-fixture"
@@ -199,7 +203,11 @@ function needsRevision(input: PlanBuildInput): boolean {
 	const previous = input.previousPlan
 	if (!previous) return true
 
-	const resource = input.incident.resources[0]
+	const resource = selectBackupResource(
+		input.incident,
+		(candidate) =>
+			effectiveCapacity(candidate, input) - candidate.allocatedCapacity,
+	)
 	if (
 		previous.capacity.resourceIdentifier !== resource.identifier ||
 		previous.capacity.totalCapacity !== resource.totalCapacity ||

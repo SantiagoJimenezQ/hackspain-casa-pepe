@@ -1,4 +1,8 @@
-import { remainingCapacity } from "@incidents/helpers/incident-state.helper"
+import { nearbyRegions } from "@incidents/helpers/geography.helper"
+import {
+	remainingCapacity,
+	selectBackupResource,
+} from "@incidents/helpers/incident-state.helper"
 import { RunsService } from "@incidents/services/runs.service"
 import { Injectable } from "@nestjs/common"
 import {
@@ -76,17 +80,13 @@ export class GetRecoveryCapacityTool
 		const incident = await this.runsService.getByRunIdentifier(
 			context.runIdentifier,
 		)
-		const remaining = incident.resources.reduce(
-			(total, resource) => total + remainingCapacity(resource),
-			0,
-		)
-		const confirmed = incident.resources.every(
-			(resource) => resource.confirmed,
-		)
+		const selected = selectBackupResource(incident)
+		const remaining = remainingCapacity(selected)
 		return {
 			output: {
-				confirmed,
+				confirmed: selected.confirmed,
 				kind: "recovery-capacity",
+				nearbyRegions: nearbyRegions(incident),
 				remainingCapacity: remaining,
 				resources: incident.resources,
 			},

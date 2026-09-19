@@ -1,34 +1,42 @@
 import {
+	IMPACT_REGION,
+	meteoriteCustomers,
+	meteoriteResources,
+	meteoriteTopology,
+	OMAN_REGION,
+} from "@scenarios/constants/meteorite-map.constant"
+import {
 	DEFAULT_SCENARIO_IDENTIFIER,
 	SPANISH_SCENARIO_IDENTIFIER,
 } from "@scenarios/constants/scenario.constant"
 import { ScenarioDefinition } from "@scenarios/types/scenario.type"
 
 export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
-	backupRegion: "eu-central-1",
+	backupRegion: OMAN_REGION,
 	businessImpactSummary:
 		"Los repartidores no reciben rutas y los clientes no pueden seguir sus paquetes. Cada hora sin asignación de rutas bloquea unas 4.000 entregas y desborda atención al cliente.",
-	company: "Reparto Rápido, empresa de reparto de última milla",
+	company: "Gulf Relay, empresa regional de reparto de última milla",
+	customers: meteoriteCustomers("es"),
 	engineerBriefing: {
 		purpose:
 			"Confirmar el estado de la región de respaldo y del snapshot de la base de datos antes de comprometer capacidad de recuperación",
 		questions: [
 			{
 				confirmsFact:
-					"El snapshot de la base de datos de pedidos en eu-central-1 es lo bastante reciente para hacer failover",
+					"El snapshot de la base de datos de pedidos en muscat-lz es lo bastante reciente para hacer failover",
 				key: "database-snapshot",
 				question:
-					"¿Qué antigüedad tiene el último snapshot de la base de datos de pedidos replicado en eu-central-1?",
+					"¿Qué antigüedad tiene el último snapshot de la base de datos de pedidos replicado en la Local Zone de Omán?",
 				simulatedAnswer:
 					"El snapshot tiene unos doce minutos, podemos hacer failover con una pérdida mínima de pedidos.",
 				simulatedConfirms: true,
 			},
 			{
 				confirmsFact:
-					"La asignación de rutas puede ejecutarse en eu-central-1 en cuanto la base de datos esté disponible",
+					"La asignación de rutas puede ejecutarse en la región de respaldo activa en cuanto la base de datos esté disponible",
 				key: "route-assignment-readiness",
 				question:
-					"¿Está el servicio de asignación de rutas listo para desplegarse en eu-central-1?",
+					"¿Está el servicio de asignación de rutas listo para desplegarse en la Local Zone de Omán?",
 				simulatedAnswer:
 					"Sí, las plantillas de despliegue están preparadas, solo necesita el endpoint de la base de datos.",
 				simulatedConfirms: true,
@@ -38,7 +46,7 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 					"La capacidad de la región de respaldo que muestra el panel es correcta",
 				key: "backup-capacity",
 				question:
-					"¿Podemos contar con las doce unidades de cómputo que muestra el panel para la región de respaldo?",
+					"¿Podemos contar con las cuatro unidades de cómputo que muestra el panel para la Local Zone de Omán?",
 				simulatedAnswer:
 					"No estoy segura, otro equipo ha estado reservando capacidad allí. Déjame comprobarlo y os mando una actualización.",
 				simulatedConfirms: false,
@@ -54,7 +62,7 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 			confirmed: true,
 			source: "Monitorización",
 			statement:
-				"El impacto de un meteorito ha dejado fuera de servicio toda la región eu-west-1",
+				"El impacto de un meteorito ha dejado fuera de servicio toda la región de Dubái me-central-1",
 		},
 		{
 			confirmed: true,
@@ -72,27 +80,20 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 			confirmed: false,
 			source: "Runbook",
 			statement:
-				"El snapshot de la base de datos de pedidos en eu-central-1 es lo bastante reciente para hacer failover",
+				"El snapshot de la base de datos de pedidos en muscat-lz es lo bastante reciente para hacer failover",
 		},
 		{
 			confirmed: false,
 			source: "Runbook",
 			statement:
-				"La asignación de rutas puede ejecutarse en eu-central-1 en cuanto la base de datos esté disponible",
+				"La asignación de rutas puede ejecutarse en la región de respaldo activa en cuanto la base de datos esté disponible",
 		},
 	],
 	language: "es",
 	narrative:
-		"Un meteorito ha destruido los centros de datos de AWS eu-west-1 que alojan la plataforma de reparto. Existe capacidad de respaldo en eu-central-1, pero no puede alojar todos los servicios a la vez.",
-	region: "eu-west-1",
-	resource: {
-		identifier: "backup-compute",
-		name: "Capacidad de cómputo de respaldo",
-		note: "Capacidad que muestra el panel, pendiente de confirmación por el equipo de plataforma",
-		region: "eu-central-1",
-		reportedCapacity: 12,
-		unit: "unidades de cómputo",
-	},
+		"Un meteorito ha destruido los centros de datos de AWS Dubái (me-central-1) que alojan la plataforma de reparto. El respaldo más cercano es la Local Zone de Omán, después Baréin y Riad.",
+	region: IMPACT_REGION,
+	resources: meteoriteResources("es"),
 	services: [
 		{
 			businessImpact: "critical",
@@ -111,13 +112,13 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 					"La región principal no podrá reincorporarse sin una reconciliación manual",
 				],
 				description:
-					"Promover la réplica de eu-central-1 a primaria y apuntar la plataforma hacia ella",
+					"Promover la réplica de la región de respaldo activa a primaria y apuntar la plataforma hacia ella",
 				kind: "failover-database",
 				requiresApproval: true,
 			},
 			recoveryCapacityUnits: 4,
 			simulatedRecovery: {
-				detail: "Réplica promovida, escrituras aceptadas en eu-central-1",
+				detail: "Réplica promovida, escrituras aceptadas en la región de respaldo activa",
 				outcome: "success",
 			},
 			statusAfterImpact: "down",
@@ -137,7 +138,7 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 					"Los repartidores reciben rutas calculadas desde la base de datos de failover",
 				],
 				description:
-					"Redesplegar el servicio de asignación de rutas en eu-central-1 contra la base de datos de failover",
+					"Redesplegar el servicio de asignación de rutas en la región de respaldo activa contra la base de datos de failover",
 				kind: "redeploy-service",
 				requiresApproval: false,
 			},
@@ -164,7 +165,7 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 					"El histórico de seguimiento durante la caída quedará incompleto",
 				],
 				description:
-					"Redesplegar el servicio de seguimiento de paquetes en eu-central-1",
+					"Redesplegar el servicio de seguimiento de paquetes en la región de respaldo activa",
 				kind: "redeploy-service",
 				requiresApproval: false,
 			},
@@ -190,7 +191,7 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 					"Los eventos producidos durante la caída se pierden",
 				],
 				description:
-					"Arrancar un clúster Kafka reducido en eu-central-1",
+					"Arrancar un clúster Kafka reducido en la región de respaldo activa",
 				kind: "restart-stream",
 				requiresApproval: false,
 			},
@@ -215,7 +216,7 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 					"Consume una de las unidades de cómputo de respaldo",
 				],
 				description:
-					"Redesplegar los procesos de notificación en eu-central-1",
+					"Redesplegar los procesos de notificación en la región de respaldo activa",
 				kind: "redeploy-service",
 				requiresApproval: false,
 			},
@@ -240,7 +241,7 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 					"Consume una de las unidades de cómputo de respaldo",
 				],
 				description:
-					"Redesplegar la API de repartidores en eu-central-1",
+					"Redesplegar la API de repartidores en la región de respaldo activa",
 				kind: "redeploy-service",
 				requiresApproval: false,
 			},
@@ -253,11 +254,12 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 		name: "Carlos Vega",
 		role: "Responsable de atención al cliente",
 	},
-	title: "Impacto de meteorito en eu-west-1",
+	title: "Impacto de meteorito en Dubái",
+	topology: meteoriteTopology("es"),
 	twist: {
-		capacityAfterTwist: 7,
+		capacityAfterTwist: 1,
 		description:
-			"El equipo de plataforma confirma que otra unidad de negocio ya había reservado parte de la región de respaldo. Solo hay siete unidades de cómputo disponibles en lugar de doce.",
+			"El equipo de plataforma confirma que otra unidad de negocio ya había reservado casi toda la Local Zone de Omán. Solo queda una unidad de cómputo allí en lugar de cuatro.",
 		identifier: "backup-capacity-limited",
 		title: "La capacidad de respaldo es insuficiente para el plan inicial",
 	},

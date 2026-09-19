@@ -11,7 +11,7 @@ describe("Casa Pepe browser client", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/casa-pepe/demo/start",
-      expect.objectContaining({ method: "POST", body: JSON.stringify({ scenarioIdentifier: "meteorite-eu-west-1-es" }) }),
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ scenarioIdentifier: "meteorite-me-south-1-es" }) }),
     );
   });
 

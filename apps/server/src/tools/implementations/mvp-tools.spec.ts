@@ -24,7 +24,7 @@ describe("MVP recovery boundaries", () => {
 			getByRunIdentifier: jest.fn().mockResolvedValue(incident),
 		}
 		const plan = {
-			capacity: { resourceIdentifier: "backup-compute" },
+			capacity: { resourceIdentifier: incident.resources[0].identifier },
 			identifier: "plan-1",
 			steps: [
 				{
@@ -63,7 +63,7 @@ describe("MVP recovery boundaries", () => {
 			actionKind: "failover-database" as const,
 			approvalIdentifier: "",
 			capacityUnits: 4,
-			resourceIdentifier: "backup-compute",
+			resourceIdentifier: incident.resources[0].identifier,
 			serviceIdentifier: "orders-database",
 		}
 		return { approvals, incident, input, plans, recovery, runs }

@@ -13,6 +13,7 @@ import {
 	deriveIncidentStatus,
 	propagateDependencyHealth,
 	remainingCapacity,
+	selectBackupResource,
 	toIncidentSnapshot,
 	updateServiceStatus,
 } from "@incidents/helpers/incident-state.helper"
@@ -577,6 +578,20 @@ export class IncidentsService {
 		await updateEntity(this.repository, entity)
 	}
 
+	async setBackupRegion(
+		runIdentifier: string,
+		backupRegion: string,
+	): Promise<void> {
+		const entity =
+			await this.runsService.getEntityByRunIdentifier(runIdentifier)
+		if (entity.backupRegion === backupRegion) {
+			return
+		}
+		entity.backupRegion = backupRegion
+		entity.updatedAt = nowISO()
+		await updateEntity(this.repository, entity)
+	}
+
 	async markResponding(runIdentifier: string): Promise<IncidentSnapshot> {
 		const entity =
 			await this.runsService.getEntityByRunIdentifier(runIdentifier)
@@ -617,6 +632,11 @@ export class IncidentsService {
 		)
 		switch (harnessEvent.type) {
 			case "meteorite-impact": {
+				entity.topologyNodes = entity.topologyNodes.map((node) =>
+					node.role === "primary"
+						? { ...node, status: "down" }
+						: node,
+				)
 				entity.services = applyImpact(
 					entity.services,
 					scenario,
@@ -650,13 +670,27 @@ export class IncidentsService {
 				return
 			}
 			case "capacity-limited": {
-				entity.resources = entity.resources.map((resource) => ({
-					...resource,
-					confirmed: true,
-					lastChangedAt: timestamp,
-					note: harnessEvent.reason,
-					totalCapacity: harnessEvent.availableCapacity,
-				}))
+				const activeRegion = entity.backupRegion
+				entity.topologyNodes = entity.topologyNodes.map((node) =>
+					node.role === "backup" && node.region === activeRegion
+						? { ...node, status: "degraded" }
+						: node,
+				)
+				entity.resources = entity.resources.map((resource) =>
+					resource.region === activeRegion
+						? {
+								...resource,
+								confirmed: true,
+								lastChangedAt: timestamp,
+								note: harnessEvent.reason,
+								totalCapacity: harnessEvent.availableCapacity,
+							}
+						: resource,
+				)
+				const selected = selectBackupResource(
+					toIncidentSnapshot(entity),
+				)
+				entity.backupRegion = selected.region
 				await this.activityService.record({
 					correlation: { harnessEventIdentifier: applied.identifier },
 					incidentIdentifier: entity.identifier,
@@ -776,6 +810,7 @@ export class IncidentsService {
 			businessImpactSummary: scenario.businessImpactSummary,
 			company: scenario.company,
 			createdAt: timestamp,
+			customers: [...scenario.customers],
 			facts: [],
 			harnessEvents: [],
 			identifier: createPrefixedIdentifier("inc"),
@@ -793,6 +828,8 @@ export class IncidentsService {
 			startedAt: timestamp,
 			status: "normal",
 			title: scenario.title,
+			topologyLinks: [...scenario.topology.links],
+			topologyNodes: [...scenario.topology.nodes],
 			updatedAt: timestamp,
 		})
 	}

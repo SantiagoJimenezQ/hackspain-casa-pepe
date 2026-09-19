@@ -17,6 +17,8 @@ export const LOG_MESSAGES = {
 			"Retrying the LLM request after the provider asked for a pause",
 		PLAN_CREATED: "Initial response plan created",
 		PLAN_REVISED: "Response plan revised after a change in conditions",
+		RATE_LIMIT_HOLD:
+			"Provider rate limit paused automatic follow-up; the next cycle waits for the cooldown",
 		STALLED_RUN_RESUMED:
 			"Idle run with runnable work resumed after a lost cycle",
 		STEP_EXECUTION_FAILED: "Failed to execute a plan step",

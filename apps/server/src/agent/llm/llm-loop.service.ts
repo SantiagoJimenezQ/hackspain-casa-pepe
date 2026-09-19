@@ -17,7 +17,11 @@ import {
 	restoreInvestigation,
 	safeValidationError,
 } from "@agent/llm/llm-context"
-import { modelVisible, stateFingerprint } from "@agent/llm/llm-state"
+import {
+	hasInFlightWork,
+	modelVisible,
+	stateFingerprint,
+} from "@agent/llm/llm-state"
 import { repairLlmPlanDraft } from "@agent/llm/plan-repair"
 import {
 	LlmPlanValidationError,
@@ -34,7 +38,11 @@ import { Injectable } from "@nestjs/common"
 import type { LlmPublicTurn } from "../../../../../packages/contracts/agent"
 import { PublicOutput } from "./public-output"
 
-export { modelVisible, stateFingerprint } from "@agent/llm/llm-state"
+export {
+	hasInFlightWork,
+	modelVisible,
+	stateFingerprint,
+} from "@agent/llm/llm-state"
 export type { LlmLoopActions, LlmLoopState } from "@agent/types/llm-loop.type"
 
 const SYSTEM = `You are Casa Pepe's incident commander. You own investigation, prioritization, coordination and adaptation.
@@ -326,6 +334,24 @@ export class LlmLoopService {
 					"stale",
 					AGENT_MESSAGES[state.input.language].newEvidenceReassessing,
 				)
+				if (hasInFlightWork(fresh)) {
+					const reason =
+						AGENT_MESSAGES[state.input.language]
+							.waitingForInFlightWork
+					await record(
+						state,
+						"agent.cycle-finished",
+						"LLM waiting",
+						reason,
+						{ executedSteps: executed },
+					)
+					return {
+						executedSteps: executed,
+						kind: "completed",
+						planVersion: state.input.previousPlan?.version ?? 0,
+						waitingFor: [reason],
+					}
+				}
 				history.length = 0
 				continue
 			}

@@ -4,6 +4,7 @@ import {
 	toHarnessEvent,
 } from "@incidents/dtos/inject-harness-event.dto"
 import { StartRunDTO } from "@incidents/dtos/start-run.dto"
+import { SwitchLanguageDTO } from "@incidents/dtos/switch-language.dto"
 import { IncidentsService } from "@incidents/services/incidents.service"
 import { IncidentSnapshot } from "@incidents/types/incident.type"
 import {
@@ -114,6 +115,22 @@ export class DemoController {
 			await this.incidentsService.getActiveRunIdentifier(
 				query.runIdentifier,
 			),
+		)
+	}
+
+	@Post("language")
+	@HttpCode(HttpStatus.OK)
+	@ApiOperation({
+		summary:
+			"Run the scenario written in this language. A run already in it is left untouched; any other one ends and a fresh run starts",
+	})
+	switchLanguage(
+		@Body() body: SwitchLanguageDTO,
+		@Query() query: RunScopedQueryDTO,
+	): Promise<IncidentSnapshot> {
+		return this.incidentsService.switchLanguage(
+			body.language,
+			query.runIdentifier,
 		)
 	}
 

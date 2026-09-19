@@ -39,6 +39,7 @@ import { ScenariosService } from "@scenarios/services/scenarios.service"
 import { SeededSimulationService } from "@scenarios/services/seeded-simulation.service"
 import {
 	ScenarioDefinition,
+	ScenarioLanguage,
 	ServiceHealthStatus,
 } from "@scenarios/types/scenario.type"
 import {
@@ -127,6 +128,31 @@ export class IncidentsService {
 			),
 		)
 		return toIncidentSnapshot(entity)
+	}
+
+	/**
+	 * The scenario carries the language of everything the agent writes, so changing language
+	 * means running the scenario written in it. A run already in that language is left alone;
+	 * any other run ends here, because its persisted prose cannot be rewritten.
+	 */
+	async switchLanguage(
+		language: ScenarioLanguage,
+		runIdentifier?: string,
+	): Promise<IncidentSnapshot> {
+		const scenario = this.scenariosService.getByLanguage(language)
+		const current = runIdentifier
+			? await this.runsService.getEntityByRunIdentifier(runIdentifier)
+			: await this.runsService.findActiveEntity()
+		if (current && current.scenarioIdentifier === scenario.identifier) {
+			return this.runsService.getByRunIdentifier(current.runIdentifier)
+		}
+		if (current) {
+			await this.deactivateRun(
+				current,
+				"The operator changed the language; this run ends here",
+			)
+		}
+		return this.startRun(scenario.identifier)
 	}
 
 	async reset(runIdentifier?: string): Promise<IncidentSnapshot> {

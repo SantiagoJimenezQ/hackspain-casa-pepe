@@ -151,9 +151,7 @@ export class EngineersService {
 		entity.provider = outcome.provider ?? entity.provider
 		entity.providerReference = outcome.providerReference
 		entity.providerCallSid = outcome.providerCallSid ?? null
-		return toEngineerCallRecord(
-			await updateEntity(this.repository, entity),
-		)
+		return toEngineerCallRecord(await updateEntity(this.repository, entity))
 	}
 
 	/**

@@ -380,6 +380,7 @@ export class AgentService {
 			engine: "llm",
 			engineerCallMode: this.engineersService.mode,
 			incidentStatus: incident.status,
+			language: this.scenarioOf(incident).language,
 			lastCycleAt: state.lastCycleAt,
 			lastCycleOutcome: state.lastOutcome,
 			maximumCycles: this.configuration.agent.maximumCyclesPerRun,

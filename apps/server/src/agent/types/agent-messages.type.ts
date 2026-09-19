@@ -81,6 +81,12 @@ export interface AgentMessages {
 	readonly waitingForOperator: string
 	readonly couldNotRequestApproval: string
 	attemptFailedRetrying(attempt: number, message: string): string
+	/** Shown when a proposed action no longer matches the state the agent observed. */
+	actionNoLongerValid: string
+	/** Shown when the agent wants to wait while a planned step could already run. */
+	stepRunnableNow(stepIdentifier: string): string
+	/** Shown when the agent wants to wait on the opening engineer call alone. */
+	openingCallPlanOnly: string
 	readonly toolWithoutResult: string
 	factsConfirmed(count: number, mode: string): string
 	taskCreated(taskIdentifier: string): string

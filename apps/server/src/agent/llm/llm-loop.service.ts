@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { ActivityService } from "@activity/services/activity.service"
+import { AGENT_MESSAGES } from "@agent/constants/agent-messages.constant"
 import {
 	SUBAGENT_DELEGATION_TOOLS,
 	SUBAGENT_OBJECTIVE_CHARACTER_LIMIT,
@@ -471,7 +472,8 @@ export class LlmLoopService {
 										error.message,
 										call.function.arguments,
 									)
-								: "Action failed or state changed before dispatch. Reassess current state and tool records before retrying.",
+								: AGENT_MESSAGES[state.input.language]
+										.actionNoLongerValid,
 				}
 				await record(
 					state,
@@ -625,12 +627,13 @@ function correctionFor(name: string): string {
  * loop. Each case is surfaced once; a commander that insists is still allowed to wait.
  */
 function waitChallenge(state: LlmLoopState): string {
+	const messages = AGENT_MESSAGES[state.input.language]
 	const runnable = runnableStepIdentifier(state)
 	if (runnable.length) {
-		return `Step ${runnable} is runnable now: its dependencies are complete and it is neither running nor awaiting approval. Select it with execute_step, or explain in a new reason why it cannot run.`
+		return messages.stepRunnableNow(runnable)
 	}
 	if (callOnlyPlan(state)) {
-		return "The active plan is the opening engineer call the server dispatched: it carries no recovery, task or communication step, so nothing will resume this run. Propose the plan this incident needs with propose_plan, or explain in a new reason why no step at all can be planned."
+		return messages.openingCallPlanOnly
 	}
 	return ""
 }

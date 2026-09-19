@@ -55,6 +55,8 @@ function withComment(base: string, comment: string): string {
 }
 
 const ENGLISH: AgentMessages = {
+	actionNoLongerValid:
+		"Action failed or state changed before dispatch. Reassess current state and tool records before retrying.",
 	approvalExpiredRequestAgain:
 		"The approval expired, it will be requested again",
 	approvalRequestedAgain:
@@ -127,6 +129,8 @@ const ENGLISH: AgentMessages = {
 	nextStep: (title) => `Next: ${title}`,
 	notEvaluated: "Not evaluated",
 	nothingRunnable: "Nothing runnable right now",
+	openingCallPlanOnly:
+		"The active plan is the opening engineer call the server dispatched: it carries no recovery, task or communication step, so nothing will resume this run. Propose the plan this incident needs with propose_plan, or explain in a new reason why no step at all can be planned.",
 	outcomeLabel: (outcome) => outcome,
 	partiallyRecovered:
 		"Partially recovered. A follow-up task was assigned to finish the recovery",
@@ -166,6 +170,8 @@ const ENGLISH: AgentMessages = {
 		discrepancies.length
 			? `${healthyCount} of ${totalCount} services healthy. Discrepancies: ${discrepancies.join("; ")}`
 			: `${healthyCount} of ${totalCount} services healthy. The independent check matches the recorded state`,
+	stepRunnableNow: (stepIdentifier) =>
+		`Step ${stepIdentifier} is runnable now: its dependencies are complete and it is neither running nor awaiting approval. Select it with execute_step, or explain in a new reason why it cannot run.`,
 	stepWaiting: (title, status) => `${title} (${status})`,
 	summaryAllHealthy: "Every service is healthy. Nothing left to recover.",
 	summaryNothingFits: (totalUnits, unit, postponed) =>
@@ -213,6 +219,8 @@ const ENGLISH: AgentMessages = {
 }
 
 const SPANISH: AgentMessages = {
+	actionNoLongerValid:
+		"La acción falló o el estado cambió antes de enviarla. Revisa el estado actual y el registro de herramientas antes de reintentar.",
 	approvalExpiredRequestAgain: "La aprobación expiró, se solicitará de nuevo",
 	approvalRequestedAgain:
 		"Se volverá a pedir aprobación para el plan revisado",
@@ -285,6 +293,8 @@ const SPANISH: AgentMessages = {
 	nextStep: (title) => `Siguiente: ${title}`,
 	notEvaluated: "Sin evaluar",
 	nothingRunnable: "Nada ejecutable ahora mismo",
+	openingCallPlanOnly:
+		"El plan activo es solo la llamada inicial al ingeniero que lanzó el servidor: no contiene ningún paso de recuperación, tarea ni comunicación, así que nada reanudará esta ejecución. Propón con propose_plan el plan que necesita el incidente, o explica en un motivo nuevo por qué no se puede planificar ningún paso.",
 	outcomeLabel: (outcome) => labelOr(OUTCOME_LABELS_ES, outcome),
 	partiallyRecovered:
 		"Recuperado parcialmente. Se asignó una tarea de seguimiento para terminar la recuperación",
@@ -327,6 +337,8 @@ const SPANISH: AgentMessages = {
 		discrepancies.length
 			? `${healthyCount} de ${totalCount} servicios sanos. Discrepancias: ${discrepancies.join("; ")}`
 			: `${healthyCount} de ${totalCount} servicios sanos. La comprobación independiente coincide con el estado registrado`,
+	stepRunnableNow: (stepIdentifier) =>
+		`El paso ${stepIdentifier} se puede ejecutar ya: sus dependencias están completas y no está en curso ni esperando aprobación. Selecciónalo con execute_step, o explica en un motivo nuevo por qué no puede ejecutarse.`,
 	stepWaiting: (title, status) =>
 		`${title} (${labelOr(STEP_STATUS_LABELS_ES, status)})`,
 	summaryAllHealthy:

@@ -97,6 +97,7 @@ export const llmPlanSchema = {
 										required: ["key", "question"],
 										type: "object",
 									},
+									minItems: 1,
 									type: "array",
 								},
 							},
@@ -1780,11 +1781,19 @@ function parseInvocation(
 	}
 }
 
+/**
+ * A call with no questions cannot collect anything: the voice agent receives an empty
+ * questions variable and the conversation leaves every fact pending.
+ */
 function parseQuestions(
 	value: unknown,
 	path: string,
 ): ReadonlyArray<{ readonly key: string; readonly question: string }> {
-	return array(value, path, MAX_QUESTIONS).map((candidate, index) => {
+	const candidates = array(value, path, MAX_QUESTIONS)
+	if (!candidates.length) {
+		fail(path, "an engineer call must ask at least one question")
+	}
+	return candidates.map((candidate, index) => {
 		const question = record(candidate, `${path}[${index}]`)
 		exactKeys(question, ["key", "question"], `${path}[${index}]`)
 		return {

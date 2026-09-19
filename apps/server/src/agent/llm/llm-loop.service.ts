@@ -58,40 +58,37 @@ function tool(
 	return { function: { description, name, parameters }, type: "function" }
 }
 
-function definitions(): LlmToolDefinition[] {
-	const empty = {
+function delegation(
+	name: string,
+	description: string,
+): LlmToolDefinition {
+	return tool(name, description, {
 		additionalProperties: false,
-		properties: {},
-		required: [],
+		properties: {
+			objective: {
+				description:
+					"One concrete question or task for the specialist, in the scenario language.",
+				type: "string",
+			},
+		},
+		required: ["objective"],
 		type: "object",
-	}
-	const readArguments =
-		" Arguments must be exactly {}. The server supplies run, incident and resource context. Do not pass identifiers or an input/arguments/parameters wrapper."
+	})
+}
+
+function definitions(): LlmToolDefinition[] {
 	return [
-		tool(
-			"get_incident_context",
-			`Read current incident and plan.${readArguments}`,
-			empty,
+		delegation(
+			"delegate_investigation",
+			"Ask the investigation specialist for evidence: incident context, service health and dependencies, confirmed and remaining backup capacity, an independent status check of every service, or the customer recovery ranking. It reads only; it never plans or acts.",
 		),
-		tool(
-			"get_service_health",
-			`Inspect current service health and dependencies.${readArguments}`,
-			empty,
+		delegation(
+			"delegate_engineer_call",
+			"Ask the engineer contact specialist what to ask the on-call engineer, and let it start a call step already present in the active plan. Calls are asynchronous: this returns the questions and the dispatch, never the answers.",
 		),
-		tool(
-			"get_recovery_capacity",
-			`Inspect current confirmed and remaining capacity.${readArguments}`,
-			empty,
-		),
-		tool(
-			"prioritize_customers",
-			"Rank affected customers by recovery priority: business impact, blocked dependents, unavailable services, users, time down and recovery in progress",
-			empty,
-		),
-		tool(
-			"check_services_status",
-			`Check every service with an independent query and report discrepancies with the recorded state.${readArguments}`,
-			empty,
+		delegation(
+			"delegate_communication",
+			"Ask the communication specialist to read the incident mailbox and to send a planned incident email or status publication. It only dispatches communication steps already present in the active plan.",
 		),
 		tool(
 			"propose_plan",

@@ -14,7 +14,7 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger"
 import { AppModule } from "@root/app.module"
 
 async function bootstrap(): Promise<void> {
-	const application = await NestFactory.create(AppModule)
+	const application = await NestFactory.create(AppModule, { rawBody: true })
 	const configuration = application.get(ConfigurationService)
 	const logger = new Logger("Bootstrap")
 	process.on("unhandledRejection", (reason) => {

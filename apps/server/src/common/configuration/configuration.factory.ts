@@ -106,7 +106,9 @@ export function createApplicationConfiguration(
 			apiKey: variables.RESEND_API_KEY,
 			from: variables.INCIDENT_EMAIL_FROM,
 			mode: variables.INCIDENT_EMAIL_MODE as "simulated" | "live",
+			timeoutMilliseconds: variables.AGENT_TOOL_TIMEOUT_MILLISECONDS,
 			to: variables.INCIDENT_EMAIL_TO,
+			webhookSecret: variables.RESEND_WEBHOOK_SECRET,
 		},
 		engineerCall: {
 			mode: (variables.ENGINEER_CALL_MODE ??

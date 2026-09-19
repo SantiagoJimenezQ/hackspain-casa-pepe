@@ -21,6 +21,8 @@ export class EnvironmentVariables {
 	@IsString()
 	RESEND_API_KEY: string = ""
 	@IsString()
+	RESEND_WEBHOOK_SECRET: string = ""
+	@IsString()
 	INCIDENT_EMAIL_FROM: string = ""
 	@IsString()
 	INCIDENT_EMAIL_TO: string = ""

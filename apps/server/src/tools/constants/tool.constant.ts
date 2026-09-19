@@ -12,6 +12,7 @@ export const TOOL_NAMES = [
 	"request_approval",
 	"execute_recovery",
 	"verify_recovery",
+	"read_incoming_emails",
 ] as const
 
 export const TOOL_CALL_STATUSES = [
@@ -88,6 +89,12 @@ export const TOOL_DEFINITIONS: ReadonlyArray<{
 	},
 	{
 		asynchronous: true,
+		description: "Read inbound incident emails received by Resend",
+		interaction: "real-record",
+		name: "read_incoming_emails",
+	},
+	{
+		asynchronous: false,
 		description:
 			"Call an engineer through the configured voice provider and collect the answers",
 		interaction: "real-call",

@@ -18,6 +18,7 @@ import {
 	SendIncidentEmailTool,
 } from "@tools/implementations/communication-tools"
 import { ContactEngineerTool } from "@tools/implementations/contact-engineer.tool"
+import { ReadIncomingEmailsTool } from "@tools/implementations/inbound-emails.tool"
 import {
 	CallEngineerTool,
 	GetIncidentContextTool,
@@ -74,6 +75,7 @@ import { HappyRobotSecretGuard } from "@webhooks/guards/inbound-secret.guard"
 		VerifyRecoveryTool,
 		HappyRobotSecretGuard,
 		ToolTestsService,
+		ReadIncomingEmailsTool,
 		ToolRegistryService,
 		ToolsService,
 	],

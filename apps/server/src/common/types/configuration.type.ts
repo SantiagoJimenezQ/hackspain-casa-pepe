@@ -83,6 +83,8 @@ export interface LlmConfiguration {
 export interface EmailConfiguration {
 	readonly mode: "simulated" | "live"
 	readonly apiKey: string
+	readonly timeoutMilliseconds: number
+	readonly webhookSecret: string
 	readonly from: string
 	readonly to: string
 }

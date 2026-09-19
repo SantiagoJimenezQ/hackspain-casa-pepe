@@ -66,13 +66,14 @@ function AgentTool({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { locale } = useI18n();
   return (
     <Tool open={open} onOpenChange={onOpenChange}>
       <ToolHeader
         type="dynamic-tool"
         toolName={tool.name}
         state={mapToolState(tool.status)}
-        title={toolTitle(tool, services)}
+        title={toolTitle(tool, services, locale)}
       />
       <ToolContent>
         <ToolInput input={tool.input ?? {}} />
@@ -120,6 +121,7 @@ function ProposedTool({
   call: LlmPublicToolCall;
   state: "input-streaming" | "input-available" | "output-available" | "output-error";
 }) {
+  const { locale } = useI18n();
   const input = call.arguments && typeof call.arguments === "object" && !Array.isArray(call.arguments)
     ? (call.arguments as Record<string, unknown>)
     : { arguments: call.arguments };
@@ -129,7 +131,7 @@ function ProposedTool({
         type="dynamic-tool"
         toolName={call.name}
         state={state}
-        title={toolTitle({ name: call.name, input })}
+        title={toolTitle({ name: call.name, input }, [], locale)}
       />
       <ToolContent>
         <ToolInput input={input} />

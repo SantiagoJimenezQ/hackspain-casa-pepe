@@ -608,7 +608,7 @@ describe("live dashboard chrome", () => {
 
     renderWithProviders(<LiveOperationsDashboard />);
 
-    await waitFor(() => expect(screen.getAllByText("Comprobando capacidad de recuperación").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText("Midiendo la capacidad de respaldo").length).toBeGreaterThan(0));
     expect(screen.getByText(/Rechazado/)).toBeInTheDocument();
     expect(screen.queryByText("Razonamiento")).not.toBeInTheDocument();
     expect(screen.queryByText("Selecting the next investigation or action")).not.toBeInTheDocument();

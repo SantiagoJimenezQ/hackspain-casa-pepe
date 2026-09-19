@@ -279,6 +279,6 @@ describe("formatChatDebugDump", () => {
     expect(dump).toContain("decidedBy: operator");
     expect(dump).toContain("Error: no answer");
     expect(dump).toContain("errorCode: timeout");
-    expect(dump).toContain("Llamó al ingeniero: Marta Ruiz");
+    expect(dump).toContain("Llamó al ingeniero de guardia: Marta Ruiz");
   });
 });

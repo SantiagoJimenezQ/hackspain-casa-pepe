@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { CheckCircle2, Radio, RefreshCcw, Sparkles, Zap } from "lucide-react";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
+import { LanguageSwitcher } from "@/components/dashboard/language-switcher";
 import { ThemeSwitcher } from "@/components/dashboard/theme-switcher";
 import { Button } from "@/components/ui/button";
 import { incidentClock } from "@/lib/agent-trace";
@@ -87,6 +88,7 @@ export function TopBar() {
           <p className="hidden font-mono text-[11px] tabular-nums text-muted-foreground sm:block">
             {now?.toLocaleTimeString("es-ES") ?? "--:--:--"}
           </p>
+          <LanguageSwitcher />
           <ThemeSwitcher />
         </div>
       </header>

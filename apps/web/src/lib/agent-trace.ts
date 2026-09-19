@@ -8,6 +8,12 @@ import type {
   Service,
   ToolCall,
 } from "@/lib/casa-pepe-types";
+import {
+  DEFAULT_LOCALE,
+  messageKey,
+  translate,
+  type Locale,
+} from "@/lib/i18n";
 import type { VisualStatus } from "@/lib/live-dashboard";
 
 export type ElementsToolState =
@@ -80,22 +86,10 @@ export function isLlmActivityType(type: string) {
 export const LIVE_REASONING_ID = "thinking-live";
 export const PLACEHOLDER_DECISION_SUMMARY = "Selecting the next investigation or action";
 
-const TOOL_LABELS: Record<string, { running: string; done: string }> = {
-  get_incident_context: { running: "Leyendo contexto del incidente", done: "Leyó el contexto del incidente" },
-  get_incident_state: { running: "Leyendo el estado del incidente", done: "Leyó el estado del incidente" },
-  get_service_health: { running: "Revisando salud de servicios", done: "Revisó la salud de servicios" },
-  get_recovery_capacity: { running: "Comprobando capacidad de recuperación", done: "Comprobó la capacidad de recuperación" },
-  execute_recovery: { running: "Recuperando", done: "Recuperó" },
-  verify_recovery: { running: "Verificando", done: "Verificó" },
-  publish_status_update: { running: "Publicando estado", done: "Publicó el estado" },
-  save_recovery_plan: { running: "Guardando el plan de recuperación", done: "Guardó el plan de recuperación" },
-  send_incident_email: { running: "Enviando el plan por correo", done: "Envió el plan por correo" },
-  request_approval: { running: "Pidiendo autorización", done: "Pidió autorización" },
-  call_engineer: { running: "Llamando al ingeniero", done: "Llamó al ingeniero" },
-  contact_engineer: { running: "Contactando al ingeniero", done: "Contactó al ingeniero" },
-  assign_task: { running: "Asignando una tarea", done: "Asignó una tarea" },
-  propose_plan: { running: "Proponiendo el plan", done: "Propuso el plan" },
-};
+/** Tools whose label lives in the dictionary; anything else falls back to its own name. */
+function toolMessageKey(name: string, tense: "running" | "done") {
+  return messageKey(`tool.${name}.${tense}`);
+}
 
 export function mapToolState(status: string): ElementsToolState {
   if (status === "pending") return "input-streaming";
@@ -175,10 +169,11 @@ function isFinishedStatus(status: string | undefined) {
 export function toolTitle(
   tool: Pick<ToolCall, "name" | "input"> & { status?: string },
   services: ReadonlyArray<Pick<Service, "identifier" | "name">> = [],
+  locale: Locale = DEFAULT_LOCALE,
 ) {
-  const labels = TOOL_LABELS[tool.name];
   const tense = isFinishedStatus(tool.status) ? "done" : "running";
-  const base = labels ? labels[tense] : tool.name.replaceAll("_", " ");
+  const key = toolMessageKey(tool.name, tense);
+  const base = key ? translate(locale, key) : tool.name.replaceAll("_", " ");
   if (tool.name === "execute_recovery" || tool.name === "verify_recovery") {
     const name = serviceName(inputServiceIdentifier(tool.input), services);
     return name ? `${base} ${name}` : base;

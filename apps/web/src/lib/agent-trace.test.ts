@@ -101,8 +101,8 @@ describe("agent trace", () => {
   });
 
   it("uses Spanish titles with the recovered service name", () => {
-    expect(toolTitle({ name: "get_incident_context", input: {} })).toBe("Leyendo contexto del incidente");
-    expect(toolTitle({ name: "propose_plan", input: {} })).toBe("Proponiendo el plan");
+    expect(toolTitle({ name: "get_incident_context", input: {} })).toBe("Leyendo el contexto del incidente");
+    expect(toolTitle({ name: "propose_plan", input: {} })).toBe("Redactando el plan");
     expect(toolTitle(
       { name: "execute_recovery", input: { serviceIdentifier: "package-tracking" } },
       [{ identifier: "package-tracking", name: "Seguimiento de paquetes" } as Overview["incident"]["services"][number]],
@@ -532,7 +532,7 @@ describe("agent trace", () => {
     ];
     expect(currentWork(overview, events)).toMatchObject({
       kind: "thinking",
-      title: "Proponiendo el plan",
+      title: "Redactando el plan",
     });
     const thoughts = buildTranscript(overview, events).filter((item) => item.kind === "thinking");
     expect(thoughts.map((item) => item.kind === "thinking" ? {
@@ -553,7 +553,7 @@ describe("agent trace", () => {
         id: "out_b",
         status: "streaming",
         text: "",
-        title: "Proponiendo el plan",
+        title: "Redactando el plan",
         disposition: "pending",
       },
     ]);
@@ -622,7 +622,7 @@ describe("agent trace", () => {
       kind: "thinking",
       id: "out_tools",
       text: "",
-      title: "Comprobando capacidad de recuperación",
+      title: "Midiendo la capacidad de respaldo",
       disposition: "accepted",
       toolCalls: [{ id: "call_cap", name: "get_recovery_capacity", arguments: {} }],
     });
@@ -652,7 +652,7 @@ describe("agent trace", () => {
         id: "out_done",
         status: "complete",
         text: "",
-        title: "Comprobando capacidad de recuperación",
+        title: "Midiendo la capacidad de respaldo",
       }),
     ]);
   });

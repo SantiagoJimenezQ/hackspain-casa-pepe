@@ -15,6 +15,13 @@ export const ACTIVE_CALL_AUTHORIZED_DISMISS_MS = 4200;
 export const ACTIVE_CALL_TERMINAL_WINDOW_MS = 12_000;
 /** The browser clock can sit a little behind the server's, so a fresh end is never in the future. */
 export const ACTIVE_CALL_CLOCK_SKEW_MS = 5_000;
+/**
+ * The dashboard refreshes on activity events, never on a timer, so a dropped stream leaves the
+ * card frozen on whatever it last saw, counting upwards forever. Real calls last seconds and
+ * the server times them out well before this, so a call still ringing after five minutes means
+ * the data is stale, not that somebody is still on the line.
+ */
+export const ACTIVE_CALL_STALE_MS = 300_000;
 
 export const CALL_TOOL_NAMES = new Set(["call_engineer", "contact_engineer"]);
 const LIVE_STATUSES = new Set(["dialing", "in-progress"]);
@@ -91,7 +98,11 @@ export function activeCallView(
   }
 
   const calls = [...merged.values()];
-  const live = latestCall(calls.filter((call) => callPhase(call.status) === "calling"));
+  const live = latestCall(
+    calls.filter(
+      (call) => callPhase(call.status) === "calling" && !isStale(call, nowMs),
+    ),
+  );
   const liveView = live ? toView(live) : null;
   if (liveView) return liveView;
 
@@ -108,7 +119,7 @@ export function activeCallView(
   // exists it is the truth, and the tool -- which stays running for a while after the line drops
   // -- must never put a finished call back on screen as if it were still ringing.
   if (calls.length) return null;
-  return toolFallback(overview?.toolCalls ?? []);
+  return toolFallback(overview?.toolCalls ?? [], nowMs);
 }
 
 function toView(call: EngineerCall): ActiveCallView | null {
@@ -127,7 +138,10 @@ function toView(call: EngineerCall): ActiveCallView | null {
   };
 }
 
-function toolFallback(tools: ReadonlyArray<ToolCall>): ActiveCallView | null {
+function toolFallback(
+  tools: ReadonlyArray<ToolCall>,
+  nowMs: number,
+): ActiveCallView | null {
   const tool = [...tools]
     .reverse()
     .find(
@@ -138,6 +152,8 @@ function toolFallback(tools: ReadonlyArray<ToolCall>): ActiveCallView | null {
   if (!tool) return null;
   const name = stringField(tool.input.engineerName);
   if (!name) return null;
+  const started = new Date(tool.startedAt).getTime();
+  if (Number.isFinite(started) && nowMs - started > ACTIVE_CALL_STALE_MS) return null;
   return {
     identifier: tool.identifier,
     name,
@@ -148,6 +164,13 @@ function toolFallback(tools: ReadonlyArray<ToolCall>): ActiveCallView | null {
     live: true,
     authorized: false,
   };
+}
+
+/** A call that never reported an ending, long after any real call would have finished. */
+function isStale(call: EngineerCall, nowMs: number): boolean {
+  const started = new Date(call.startedAt).getTime();
+  if (!Number.isFinite(started)) return false;
+  return nowMs - started > ACTIVE_CALL_STALE_MS;
 }
 
 function isRecentTerminal(call: EngineerCall, nowMs: number): boolean {

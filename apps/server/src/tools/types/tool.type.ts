@@ -1,4 +1,8 @@
 import {
+	CustomerPriority,
+	CustomerPriorityCriterion,
+} from "@customers/types/customer-priority.type"
+import {
 	IncidentSnapshot,
 	ResourceState,
 	ServiceState,
@@ -77,6 +81,10 @@ export type ToolInvocation =
 			readonly name: "check_services_status"
 			readonly input: Record<string, never>
 	  }
+	| {
+			readonly name: "prioritize_customers"
+			readonly input: Record<string, never>
+	  }
 
 export interface EngineerAnswer {
 	readonly key: string
@@ -152,6 +160,12 @@ export type ToolOutput =
 			readonly totalCount: number
 			readonly discrepancies: ReadonlyArray<string>
 			readonly mode: "simulated" | "http"
+	  }
+	| {
+			readonly kind: "customer-priorities"
+			readonly generatedAt: string
+			readonly criteria: ReadonlyArray<CustomerPriorityCriterion>
+			readonly customers: ReadonlyArray<CustomerPriority>
 	  }
 
 export interface ToolError {

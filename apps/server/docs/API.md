@@ -359,6 +359,37 @@ source.onmessage = (message) => append(JSON.parse(message.data))
 
 ---
 
+## Customers (`/customers`)
+
+### `GET /customers/priorities?runIdentifier=`
+
+Customers (the companies whose services run on the affected region) ranked by recovery priority. Pure read over the incident state and the recovery actions, no model call, so it answers in milliseconds and is safe to poll from the UI.
+
+```json
+{
+  "runIdentifier": "run_…",
+  "incidentIdentifier": "inc_…",
+  "generatedAt": "2026-09-19T12:00:00.000Z",
+  "criteria": [{ "key": "business-impact", "description": "…" }, …],
+  "customers": [
+    {
+      "rank": 1, "identifier": "emirates-nbd", "name": "Emirates NBD", "shortName": "ENBD", "sector": "Fintech", "users": 6400,
+      "status": "down", "score": 91, "highestImpact": "critical",
+      "breakdown": { "businessImpact": 40, "blockedDependents": 24, "unhealthyServices": 6, "affectedUsers": 12, "timeDown": 9, "recoveryInProgress": 0 },
+      "servicesDown": 1, "servicesDegraded": 0, "servicesRecovering": 0, "servicesHealthy": 0,
+      "blockedDependentServices": ["route-assignment", "package-tracking", "…"],
+      "minutesDown": 47, "recoveryInProgress": 0, "recoveryCompleted": 0, "recoveryFailed": 0,
+      "capacityUnitsToRecover": 4,
+      "nextAction": "Fail over the orders database to the backup region (4 units, approval required)",
+      "reason": "Emirates NBD: 1 service unavailable with critical impact for 6400 users, blocking route-assignment, …",
+      "services": [{ "identifier": "orders-database", "status": "down", "recoveryStatus": "not-started", "recoveryDetail": "", … }]
+    }
+  ]
+}
+```
+
+`status` is `down` \| `degraded` \| `recovering` \| `healthy`. `score` is the sum of `breakdown`: highest business impact of the unavailable services (critical 40, high 25, medium 12, low 5), 8 points per service of any customer blocked by them, 6 per unavailable service, 1 per 500 users (maximum 30), 1 per 5 minutes down (maximum 20), minus 10 per recovery action already requested or running. Ties break by users, then name. The same ranking is available to the agent as the `prioritize_customers` tool (output `kind: "customer-priorities"`).
+
 ## Tools (`/tools`)
 
 ### `GET /tools`
@@ -367,7 +398,7 @@ The eight tools with `name`, `description`, `interaction` (`harness` \| `simulat
 
 ### `GET /tools/calls?runIdentifier=`, `GET /tools/calls/:identifier`
 
-**ToolCallRecord**: `identifier`, `name`, `interaction`, `input`, `status` (`pending` \| `running` \| `succeeded` \| `failed` \| `cancelled`), `output` (union by `kind`: `incident-state`, `service-health`, `recovery-capacity`, `engineer-call`, `task`, `approval`, `recovery-execution`, `recovery-verification`, `services-status`), `error { code, message, retryable }`, `externalReference`, `simulated`, `attempt`, `idempotencyKey`, `planIdentifier`, `planVersion`, `planStepIdentifier`, `decisionIdentifier`, `startedAt`, `finishedAt`.
+**ToolCallRecord**: `identifier`, `name`, `interaction`, `input`, `status` (`pending` \| `running` \| `succeeded` \| `failed` \| `cancelled`), `output` (union by `kind`: `incident-state`, `service-health`, `recovery-capacity`, `engineer-call`, `task`, `approval`, `recovery-execution`, `recovery-verification`, `services-status`, `customer-priorities`), `error { code, message, retryable }`, `externalReference`, `simulated`, `attempt`, `idempotencyKey`, `planIdentifier`, `planVersion`, `planStepIdentifier`, `decisionIdentifier`, `startedAt`, `finishedAt`.
 
 Error codes: `TIMEOUT`, `CALL_FAILED`, `APPROVAL_INVALID`, `CAPACITY_INSUFFICIENT`, `EXECUTION_FAILED`, `UNEXPECTED_ERROR`, `CANCELLED`.
 

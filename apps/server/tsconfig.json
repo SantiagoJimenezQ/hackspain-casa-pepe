@@ -33,6 +33,7 @@
 			"@tasks/*": ["src/tasks/*"],
 			"@engineers/*": ["src/engineers/*"],
 			"@recovery/*": ["src/recovery/*"],
+			"@customers/*": ["src/customers/*"],
 			"@tools/*": ["src/tools/*"],
 			"@agent/*": ["src/agent/*"],
 			"@replays/*": ["src/replays/*"],

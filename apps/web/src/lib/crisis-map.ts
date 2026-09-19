@@ -6,6 +6,13 @@ import type { Overview, ToolCall } from "@/lib/casa-pepe-types";
 import { topologyView } from "@/lib/live-dashboard";
 
 export const MAP_PADDING = 24;
+export const MIN_CAMERA_K = 1;
+export const MAX_CAMERA_K = 5;
+export const MIN_PROJECTED_SPAN = 72;
+
+const WORLD_CAMERA: Camera = { x: 0, y: 0, k: 1 };
+const IMPACT_PADDING = 64;
+const NEARBY_PADDING = 48;
 
 const topology = countries as unknown as Topology<{ countries: GeometryCollection }>;
 export const worldLand = feature(topology, topology.objects.countries);
@@ -31,6 +38,14 @@ export function fitWorldProjection(width: number, height: number, padding = MAP_
 export function projectPoint(projection: GeoProjection, longitude: number, latitude: number): [number, number] {
   const point = projection([longitude, latitude]);
   return point ? [point[0], point[1]] : [0, 0];
+}
+
+export function projectToScreen(camera: Camera, point: [number, number]): [number, number] {
+  return [camera.x + point[0] * camera.k, camera.y + point[1] * camera.k];
+}
+
+export function cameraSvgTransform(camera: Camera) {
+  return `translate(${camera.x} ${camera.y}) scale(${camera.k})`;
 }
 
 export function worldPath(projection: GeoProjection) {
@@ -66,28 +81,41 @@ export function cameraForView(
   height: number,
   nodes: readonly MapPoint[],
 ): Camera {
-  if (view === "world" || width < 10 || height < 10) return { x: 0, y: 0, k: 1 };
+  if (view === "world" || width < 10 || height < 10) return WORLD_CAMERA;
   const primary = nodes.find((node) => node.role === "primary");
-  const gulf = nodes.filter((node) => node.role === "backup" || node.role === "primary");
-  const targets = view === "impact" && primary ? [primary] : gulf;
-  const points = targets.map((node) => projectPoint(projection, node.longitude, node.latitude));
-  if (!points.length) return { x: 0, y: 0, k: 1 };
-  return fitPoints(points, width, height, view === "impact" ? 80 : 52);
+  const sites = nodes.filter((node) => node.role === "primary" || node.role === "backup");
+  if (!sites.length) return WORLD_CAMERA;
+  const targets = view === "impact" && primary ? [primary] : sites;
+  return fitPoints(
+    targets.map((node) => projectPoint(projection, node.longitude, node.latitude)),
+    width,
+    height,
+    view === "nearby" ? NEARBY_PADDING : IMPACT_PADDING,
+  );
 }
 
 function fitPoints(points: ReadonlyArray<[number, number]>, width: number, height: number, padding: number): Camera {
+  const innerWidth = width - 2 * padding;
+  const innerHeight = height - 2 * padding;
+  if (innerWidth <= 0 || innerHeight <= 0) return WORLD_CAMERA;
   const xs = points.map((point) => point[0]);
   const ys = points.map((point) => point[1]);
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
-  const boxWidth = Math.max(maxX - minX, 14);
-  const boxHeight = Math.max(maxY - minY, 14);
-  const k = Math.min((width - 2 * padding) / boxWidth, (height - 2 * padding) / boxHeight);
+  const boxWidth = Math.max(maxX - minX, MIN_PROJECTED_SPAN);
+  const boxHeight = Math.max(maxY - minY, MIN_PROJECTED_SPAN);
+  const raw = Math.min(innerWidth / boxWidth, innerHeight / boxHeight);
+  if (!Number.isFinite(raw) || raw <= 0) return WORLD_CAMERA;
+  const k = clamp(raw, MIN_CAMERA_K, MAX_CAMERA_K);
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
   return { x: width / 2 - k * cx, y: height / 2 - k * cy, k };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 export function arcPath(from: [number, number], to: [number, number]): string {

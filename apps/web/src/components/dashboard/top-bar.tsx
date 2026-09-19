@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Activity, Radio, RefreshCcw, Sparkles, Zap } from "lucide-react";
+import { Activity, CheckCircle2, Radio, RefreshCcw, Sparkles, Zap } from "lucide-react";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { ThemeSwitcher } from "@/components/dashboard/theme-switcher";
 import { Button } from "@/components/ui/button";
-import { crisisStartedAt, formatElapsed } from "@/lib/agent-trace";
+import { incidentClock } from "@/lib/agent-trace";
+import { cn } from "@/lib/utils";
 
 export function TopBar() {
   const { overview, status, busyAction, triggerImpact, triggerTwist, resetDemo } = useDashboard();
@@ -15,9 +16,10 @@ export function TopBar() {
     return () => window.clearInterval(timer);
   }, []);
   const live = status === "active";
-  const elapsed = live && overview && now
-    ? formatElapsed(crisisStartedAt(overview.incident), now.getTime())
-    : "00:00";
+  const clock = overview ? incidentClock(overview.incident, now?.getTime() ?? 0) : null;
+  const elapsed = clock?.elapsed ?? "00:00";
+  const recovered = Boolean(clock?.recovered);
+  const impacted = Boolean(overview?.incident.impactedAt);
   const busy = busyAction !== null;
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border bg-background/75 px-4 backdrop-blur">
@@ -31,32 +33,50 @@ export function TopBar() {
         </div>
       </div>
       <div className="ml-3 hidden min-w-0 flex-1 items-center gap-2 md:flex">
-        <span className={live ? "size-1.5 animate-pulse rounded-full bg-emerald-400" : "size-1.5 rounded-full bg-muted-foreground"} />
+        <span className={impacted ? "size-1.5 animate-pulse rounded-full bg-emerald-400" : "size-1.5 rounded-full bg-muted-foreground"} />
         <span className="truncate text-[11px] text-muted-foreground">
-          {live ? `${overview?.incident.company} · ${overview?.incident.region} → ${overview?.incident.backupRegion}` : "Preparado para iniciar una simulación"}
+          {overview ? `${overview.incident.company} · ${overview.incident.region} → ${overview.incident.backupRegion}` : "En espera del impacto"}
         </span>
       </div>
       <div className="ml-auto flex items-center gap-3">
-        {live ? (
-          <div className="flex items-center gap-2">
-            <div className="rounded-md border border-border bg-muted/30 px-2 py-1 text-center">
-              <p className="font-mono text-[13px] leading-none tabular-nums text-foreground">{elapsed}</p>
-              <p className="mt-0.5 text-[8px] tracking-[0.12em] text-muted-foreground uppercase">Tiempo de incidente</p>
-            </div>
-            <Button size="xs" variant="outline" onClick={() => void triggerImpact()} disabled={busy}>
-              <Zap /> Impacto
-            </Button>
-            <Button size="xs" variant="outline" onClick={() => void triggerTwist()} disabled={busy}>
-              <Sparkles /> Twist
-            </Button>
-            <Button size="xs" variant="outline" onClick={() => void resetDemo()} disabled={busy}>
-              <RefreshCcw /> Reiniciar
-            </Button>
+        <div className="flex items-center gap-2">
+          <div
+            className={cn(
+              "rounded-md border px-2 py-1 text-center",
+              recovered ? "border-status-up/40 bg-status-up/10" : "border-border bg-muted/30",
+            )}
+          >
+            <p
+              className={cn(
+                "flex items-center justify-center gap-1 font-mono text-[13px] leading-none tabular-nums",
+                recovered ? "text-status-up" : "text-foreground",
+              )}
+            >
+              {recovered ? <CheckCircle2 className="size-3.5" /> : null}
+              {elapsed}
+            </p>
+            <p
+              className={cn(
+                "mt-0.5 text-[8px] tracking-[0.12em] uppercase",
+                recovered ? "text-status-up/80" : "text-muted-foreground",
+              )}
+            >
+              {recovered ? "Resuelto" : "Tiempo de incidente"}
+            </p>
           </div>
-        ) : null}
+          <Button size="xs" variant="outline" onClick={() => void triggerImpact()} disabled={!live || busy || impacted || recovered}>
+            <Zap /> Impacto
+          </Button>
+          <Button size="xs" variant="outline" onClick={() => void triggerTwist()} disabled={!live || busy}>
+            <Sparkles /> Twist
+          </Button>
+          <Button size="xs" variant="outline" onClick={() => void resetDemo()} disabled={!live || busy}>
+            <RefreshCcw /> Reiniciar
+          </Button>
+        </div>
         <div className="hidden items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1 text-[10px] text-muted-foreground sm:flex">
-          <Radio className={live ? "size-3 text-emerald-300" : "size-3"} />
-          {live ? "ACTIVIDAD EN DIRECTO" : "SIN EJECUCIÓN"}
+          <Radio className={impacted ? "size-3 text-emerald-300" : "size-3"} />
+          {impacted ? "ACTIVIDAD EN DIRECTO" : "EN ESPERA"}
         </div>
         <p className="hidden font-mono text-[11px] tabular-nums text-muted-foreground sm:block">
           {now?.toLocaleTimeString("es-ES") ?? "--:--:--"}

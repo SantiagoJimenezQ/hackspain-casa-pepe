@@ -5,6 +5,7 @@ import {
   crisisStartedAt,
   currentWork,
   formatElapsed,
+  incidentClock,
   mapToolState,
   mergedToolCalls,
   recoveryTimeline,
@@ -42,6 +43,7 @@ function overviewWith(tools: ToolCall[], services = [
       active: true,
       startedAt: "2026-09-19T09:58:00.000Z",
       impactedAt: "2026-09-19T10:00:00.000Z",
+      resolvedAt: "",
       businessImpactSummary: "",
       services: services.map((service) => ({
         description: "",
@@ -115,15 +117,21 @@ describe("agent trace", () => {
     expect(tools[0]).toMatchObject({ identifier: "t9", status: "running", name: "verify_recovery" });
   });
 
-  it("orders recovery by work in progress, then recently recovered, then queued", () => {
+  it("keeps recovery services in incident order while phases update", () => {
     const overview = overviewWith([
       tool({ identifier: "t1", name: "execute_recovery", status: "succeeded", startedAt: "2026-09-19T10:00:02.000Z", input: { serviceIdentifier: "orders-database" } }),
       tool({ identifier: "t2", name: "execute_recovery", status: "running", startedAt: "2026-09-19T10:00:08.000Z", input: { serviceIdentifier: "events-stream" } }),
     ]);
-    expect(recoveryTimeline(overview).map((item) => item.identifier)).toEqual([
+    const items = recoveryTimeline(overview);
+    expect(items.map((item) => item.identifier)).toEqual([
       "events-stream",
-      "orders-database",
       "package-tracking",
+      "orders-database",
+    ]);
+    expect(items.map((item) => item.phase)).toEqual([
+      "recovering",
+      "queued",
+      "recovered",
     ]);
   });
 
@@ -132,6 +140,39 @@ describe("agent trace", () => {
     expect(crisisStartedAt(overview.incident)).toBe("2026-09-19T10:00:00.000Z");
     expect(formatElapsed(overview.incident.impactedAt, Date.parse("2026-09-19T10:01:05.000Z"))).toBe("01:05");
     expect(formatElapsed(overview.incident.impactedAt, Date.parse("2026-09-19T11:02:03.000Z"))).toBe("1:02:03");
+  });
+
+  it("keeps the incident clock at zero until impact", () => {
+    const overview = overviewWith([]);
+    overview.incident.impactedAt = "";
+    expect(incidentClock(overview.incident, Date.parse("2026-09-19T10:05:00.000Z"))).toEqual({
+      elapsed: "00:00",
+      recovered: false,
+      running: false,
+    });
+  });
+
+  it("keeps the incident clock running during partial recovery", () => {
+    const overview = overviewWith([]);
+    overview.incident.status = "partially-recovered";
+    expect(incidentClock(overview.incident, Date.parse("2026-09-19T10:00:45.000Z"))).toEqual({
+      elapsed: "00:45",
+      recovered: false,
+      running: true,
+    });
+  });
+
+  it("freezes the incident clock at resolution even as wall time moves", () => {
+    const overview = overviewWith([]);
+    overview.incident.status = "recovered";
+    overview.incident.resolvedAt = "2026-09-19T10:01:23.000Z";
+    const later = Date.parse("2026-09-19T12:00:00.000Z");
+    expect(incidentClock(overview.incident, later)).toEqual({
+      elapsed: "01:23",
+      recovered: true,
+      running: false,
+    });
+    expect(incidentClock(overview.incident, later + 60_000).elapsed).toBe("01:23");
   });
 
   it("switches tool titles to past tense when the call has finished", () => {

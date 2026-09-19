@@ -62,8 +62,14 @@ export function mapToolState(status: string): ElementsToolState {
   return "output-available";
 }
 
-export function crisisStartedAt(incident: Incident) {
-  return incident.impactedAt || incident.startedAt;
+export type IncidentClock = {
+  elapsed: string;
+  recovered: boolean;
+  running: boolean;
+};
+
+export function crisisStartedAt(incident: Pick<Incident, "impactedAt">) {
+  return incident.impactedAt;
 }
 
 export function formatElapsed(fromIso: string | undefined, nowMs: number) {
@@ -78,6 +84,23 @@ export function formatElapsed(fromIso: string | undefined, nowMs: number) {
     return `${hours}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
   }
   return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+export function incidentClock(
+  incident: Pick<Incident, "status" | "impactedAt" | "resolvedAt">,
+  nowMs: number,
+): IncidentClock {
+  const recovered = incident.status === "recovered";
+  if (!incident.impactedAt) {
+    return { elapsed: "00:00", recovered: false, running: false };
+  }
+  const resolvedAt = recovered ? Date.parse(incident.resolvedAt) : Number.NaN;
+  const endMs = Number.isFinite(resolvedAt) ? resolvedAt : nowMs;
+  return {
+    elapsed: formatElapsed(incident.impactedAt, endMs),
+    recovered,
+    running: !recovered,
+  };
 }
 
 export function sortedToolCalls(toolCalls: ReadonlyArray<ToolCall>) {
@@ -366,6 +389,29 @@ function transcriptId(item: TranscriptItem) {
   return "thinking";
 }
 
+export function recoveryStartTimes(
+  overview: Overview,
+  activity: ReadonlyArray<ActivityRecord> = [],
+): Map<string, number> {
+  const times = new Map<string, number>();
+  for (const tool of mergedToolCalls(overview, activity)) {
+    if (tool.name !== "execute_recovery" && tool.name !== "verify_recovery") continue;
+    const identifier = inputServiceIdentifier(tool.input);
+    if (!identifier) continue;
+    const time = toolTime(tool);
+    if (time <= 0) continue;
+    const previous = times.get(identifier);
+    if (previous === undefined || time < previous) times.set(identifier, time);
+  }
+  for (const service of overview.incident.services ?? []) {
+    if (times.has(service.identifier)) continue;
+    if (service.status !== "recovering" && service.status !== "healthy") continue;
+    const fallback = Date.parse(service.lastChangedAt) || 0;
+    if (fallback > 0) times.set(service.identifier, fallback);
+  }
+  return times;
+}
+
 export function recoveryTimeline(overview: Overview, activity: ReadonlyArray<ActivityRecord> = []): RecoveryTimelineItem[] {
   const tools = mergedToolCalls(overview, activity);
   const recoveryTools = tools.filter((tool) => tool.name === "execute_recovery" || tool.name === "verify_recovery");
@@ -388,10 +434,5 @@ export function recoveryTimeline(overview: Overview, activity: ReadonlyArray<Act
       startedAt: latest?.startedAt || service.lastChangedAt,
       capacityUnits: service.recoveryCapacityUnits,
     };
-  }).toSorted((left, right) => {
-    const rank = { recovering: 0, recovered: 1, queued: 2 };
-    if (rank[left.phase] !== rank[right.phase]) return rank[left.phase] - rank[right.phase];
-    if (left.phase === "queued") return left.name.localeCompare(right.name, "es");
-    return Date.parse(right.startedAt || "") - Date.parse(left.startedAt || "");
   });
 }

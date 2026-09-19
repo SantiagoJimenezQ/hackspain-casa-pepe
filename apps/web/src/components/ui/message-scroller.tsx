@@ -10,6 +10,7 @@ import {
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
+import { useScrollFade } from "@/lib/use-scroll-fade"
 import { ArrowDownIcon } from "lucide-react"
 
 function MessageScrollerProvider(
@@ -36,13 +37,22 @@ function MessageScroller({
 
 function MessageScrollerViewport({
   className,
+  ref,
   ...props
 }: React.ComponentProps<typeof MessageScrollerPrimitive.Viewport>) {
+  const { ref: scrollFadeRef, className: scrollFadeClass } = useScrollFade()
+
   return (
     <MessageScrollerPrimitive.Viewport
+      ref={(node) => {
+        scrollFadeRef(node)
+        if (typeof ref === "function") ref(node)
+        else if (ref) ref.current = node
+      }}
       data-slot="message-scroller-viewport"
       className={cn(
-        "size-full min-h-0 min-w-0 scroll-fade-b scrollbar-thin scrollbar-gutter-stable overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent data-pending-scroll:invisible",
+        scrollFadeClass,
+        "size-full min-h-0 min-w-0 scrollbar-thin scrollbar-gutter-stable overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent data-pending-scroll:invisible",
         className
       )}
       {...props}

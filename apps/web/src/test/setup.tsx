@@ -84,6 +84,19 @@ window.scrollTo = vi.fn();
 HTMLElement.prototype.scrollTo = vi.fn();
 HTMLElement.prototype.scrollIntoView = vi.fn();
 
+export class MockEventSource {
+  url: string;
+  onerror: ((event?: Event) => void) | null = null;
+
+  constructor(url: string) {
+    this.url = url;
+  }
+
+  addEventListener() {}
+  removeEventListener() {}
+  close() {}
+}
+
 class LayoutObserver {
   observe() {}
   unobserve() {}
@@ -109,6 +122,7 @@ HTMLElement.prototype.releasePointerCapture = vi.fn();
 const originalError = console.error.bind(console);
 
 beforeEach(() => {
+  vi.stubGlobal("EventSource", MockEventSource);
   localStorage.clear();
   sessionStorage.clear();
   document.documentElement.className = "";

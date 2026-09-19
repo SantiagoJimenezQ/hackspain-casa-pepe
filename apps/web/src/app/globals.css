@@ -91,10 +91,10 @@
   --status-up: #16a34a;
   --status-degraded: #d97706;
   --status-down: #e11d2e;
-  --map-bg: #f2f2f2;
-  --map-land: #e4e4e4;
-  --map-stroke: #cfcfcf;
-  --map-inset: #fafafa;
+  --map-bg: #e7eef4;
+  --map-land: #efe6d6;
+  --map-stroke: #8f9eab;
+  --map-inset: #c9d8e4;
   --map-glow: rgb(0 0 0 / 6%);
   --map-node-fill: #ffffff;
   --map-callout: #ffffff;
@@ -135,13 +135,13 @@
   --status-up: #3ee08f;
   --status-degraded: #f5a524;
   --status-down: #f04444;
-  --map-bg: #141414;
-  --map-land: #1f1f1f;
-  --map-stroke: #2e2e2e;
-  --map-inset: #181818;
+  --map-bg: #10141a;
+  --map-land: #2c3440;
+  --map-stroke: #5b6a7a;
+  --map-inset: #0c1218;
   --map-glow: rgb(255 255 255 / 4%);
-  --map-node-fill: #141414;
-  --map-callout: #222222;
+  --map-node-fill: #1a212b;
+  --map-callout: #1c2430;
 }
 
 @layer base {
@@ -181,13 +181,28 @@
   animation: pulse-ring 2.4s ease-out infinite;
 }
 
-.scroll-fade,
-.scroll-fade-b {
+.scroll-fade[data-fade-start][data-fade-end] {
   mask-image: linear-gradient(to bottom, transparent, black 14px, black calc(100% - 18px), transparent);
 }
 
-.scroll-fade-x {
+.scroll-fade[data-fade-start]:not([data-fade-end]) {
+  mask-image: linear-gradient(to bottom, transparent, black 14px, black);
+}
+
+.scroll-fade[data-fade-end]:not([data-fade-start]) {
+  mask-image: linear-gradient(to bottom, black, black calc(100% - 18px), transparent);
+}
+
+.scroll-fade-x[data-fade-start][data-fade-end] {
   mask-image: linear-gradient(to right, transparent, black 14px, black calc(100% - 18px), transparent);
+}
+
+.scroll-fade-x[data-fade-start]:not([data-fade-end]) {
+  mask-image: linear-gradient(to right, transparent, black 14px, black);
+}
+
+.scroll-fade-x[data-fade-end]:not([data-fade-start]) {
+  mask-image: linear-gradient(to right, black, black calc(100% - 18px), transparent);
 }
 
 @keyframes dashboard-shimmer {

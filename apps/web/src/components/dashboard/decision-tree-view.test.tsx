@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DecisionTreeView from './decision-tree-view';
-import { LocaleProvider } from '@/components/i18n/locale-provider';
+import { LocaleProvider, useI18n } from '@/components/i18n/locale-provider';
 import { LOCALE_STORAGE_KEY } from '@/lib/i18n';
 import type { ActivityRecord } from '@/lib/casa-pepe-types';
 const fixture = vi.hoisted(() => ({ run: 'one', events: [] as ActivityRecord[] }));
@@ -15,6 +15,19 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
 });
 describe('decision tree view', () => {
+  it('updates the open tree when the locale changes', async () => {
+    function LocaleSwitch() {
+      const { setLocale } = useI18n();
+      return <button onClick={() => setLocale('en')}>English</button>;
+    }
+    fixture.events = [plan];
+    render(<><LocaleSwitch /><DecisionTreeView onClose={vi.fn()} /></>, { wrapper: LocaleProvider });
+    await waitFor(() => expect(screen.getByText(/En directo/)).toBeVisible());
+    expect(screen.getByRole('button', { name: /Aplazado Reports/ })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'English' }));
+    expect(screen.getByText(/1 milestones · 1 plan changes/)).toBeVisible();
+    expect(screen.getByRole('button', { name: /Postponed Reports/ })).toBeVisible();
+  });
   it('opens an accessible empty view and closes with the close button', async () => {
     const close = vi.fn(); render(<DecisionTreeView onClose={close} />, { wrapper: LocaleProvider });
     expect(screen.getByRole('dialog', { name: 'Árbol de decisiones' })).toBeVisible();

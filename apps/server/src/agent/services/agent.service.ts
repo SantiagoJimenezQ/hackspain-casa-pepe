@@ -1,5 +1,6 @@
 import { ActivityService } from "@activity/services/activity.service"
 import {
+	AGENT_RATE_LIMIT_COOLDOWN_MILLISECONDS,
 	AGENT_STALLED_RUN_MILLISECONDS,
 	AGENT_TICK_INTERVAL_MILLISECONDS,
 } from "@agent/constants/agent.constant"
@@ -287,14 +288,17 @@ export class AgentService {
 		if (this.cycleState.get(active.runIdentifier).inProgress) {
 			return
 		}
+		const { lastOutcome } = this.cycleState.get(active.runIdentifier)
 		const nudgedAt = this.stalledNudges.get(active.runIdentifier) ?? 0
-		if (Date.now() - nudgedAt < AGENT_STALLED_RUN_MILLISECONDS) {
+		const cooldown = isRateLimitFailure(lastOutcome)
+			? AGENT_RATE_LIMIT_COOLDOWN_MILLISECONDS
+			: AGENT_STALLED_RUN_MILLISECONDS
+		if (Date.now() - nudgedAt < cooldown) {
 			return
 		}
 		// A cycle that failed never reached a decision, so there is no parked plan to respect
 		// and no runnable step to look for: the provider simply refused. The run gets another
 		// cycle, spaced like every other nudge, instead of ending on a rate limit.
-		const { lastOutcome } = this.cycleState.get(active.runIdentifier)
 		if (lastOutcome && lastOutcome.kind === "failed") {
 			this.stalledNudges.set(active.runIdentifier, Date.now())
 			this.logger.warn(LOG_MESSAGES.AGENT.STALLED_RUN_RESUMED, {
@@ -367,8 +371,14 @@ export class AgentService {
 			)
 			outcome = { kind: "failed", reason }
 		}
+		if (isRateLimitFailure(outcome)) {
+			this.stalledNudges.set(runIdentifier, Date.now())
+			this.logger.warn(LOG_MESSAGES.AGENT.RATE_LIMIT_HOLD, {
+				runIdentifier,
+			})
+		}
 		const rerun = this.cycleState.finish(runIdentifier, outcome)
-		if (rerun) {
+		if (rerun && !isRateLimitFailure(outcome)) {
 			const next = this.pendingChanges.get(runIdentifier) ?? {
 				kind: "follow-up" as const,
 			}
@@ -1514,6 +1524,13 @@ export class AgentService {
 				return
 		}
 	}
+}
+
+function isRateLimitFailure(outcome: CycleOutcome | null): boolean {
+	return (
+		outcome?.kind === "failed" &&
+		/HTTP 429|rate limit/i.test(outcome.reason)
+	)
 }
 
 function describeTrigger(

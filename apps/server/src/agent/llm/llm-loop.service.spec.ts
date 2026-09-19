@@ -1,6 +1,7 @@
 import "reflect-metadata"
 import { LlmToolCall } from "@agent/llm/llm.types"
 import {
+	hasInFlightWork,
 	LlmLoopActions,
 	LlmLoopService,
 	LlmLoopState,
@@ -600,6 +601,49 @@ describe("LlmLoopService", () => {
 		expect(stateFingerprint(incomingReportChanged)).not.toBe(fingerprint)
 	})
 
+	it("treats a running step, tool call, or engineer call as in-flight work", () => {
+		const incident = createImpactedIncident(12)
+		const plan = createActivePlan(incident)
+		expect(hasInFlightWork(createState(createInput(incident, plan)))).toBe(
+			false,
+		)
+		expect(
+			hasInFlightWork(
+				createState({
+					...createInput(incident, plan),
+					previousPlan: {
+						...plan,
+						steps: plan.steps.map((step, index) =>
+							index === 0 ? { ...step, status: "running" } : step,
+						),
+					},
+				}),
+			),
+		).toBe(true)
+		expect(
+			hasInFlightWork(
+				createState(createInput(incident, plan), {
+					evidence: {
+						toolCalls: [
+							{ identifier: "tool_1", status: "running" },
+						],
+					},
+				}),
+			),
+		).toBe(true)
+		expect(
+			hasInFlightWork(
+				createState(createInput(incident, plan), {
+					evidence: {
+						calls: [
+							{ identifier: "call_1", status: "in-progress" },
+						],
+					},
+				}),
+			),
+		).toBe(true)
+	})
+
 	it("validates and saves a proposed plan, then gives the saved result to the next turn", async () => {
 		const incident = createImpactedIncident(12)
 		const state = createState(createInput(incident))
@@ -828,6 +872,56 @@ describe("LlmLoopService", () => {
 			"agent.llm-decision",
 			"agent.cycle-finished",
 		])
+	})
+
+	it("stops after a stale decision when work is already in flight", async () => {
+		const incident = createImpactedIncident(12)
+		const plan = createActivePlan(incident)
+		const runningPlan: PlanRecord = {
+			...plan,
+			steps: plan.steps.map((step, index) =>
+				index === 0 ? { ...step, status: "running" } : step,
+			),
+		}
+		let current = createState(createInput(incident, runningPlan))
+		const { activity, client, service } = createHarness(3)
+		const actions = createActions(() => current)
+		client.complete.mockImplementationOnce(async () => {
+			current = {
+				...current,
+				input: {
+					...current.input,
+					triggeredBy: "call-progress",
+				},
+			}
+			return completion([
+				toolCall("execute_step", {
+					stepIdentifier: "stp_orders-database_execute",
+				}),
+			])
+		})
+
+		const outcome = await service.run(actions as unknown as LlmLoopActions)
+
+		expect(outcome).toMatchObject({
+			executedSteps: 0,
+			kind: "completed",
+			waitingFor: [
+				"Work already in flight; waiting for its completion instead of spending another model turn",
+			],
+		})
+		expect(client.complete).toHaveBeenCalledTimes(1)
+		expect(actions.execute).not.toHaveBeenCalled()
+		expect(
+			activityInputs(activity).some(
+				(input) => input.type === "agent.llm-stale",
+			),
+		).toBe(true)
+		expect(
+			activityInputs(activity).some(
+				(input) => input.type === "agent.cycle-finished",
+			),
+		).toBe(true)
 	})
 
 	it("discards an execute decision when input changes during the provider response", async () => {

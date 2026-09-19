@@ -6,6 +6,11 @@ type DemoRouteContext = {
   params: Promise<{ action: string }>;
 };
 
+function runQuery(request: Request): string {
+  const runIdentifier = new URL(request.url).searchParams.get("runIdentifier");
+  return runIdentifier ? `?runIdentifier=${encodeURIComponent(runIdentifier)}` : "";
+}
+
 export async function POST(
   request: Request,
   context: DemoRouteContext,
@@ -15,7 +20,7 @@ export async function POST(
     return Response.json({ message: "Control de demo no permitido." }, { status: 404 });
   }
   const body = action === "start" ? await request.text() : undefined;
-  return proxyJSON(`/demo/${action}`, {
+  return proxyJSON(`/demo/${action}${runQuery(request)}`, {
     method: "POST",
     body: body || undefined,
   });

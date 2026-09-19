@@ -932,3 +932,29 @@ it("correlates provisional public output with the final decision before executin
 		draft?.payload.outputIdentifier,
 	)
 })
+
+describe("reset during a model request", () => {
+	it("discards the response without dispatching tools or saving a plan", async () => {
+		const { service, client, activity } = createHarness(1)
+		let state = createState()
+		const actions = createActions(() => state)
+		client.complete.mockImplementation(async () => {
+			state = createState(
+				createInput({
+					...state.input.incident,
+					active: false,
+					status: "reset",
+				}),
+			)
+			return completion([toolCall("get_incident_context", {})])
+		})
+		await expect(service.run(actions)).resolves.toMatchObject({
+			kind: "skipped",
+		})
+		expect(client.complete).toHaveBeenCalledTimes(1)
+		expect(actions.investigate).not.toHaveBeenCalled()
+		expect(actions.execute).not.toHaveBeenCalled()
+		expect(actions.save).not.toHaveBeenCalled()
+		expect(activity.record).not.toHaveBeenCalled()
+	})
+})

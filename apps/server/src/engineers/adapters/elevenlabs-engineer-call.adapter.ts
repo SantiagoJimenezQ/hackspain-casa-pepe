@@ -10,6 +10,7 @@ import {
 	EngineerCallAdapter,
 	EngineerCallRecord,
 	EngineerCallResult,
+	EngineerQuestion,
 } from "@engineers/types/engineer.type"
 import { Injectable, Logger } from "@nestjs/common"
 import {
@@ -37,6 +38,7 @@ type JSONRecord = Record<string, unknown>
 
 interface ElevenLabsOutboundCallResponse extends JSONRecord {
 	readonly success?: unknown
+	readonly message?: unknown
 	readonly conversation_id?: unknown
 	readonly callSid?: unknown
 }
@@ -101,6 +103,7 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 					request.call.engineer.name,
 					request.incidentContext,
 					request.call.purpose,
+					request.call.questions,
 				),
 			},
 			to_number: destination,
@@ -143,9 +146,16 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 					...responseDiagnostic(response),
 					body,
 				})
+				const providerMessage =
+					typeof body?.message === "string" &&
+					body.message.trim().length
+						? body.message.trim()
+						: ""
 				return {
 					kind: "failed",
-					reason: "ElevenLabs returned an invalid outbound call response",
+					reason: providerMessage.length
+						? `ElevenLabs rejected the call: ${providerMessage}`
+						: "ElevenLabs returned an invalid outbound call response",
 				}
 			}
 
@@ -327,6 +337,7 @@ function dynamicVariables(
 	contactName: string,
 	context: EngineerCallIncidentContext,
 	purpose: string,
+	questions: ReadonlyArray<EngineerQuestion>,
 ): Record<string, string> {
 	return {
 		contact_name: contactName,
@@ -335,6 +346,10 @@ function dynamicVariables(
 		),
 		location: context.location,
 		outage_time: formatOutageTime(context.outageStartedAt),
+		questions: questions
+			.map((question, index) => `${index + 1}. ${question.question}`)
+			.join(" "),
+		questions_count: String(questions.length),
 		services_down: context.servicesDown.join(", "),
 	}
 }

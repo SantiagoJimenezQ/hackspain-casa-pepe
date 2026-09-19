@@ -31,6 +31,7 @@ import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { EngineersService } from "@engineers/services/engineers.service"
 import { IncomingCallsService } from "@engineers/services/incoming-calls.service"
+import { IncidentEntity } from "@incidents/entities/incident.entity"
 import { toIncidentSnapshot } from "@incidents/helpers/incident-state.helper"
 import { IncidentsService } from "@incidents/services/incidents.service"
 import { RunsService } from "@incidents/services/runs.service"
@@ -86,6 +87,12 @@ export class AgentService {
 		private readonly incomingCalls: IncomingCallsService,
 		private readonly llmLoop: LlmLoopService,
 	) {}
+
+	@OnEvent(DOMAIN_EVENTS.INCIDENT_RUN_DEACTIVATED)
+	onRunDeactivated(event: { runIdentifier: string }): void {
+		this.pendingChanges.delete(event.runIdentifier)
+		this.cycleState.forget(event.runIdentifier)
+	}
 
 	@OnEvent(DOMAIN_EVENTS.INCOMING_CALL_CONFIRMED, {
 		async: true,
@@ -214,10 +221,11 @@ export class AgentService {
 
 	@Interval(AGENT_TICK_INTERVAL_MILLISECONDS)
 	async tick(): Promise<void> {
-		const active = await this.runsService.findActiveEntity()
-		if (!active) {
-			return
-		}
+		const activeRuns = await this.runsService.listActiveEntities()
+		await Promise.all(activeRuns.map((active) => this.tickRun(active)))
+	}
+
+	private async tickRun(active: IncidentEntity): Promise<void> {
 		if (
 			active.runKind === "replay" ||
 			active.status === "normal" ||
@@ -467,6 +475,8 @@ export class AgentService {
 			},
 		})
 		const finalPlan = await this.plansService.findLatestPlan(runIdentifier)
+		if (!(await this.runsService.getByRunIdentifier(runIdentifier)).active)
+			return { kind: "skipped", reason: "The run is no longer active" }
 		if (
 			finalPlan?.status === "active" &&
 			!finalPlan.steps.some((step) => OPEN_STATUSES.includes(step.status))

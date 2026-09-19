@@ -27,6 +27,14 @@ export class RunsService {
 		})
 	}
 
+	/** Every run currently active. Several people can drive independent runs at the same time. */
+	async listActiveEntities(): Promise<IncidentEntity[]> {
+		return this.repository.find({
+			order: { createdAt: "DESC" },
+			where: { active: true },
+		})
+	}
+
 	async getActiveEntity(): Promise<IncidentEntity> {
 		const entity = await this.findActiveEntity()
 		if (!entity) {

@@ -28,8 +28,8 @@ export const LOG_MESSAGES = {
 	},
 	CUSTOMERS: {
 		RANKING_FAILED:
-			"Customer recovery ranking fell back to the deterministic order",
-		RANKING_FINISHED: "Customer recovery ranking updated from the LLM",
+			"Failed to rank customers with the model, using the deterministic order",
+		RANKING_FINISHED: "Customer ranking by the model finished",
 	},
 	DATABASE: {
 		CONNECTION_FAILED: "Failed to connect to the database",

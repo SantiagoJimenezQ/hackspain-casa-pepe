@@ -43,7 +43,7 @@ Common errors:
 
 ## Common parameter `runIdentifier`
 
-List queries accept `?runIdentifier=run_…`. When omitted they use the active run. Without an active run they return `409 No Active Run`.
+List queries, `GET /incidents/current`, `GET /agent/status`, `POST /agent/cycle` and every demo control accept `?runIdentifier=run_…`. Several runs can be active at the same time, one per person driving a demo: `POST /demo/start` no longer stops other runs, `POST /demo/reset` resets only the run it targets, and the agent and simulation clock tick every active run independently. When `runIdentifier` is omitted the most recently started active run is used, so single-user setups keep working. Without an active run they return `409 No Active Run`.
 
 ---
 
@@ -102,7 +102,7 @@ Arbitrary harness event.
 
 ### `POST /demo/reset`
 
-Marks the current run as `reset` and creates a new one from the same scenario. Late results from the previous run (calls, recoveries) are rejected with `409 Stale Run`. Events: `incident.run-reset`, `incident.run-started`.
+Marks the current run as `reset` and creates a new one from the same scenario. Clears the old agent cycle state and queued follow-ups; model responses arriving after reset are discarded before dispatch. The new agent starts with no plan or investigation history and a fresh cycle budget. Trigger impact to retry the agent path. Historical runs and saved learning are preserved; external actions already dispatched are not undone. Late results from the previous run (calls, recoveries) are rejected with `409 Stale Run`. Events: `incident.run-reset`, `incident.run-started`.
 
 ### `POST /demo/pause`
 
@@ -361,7 +361,7 @@ source.onmessage = (message) => append(JSON.parse(message.data))
 
 ## Customers (`/customers`)
 
-### `GET /customers/priorities?runIdentifier=`
+### `GET /customers/priorities?runIdentifier=&mode=`
 
 Customers (the companies whose services run on the affected region) ranked by recovery priority. Pure read over the incident state and the recovery actions, no model call, so it answers in milliseconds and is safe to poll from the UI.
 
@@ -389,6 +389,8 @@ Customers (the companies whose services run on the affected region) ranked by re
 ```
 
 `status` is `down` \| `degraded` \| `recovering` \| `healthy`. `score` is the sum of `breakdown`: highest business impact of the unavailable services (critical 40, high 25, medium 12, low 5), 8 points per service of any customer blocked by them, 6 per unavailable service, 1 per 500 users (maximum 30), 1 per 5 minutes down (maximum 20), minus 10 per recovery action already requested or running. Ties break by users, then name. The same ranking is available to the agent as the `prioritize_customers` tool (output `kind: "customer-priorities"`).
+
+`mode=llm` sends the deterministic ranking and the customer state to the fast model (`LLM_FAST_MODEL`, or `LLM_MODEL` when empty) and asks it to confirm or reorder the customers with one sentence of `justification` each. The answer is cached per run until a service status, recovery action or blocked dependency changes, so repeated reads are instant; a failure is remembered for 30 seconds so polling stays fast. `source` says whether the order came from the `llm` or is the `deterministic` fallback, `model` names the model used, and `fallbackReason` explains a fallback (timeout past `LLM_FAST_TIMEOUT_MILLISECONDS`, provider error or an invalid answer).
 
 ## Tools (`/tools`)
 

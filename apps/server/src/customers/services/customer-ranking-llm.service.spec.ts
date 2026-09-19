@@ -74,7 +74,7 @@ describe("CustomerRankingLlmService", () => {
 			`Reason for ${reversed[0].name}`,
 		)
 		expect(complete).toHaveBeenCalledTimes(1)
-		expect(complete.mock.calls[0][2]).toMatchObject({
+		expect(complete.mock.calls[0][3]).toMatchObject({
 			model: "fast-model",
 			reasoningEffort: "none",
 			timeoutMilliseconds: 5000,

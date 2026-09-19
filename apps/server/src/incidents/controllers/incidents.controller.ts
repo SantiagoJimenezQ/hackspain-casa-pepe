@@ -1,7 +1,8 @@
 import { RunsService } from "@incidents/services/runs.service"
 import { IncidentSnapshot, RunSummary } from "@incidents/types/incident.type"
-import { Controller, Get, Param } from "@nestjs/common"
+import { Controller, Get, Param, Query } from "@nestjs/common"
 import { ApiOperation, ApiSecurity, ApiTags } from "@nestjs/swagger"
+import { RunScopedQueryDTO } from "@plans/dtos/list-plans.dto"
 
 @ApiTags("Incidents")
 @ApiSecurity("operator")
@@ -14,8 +15,12 @@ export class IncidentsController {
 		summary:
 			"Current incident: status, services, dependencies, capacity and facts",
 	})
-	getCurrent(): Promise<IncidentSnapshot> {
-		return this.runsService.getActive()
+	async getCurrent(
+		@Query() query: RunScopedQueryDTO,
+	): Promise<IncidentSnapshot> {
+		return this.runsService.getByRunIdentifier(
+			await this.runsService.resolveRunIdentifier(query.runIdentifier),
+		)
 	}
 
 	@Get("runs")

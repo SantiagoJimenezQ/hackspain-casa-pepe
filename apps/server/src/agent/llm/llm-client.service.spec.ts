@@ -4,6 +4,7 @@ import { LlmClientService } from "@agent/llm/llm-client.service"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { LlmConfiguration } from "@common/types/configuration.type"
 import { HttpService } from "@nestjs/axios"
+import { Logger } from "@nestjs/common"
 import { of, throwError } from "rxjs"
 
 const CONFIGURATION: LlmConfiguration = {
@@ -67,6 +68,75 @@ function setup(configuration: Partial<LlmConfiguration> = {}) {
 }
 
 describe("LlmClientService", () => {
+	it("logs request context and safe provider metadata without exposing content or keys", async () => {
+		const warn = jest
+			.spyOn(Logger.prototype, "warn")
+			.mockImplementation(() => {})
+		try {
+			const { client, post } = setup({
+				baseURL: "https://api.openai.com/v1",
+				reasoningEffort: "medium",
+			})
+			post.mockReturnValue(
+				throwError(() => ({
+					code: "ERR_BAD_REQUEST",
+					config: {
+						headers: { Authorization: "Bearer test-provider-key" },
+					},
+					isAxiosError: true,
+					response: {
+						data: {
+							error: {
+								code: "unsupported_parameter",
+								message:
+									"private-incident max_tokens use max_completion_tokens test-provider-key",
+								param: "max_tokens",
+							},
+						},
+						headers: { "x-request-id": "req-test" },
+						status: 400,
+					},
+				})),
+			)
+			await expect(
+				client.complete(
+					[{ content: "private-incident", role: "user" }],
+					[TOOL],
+				),
+			).rejects.toThrow("HTTP 400")
+			expect(warn).toHaveBeenCalledWith(
+				"LLM provider request failed",
+				expect.objectContaining({
+					elapsedMilliseconds: expect.any(Number),
+					httpStatus: 400,
+					model: "test-model",
+					providerCode: "unsupported_parameter",
+					providerHost: "api.openai.com",
+					providerRequestId: "req-test",
+					requestIdentifier: expect.any(String),
+				}),
+			)
+			expect(JSON.stringify(warn.mock.calls)).not.toMatch(
+				/private-incident|test-provider-key|Bearer/,
+			)
+		} finally {
+			warn.mockRestore()
+		}
+	})
+
+	it("uses the reasoning-inclusive token parameter for OpenAI", async () => {
+		const { client, post } = setup({
+			baseURL: "https://api.openai.com/v1",
+			reasoningEffort: "medium",
+		})
+		await client.complete([{ content: "Test", role: "user" }], [TOOL])
+		expect(post.mock.calls[0][1]).toMatchObject({
+			max_completion_tokens: 128,
+			reasoning_effort: "medium",
+		})
+		expect(post.mock.calls[0][1]).not.toHaveProperty("max_tokens")
+	})
+
 	it("sends the bounded OpenAI-compatible chat request", async () => {
 		const { client, post } = setup()
 		const messages: LlmMessage[] = [
@@ -89,6 +159,7 @@ describe("LlmClientService", () => {
 				headers: {
 					Authorization: "Bearer test-provider-key",
 					"Content-Type": "application/json",
+					"X-Client-Request-Id": expect.any(String),
 				},
 				maxBodyLength: 1024 * 1024,
 				maxContentLength: 1024 * 1024,

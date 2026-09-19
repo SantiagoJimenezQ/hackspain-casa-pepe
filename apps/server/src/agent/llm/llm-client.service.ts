@@ -1,15 +1,17 @@
+import { randomUUID } from "node:crypto"
 import {
 	LlmCompletionOverrides,
 	LlmMessage,
 	LlmToolCall,
 	LlmToolDefinition,
 } from "@agent/llm/llm.types"
+import { failureDetails } from "@agent/llm/llm-failure-details"
 import { readCompletionStream } from "@agent/llm/llm-stream"
 import { isAllowedLlmBaseURL } from "@common/configuration/configuration.factory"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { LlmConfiguration } from "@common/types/configuration.type"
 import { HttpService } from "@nestjs/axios"
-import { Injectable } from "@nestjs/common"
+import { Injectable, Logger } from "@nestjs/common"
 import { isAxiosError } from "axios"
 import { firstValueFrom } from "rxjs"
 
@@ -25,6 +27,7 @@ export class LlmClientError extends Error {
 
 @Injectable()
 export class LlmClientService {
+	private readonly logger = new Logger(LlmClientService.name)
 	constructor(
 		private readonly configuration: ConfigurationService,
 		private readonly httpService: HttpService,
@@ -33,25 +36,36 @@ export class LlmClientService {
 	async complete(
 		messages: LlmMessage[],
 		tools: LlmToolDefinition[],
-		onTextOrOverrides?:
-			| ((text: string) => Promise<void>)
-			| LlmCompletionOverrides,
+		onText?: (text: string) => Promise<void>,
+		overrides: LlmCompletionOverrides = {},
 	): Promise<{ message: LlmMessage; usage: unknown; model: string }> {
-		const configuration = this.providerConfiguration(onTextOrOverrides)
-		const onText =
-			typeof onTextOrOverrides === "function"
-				? onTextOrOverrides
-				: undefined
+		const configuration = {
+			...this.providerConfiguration(),
+			...overrides,
+		}
 		const responseData = await this.request(
 			configuration,
 			messages,
 			tools,
 			onText,
 		)
-		return parseCompletionResponse(
-			responseData,
-			configuration.maximumOutputTokens,
-		)
+		try {
+			return parseCompletionResponse(
+				responseData,
+				configuration.maximumOutputTokens,
+			)
+		} catch (error) {
+			this.logger.warn("LLM response validation failed", {
+				model: configuration.model,
+				providerHost: new URL(configuration.baseURL).hostname,
+				reason:
+					error instanceof LlmClientError
+						? error.message
+						: "Malformed completion",
+				streamOutput: configuration.streamOutput,
+			})
+			throw error
+		}
 	}
 
 	private providerConfiguration(
@@ -100,31 +114,18 @@ export class LlmClientService {
 			throw new LlmClientError("LLM provider configuration is invalid")
 		}
 
-		return mergeCompletionOverrides(
-			{
-				apiKey,
-				baseURL,
-				fastModel:
-					typeof configured.fastModel === "string"
-						? configured.fastModel.trim()
-						: "",
-				fastTimeoutMilliseconds:
-					Number.isInteger(configured.fastTimeoutMilliseconds) &&
-					configured.fastTimeoutMilliseconds >= 100 &&
-					configured.fastTimeoutMilliseconds <= 120000
-						? configured.fastTimeoutMilliseconds
-						: configured.timeoutMilliseconds,
-				maximumOutputTokens: configured.maximumOutputTokens,
-				maximumTurns: configured.maximumTurns,
-				model,
-				reasoningEffort: configured.reasoningEffort,
-				streamOutput: configured.streamOutput === true,
-				timeoutMilliseconds: configured.timeoutMilliseconds,
-			},
-			typeof onTextOrOverrides === "object"
-				? onTextOrOverrides
-				: undefined,
-		)
+		return {
+			apiKey,
+			baseURL,
+			fastModel: configured.fastModel.trim(),
+			fastTimeoutMilliseconds: configured.fastTimeoutMilliseconds,
+			maximumOutputTokens: configured.maximumOutputTokens,
+			maximumTurns: configured.maximumTurns,
+			model,
+			reasoningEffort: configured.reasoningEffort,
+			streamOutput: configured.streamOutput === true,
+			timeoutMilliseconds: configured.timeoutMilliseconds,
+		}
 	}
 
 	private async request(
@@ -136,7 +137,9 @@ export class LlmClientService {
 		const endpoint = `${configuration.baseURL.replace(/\/+$/, "")}/chat/completions`
 		const requestBody = {
 			...(configuration.streamOutput ? { stream: true } : {}),
-			max_tokens: configuration.maximumOutputTokens,
+			...(new URL(configuration.baseURL).hostname === "api.openai.com"
+				? { max_completion_tokens: configuration.maximumOutputTokens }
+				: { max_tokens: configuration.maximumOutputTokens }),
 			messages,
 			model: configuration.model,
 			...(configuration.reasoningEffort === ""
@@ -161,12 +164,15 @@ export class LlmClientService {
 				"LLM request exceeds the configured context byte budget",
 			)
 		}
+		const started = Date.now()
+		const requestIdentifier = randomUUID()
 		try {
 			const response = await firstValueFrom(
 				this.httpService.post<unknown>(endpoint, requestBody, {
 					headers: {
 						Authorization: `Bearer ${configuration.apiKey}`,
 						"Content-Type": "application/json",
+						"X-Client-Request-Id": requestIdentifier,
 					},
 					maxBodyLength: MAXIMUM_REQUEST_BYTES,
 					maxContentLength: MAXIMUM_RESPONSE_BYTES,
@@ -212,8 +218,26 @@ export class LlmClientService {
 			}
 			return response.data
 		} catch (error) {
-			if (error instanceof LlmClientError) throw error
-			throw safeRequestError(error)
+			const safeError =
+				error instanceof LlmClientError
+					? error
+					: safeRequestError(error)
+			this.logger.warn("LLM provider request failed", {
+				elapsedMilliseconds: Date.now() - started,
+				maximumOutputTokens: configuration.maximumOutputTokens,
+				model: configuration.model,
+				providerHost: new URL(configuration.baseURL).hostname,
+				reason: safeError.message,
+				reasoningEffort:
+					configuration.reasoningEffort || "provider-default",
+				requestBytes: Buffer.byteLength(serializedRequest, "utf8"),
+				requestIdentifier,
+				streamOutput: configuration.streamOutput,
+				timeoutMilliseconds: configuration.timeoutMilliseconds,
+				toolCount: tools.length,
+				...(await failureDetails(error, configuration.apiKey)),
+			})
+			throw safeError
 		}
 	}
 }

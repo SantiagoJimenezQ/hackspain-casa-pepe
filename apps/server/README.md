@@ -124,7 +124,7 @@ Every event carries `simulated` (simulated data or action) and `replayed` (repro
 
 ### Browser stream
 
-The dashboard receives the same events through its server-side proxy at `GET /api/casa-pepe/activity/stream`. The proxy adds the backend API key before opening `GET /api/activity/stream`, so the key never reaches the browser. The backend stream first replays the backlog after `afterSequence` and then pushes new events live; each message carries the event `type` and `id` equal to the sequence, so a reconnect can resume.
+The dashboard receives the same events through its server-side proxy at `GET /api/casa-pepe/activity/stream`. The proxy adds the backend API key before opening `GET /api/activity/stream`, so the key never reaches the browser. The backend stream first replays the backlog after `afterSequence` and then pushes new events live; each message carries the event `type` and `id` equal to the sequence, so a reconnect can resume. Streams complete normally after 240 seconds, below the 300-second Vercel runtime limit. EventSource reconnects automatically; `Last-Event-ID` takes precedence over the original `afterSequence` query. The dashboard proxy has a 250-second safety deadline and cancels its upstream request when the browser disconnects.
 
 ## Inbound webhooks
 

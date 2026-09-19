@@ -12,7 +12,7 @@ import { TypeOrmModule } from "@nestjs/typeorm"
 				extra: {
 					connectionTimeoutMillis: 5000,
 					idleTimeoutMillis: 10000,
-					max: 1,
+					max: configuration.database.poolMaximum,
 				},
 				logging: configuration.database.queryLogging
 					? ["query"]

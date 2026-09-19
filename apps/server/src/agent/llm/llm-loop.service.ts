@@ -27,7 +27,7 @@ import { isText } from "@agent/llm/subagent-tools"
 import { SubagentRunnerService } from "@agent/llm/subagent-runner.service"
 import { CycleOutcome } from "@agent/types/agent.type"
 import { LlmLoopActions, LlmLoopState } from "@agent/types/llm-loop.type"
-import { SubagentKind } from "@agent/types/subagent.type"
+import { SubagentOutcome } from "@agent/types/subagent.type"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { Injectable } from "@nestjs/common"
 
@@ -124,6 +124,7 @@ export class LlmLoopService {
 		private readonly client: LlmClientService,
 		private readonly configuration: ConfigurationService,
 		private readonly activity: ActivityService,
+		private readonly subagents: SubagentRunnerService,
 	) {}
 
 	async run(actions: LlmLoopActions): Promise<CycleOutcome> {
@@ -352,20 +353,38 @@ export class LlmLoopService {
 							planVersion: state.input.previousPlan?.version ?? 0,
 							waitingFor: [object.reason],
 						}
-					case "get_incident_context":
-					case "get_service_health":
-					case "get_recovery_capacity":
-					case "check_services_status":
-					case "prioritize_customers":
-						if (Object.keys(object).length)
-							throw new ToolArgumentsError(
-								"This tool takes no arguments; received unexpected fields (see argumentDiagnostics).",
-							)
-						result = await actions.investigate({
-							input: {},
-							name: call.function.name,
-						})
+					case "delegate_investigation":
+					case "delegate_engineer_call":
+					case "delegate_communication": {
+						const specialist =
+							SUBAGENT_DELEGATION_TOOLS[call.function.name]
+						const objective = delegationObjective(object)
+						const outcome = await this.subagents.run(
+							{
+								kind: specialist,
+								objective,
+								remainingActions:
+									this.configuration.agent
+										.maximumStepsPerCycle - executed,
+								state,
+							},
+							actions,
+						)
+						executed += outcome.executedSteps
+						await record(
+							state,
+							"agent.llm-decision",
+							`Specialist report: ${specialist}`,
+							summarizeDelegation(outcome),
+							{
+								executedSteps: outcome.executedSteps,
+								objective,
+								specialist,
+							},
+						)
+						result = outcome
 						break
+					}
 					default:
 						throw new ToolArgumentsError(
 							"Unknown tool; use one of the declared tools",
@@ -484,16 +503,33 @@ function safeToolName(name: string): string {
 		: "[unknown-tool]"
 }
 
-function correctionFor(name: string): string {
+function delegationObjective(object: Record<string, unknown>): string {
+	if (Object.keys(object).length !== 1 || !isText(object.objective))
+		throw new ToolArgumentsError("Expected only objective as a string")
+	const objective = object.objective.trim()
 	if (
-		[
-			"get_incident_context",
-			"get_service_health",
-			"get_recovery_capacity",
-			"check_services_status",
-		].includes(name)
+		!objective.length ||
+		objective.length > SUBAGENT_OBJECTIVE_CHARACTER_LIMIT
 	)
-		return "Retry this read tool with exactly {}. Remove all fields, including input, arguments, parameters, resource and identifiers. The server supplies context."
+		throw new ToolArgumentsError(
+			`objective must be one concrete task of 1 to ${SUBAGENT_OBJECTIVE_CHARACTER_LIMIT} characters`,
+		)
+	return objective
+}
+
+function summarizeDelegation(outcome: SubagentOutcome): string {
+	switch (outcome.kind) {
+		case "reported":
+			return outcome.report.summary
+		case "exhausted":
+		case "failed":
+			return outcome.reason
+	}
+}
+
+function correctionFor(name: string): string {
+	if (name in SUBAGENT_DELEGATION_TOOLS)
+		return 'Use exactly {"objective":"<one concrete question or task>"}. The specialist supplies its own tools and context; you only state the objective.'
 	if (name === "execute_step")
 		return 'Use exactly {"stepIdentifier":"<existing runnable step ID>"}. No input wrapper. Recheck the current plan and dependencies.'
 	if (name === "wait_for_input")

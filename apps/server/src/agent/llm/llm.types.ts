@@ -24,3 +24,10 @@ export interface LlmToolDefinition {
 		parameters: Record<string, unknown>
 	}
 }
+
+export interface LlmCompletionOverrides {
+	readonly maximumOutputTokens?: number
+	readonly model?: string
+	readonly reasoningEffort?: string
+	readonly timeoutMilliseconds?: number
+}

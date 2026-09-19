@@ -173,6 +173,9 @@ export class EnvironmentVariables {
 	@IsString()
 	LLM_MODEL: string = ""
 
+	@IsString()
+	LLM_FAST_MODEL: string = ""
+
 	@IsIn(["true", "false"])
 	LLM_STREAM_OUTPUT: string = "false"
 
@@ -181,6 +184,12 @@ export class EnvironmentVariables {
 	@Min(100)
 	@Max(120000)
 	LLM_TIMEOUT_MILLISECONDS: number = 30000
+
+	@Type(() => Number)
+	@IsInt()
+	@Min(100)
+	@Max(120000)
+	LLM_FAST_TIMEOUT_MILLISECONDS: number = 5000
 
 	@Type(() => Number)
 	@IsInt()

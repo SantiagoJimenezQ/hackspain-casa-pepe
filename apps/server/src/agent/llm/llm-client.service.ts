@@ -1,4 +1,5 @@
 import {
+	LlmCompletionOverrides,
 	LlmMessage,
 	LlmToolCall,
 	LlmToolDefinition,
@@ -32,9 +33,15 @@ export class LlmClientService {
 	async complete(
 		messages: LlmMessage[],
 		tools: LlmToolDefinition[],
-		onText?: (text: string) => Promise<void>,
+		onTextOrOverrides?:
+			| ((text: string) => Promise<void>)
+			| LlmCompletionOverrides,
 	): Promise<{ message: LlmMessage; usage: unknown; model: string }> {
-		const configuration = this.providerConfiguration()
+		const configuration = this.providerConfiguration(onTextOrOverrides)
+		const onText =
+			typeof onTextOrOverrides === "function"
+				? onTextOrOverrides
+				: undefined
 		const responseData = await this.request(
 			configuration,
 			messages,
@@ -47,7 +54,11 @@ export class LlmClientService {
 		)
 	}
 
-	private providerConfiguration(): LlmConfiguration {
+	private providerConfiguration(
+		onTextOrOverrides?:
+			| ((text: string) => Promise<void>)
+			| LlmCompletionOverrides,
+	): LlmConfiguration {
 		const configured = this.configuration.llm
 		if (!configured || typeof configured !== "object") {
 			throw new LlmClientError(
@@ -89,16 +100,31 @@ export class LlmClientService {
 			throw new LlmClientError("LLM provider configuration is invalid")
 		}
 
-		return {
-			apiKey,
-			baseURL,
-			maximumOutputTokens: configured.maximumOutputTokens,
-			maximumTurns: configured.maximumTurns,
-			model,
-			reasoningEffort: configured.reasoningEffort,
-			streamOutput: configured.streamOutput === true,
-			timeoutMilliseconds: configured.timeoutMilliseconds,
-		}
+		return mergeCompletionOverrides(
+			{
+				apiKey,
+				baseURL,
+				fastModel:
+					typeof configured.fastModel === "string"
+						? configured.fastModel.trim()
+						: "",
+				fastTimeoutMilliseconds:
+					Number.isInteger(configured.fastTimeoutMilliseconds) &&
+					configured.fastTimeoutMilliseconds >= 100 &&
+					configured.fastTimeoutMilliseconds <= 120000
+						? configured.fastTimeoutMilliseconds
+						: configured.timeoutMilliseconds,
+				maximumOutputTokens: configured.maximumOutputTokens,
+				maximumTurns: configured.maximumTurns,
+				model,
+				reasoningEffort: configured.reasoningEffort,
+				streamOutput: configured.streamOutput === true,
+				timeoutMilliseconds: configured.timeoutMilliseconds,
+			},
+			typeof onTextOrOverrides === "object"
+				? onTextOrOverrides
+				: undefined,
+		)
 	}
 
 	private async request(
@@ -189,6 +215,44 @@ export class LlmClientService {
 			if (error instanceof LlmClientError) throw error
 			throw safeRequestError(error)
 		}
+	}
+}
+
+function mergeCompletionOverrides(
+	configuration: LlmConfiguration,
+	overrides?: LlmCompletionOverrides,
+): LlmConfiguration {
+	if (!overrides) {
+		return configuration
+	}
+	const model =
+		typeof overrides.model === "string" && overrides.model.trim().length
+			? overrides.model.trim()
+			: configuration.model
+	const timeoutMilliseconds =
+		typeof overrides.timeoutMilliseconds === "number" &&
+		Number.isInteger(overrides.timeoutMilliseconds) &&
+		overrides.timeoutMilliseconds >= 100 &&
+		overrides.timeoutMilliseconds <= 120000
+			? overrides.timeoutMilliseconds
+			: configuration.timeoutMilliseconds
+	const maximumOutputTokens =
+		typeof overrides.maximumOutputTokens === "number" &&
+		Number.isInteger(overrides.maximumOutputTokens) &&
+		overrides.maximumOutputTokens >= 1 &&
+		overrides.maximumOutputTokens <= 32768
+			? overrides.maximumOutputTokens
+			: configuration.maximumOutputTokens
+	const reasoningEffort =
+		typeof overrides.reasoningEffort === "string"
+			? (overrides.reasoningEffort as LlmConfiguration["reasoningEffort"])
+			: configuration.reasoningEffort
+	return {
+		...configuration,
+		maximumOutputTokens,
+		model,
+		reasoningEffort,
+		timeoutMilliseconds,
 	}
 }
 

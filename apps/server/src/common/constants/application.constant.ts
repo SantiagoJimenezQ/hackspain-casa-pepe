@@ -1,3 +1,11 @@
+export const LLM_REASONING_EFFORTS = [
+	"",
+	"none",
+	"low",
+	"medium",
+	"high",
+] as const
+
 export const APPLICATION_NAME = "Casa Pepe incident coordinator"
 
 export const APPLICATION_DESCRIPTION =

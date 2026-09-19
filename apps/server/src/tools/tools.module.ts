@@ -1,5 +1,6 @@
 import { ActivityModule } from "@activity/activity.module"
 import { ApprovalsModule } from "@approvals/approvals.module"
+import { CustomersModule } from "@customers/customers.module"
 import { EngineersModule } from "@engineers/engineers.module"
 import { IncidentsModule } from "@incidents/incidents.module"
 import { Module } from "@nestjs/common"
@@ -25,6 +26,7 @@ import {
 	GetIncidentContextTool,
 	SaveRecoveryPlanTool,
 } from "@tools/implementations/mvp-tools"
+import { PrioritizeCustomersTool } from "@tools/implementations/prioritize-customers.tool"
 import {
 	ExecuteRecoveryTool,
 	VerifyRecoveryTool,
@@ -58,6 +60,7 @@ import { HappyRobotSecretGuard } from "@webhooks/guards/inbound-secret.guard"
 		TasksModule,
 		ApprovalsModule,
 		RecoveryModule,
+		CustomersModule,
 	],
 	providers: [
 		GetIncidentContextTool,
@@ -76,6 +79,7 @@ import { HappyRobotSecretGuard } from "@webhooks/guards/inbound-secret.guard"
 		VerifyRecoveryTool,
 		ReadIncomingEmailsTool,
 		CheckServicesStatusTool,
+		PrioritizeCustomersTool,
 		HappyRobotSecretGuard,
 		ToolTestsService,
 		ToolRegistryService,

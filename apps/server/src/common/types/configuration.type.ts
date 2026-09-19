@@ -1,4 +1,7 @@
-import { ENVIRONMENTS } from "@common/constants/application.constant"
+import {
+	ENVIRONMENTS,
+	LLM_REASONING_EFFORTS,
+} from "@common/constants/application.constant"
 
 export type Environment = (typeof ENVIRONMENTS)[number]
 
@@ -71,6 +74,8 @@ export interface AgentConfiguration {
 	readonly callTimeoutMilliseconds: number
 }
 
+export type LlmReasoningEffort = (typeof LLM_REASONING_EFFORTS)[number]
+
 export interface LlmConfiguration {
 	readonly streamOutput?: boolean
 	readonly baseURL: string
@@ -79,6 +84,7 @@ export interface LlmConfiguration {
 	readonly timeoutMilliseconds: number
 	readonly maximumTurns: number
 	readonly maximumOutputTokens: number
+	readonly reasoningEffort: LlmReasoningEffort
 }
 
 export interface EmailConfiguration {

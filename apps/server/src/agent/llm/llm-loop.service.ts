@@ -121,6 +121,11 @@ function definitions(): LlmToolDefinition[] {
 			empty,
 		),
 		tool(
+			"prioritize_customers",
+			"Rank affected customers by recovery priority: business impact, blocked dependents, unavailable services, users, time down and recovery in progress",
+			empty,
+		),
+		tool(
 			"check_services_status",
 			`Check every service with an independent query and report discrepancies with the recorded state.${readArguments}`,
 			empty,
@@ -380,6 +385,7 @@ export class LlmLoopService {
 					case "get_service_health":
 					case "get_recovery_capacity":
 					case "check_services_status":
+					case "prioritize_customers":
 						if (Object.keys(object).length)
 							throw new ToolArgumentsError(
 								"This tool takes no arguments; received unexpected fields (see argumentDiagnostics).",

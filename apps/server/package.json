@@ -37,6 +37,7 @@
 			"^@tasks/(.*)$": "<rootDir>/tasks/$1",
 			"^@engineers/(.*)$": "<rootDir>/engineers/$1",
 			"^@recovery/(.*)$": "<rootDir>/recovery/$1",
+			"^@customers/(.*)$": "<rootDir>/customers/$1",
 			"^@tools/(.*)$": "<rootDir>/tools/$1",
 			"^@agent/(.*)$": "<rootDir>/agent/$1",
 			"^@replays/(.*)$": "<rootDir>/replays/$1",

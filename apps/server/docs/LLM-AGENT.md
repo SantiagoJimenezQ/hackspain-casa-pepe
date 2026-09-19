@@ -48,3 +48,47 @@ The existing authenticated `/api/activity/stream` and Next.js proxy deliver `age
 Payload: `{ outputIdentifier, turn, text, provisional: true }`. Append `text` in activity sequence order and deduplicate by sequence on reconnect. The first fragment is emitted immediately; subsequent fragments are batched at 160 characters, with a final flush and a 2,000-character public output limit per turn. Output is persisted like other activity for replay. Correlate terminal `agent.llm-decision`, `agent.llm-failed`, or `agent.llm-stale` via `outputIdentifier`; discard provisional output on failure or stale evidence. The final decision summary remains authoritative.
 
 Tools execute only after the stream terminates, the complete response is validated, and current incident state is rechecked. Missing termination, malformed or oversized output, truncation, and timeouts pause autonomous decisions. Disable the flag to roll back without frontend changes.
+
+## Check configured models
+
+`POST /api/agent/models/test` requires the usual operator API key and no request body.
+It makes two billable, synthetic tool-call requests using the runtime client: the
+agent profile (configured reasoning and timeout) and customer-ranking profile
+(`LLM_FAST_MODEL` or `LLM_MODEL`, reasoning `none`, fast timeout, no streaming,
+1,500 output tokens). The agent profile uses the configured streaming mode and
+output token budget. Neither profile needs an incident,
+executing tools, changing plans, or contacting engineers.
+
+```bash
+curl -X POST https://casa-pepe-api.vercel.app/api/agent/models/test \
+  -H "Authorization: API $CASA_PEPE_API_KEY"
+```
+
+HTTP 200 means the diagnostic completed; check `ok` and each entry in `results`.
+Each entry includes `profile`, `model`, `reasoningEffort`, `timeoutMilliseconds`,
+`streamOutput`, `maximumOutputTokens`, `status` (`succeeded` or `failed`),
+`latencyMilliseconds`, and a sanitized `error`.
+The response also includes `streamOutput` and `maximumOutputTokens`.
+Success requires exactly one `model_health_check` tool call with `{"ok":true}`;
+it verifies provider access and tool calling, not incident decision quality.
+Failures retain safe HTTP status/timeout messages but never raw provider errors
+or credentials. OpenAI requests use `max_completion_tokens`; other compatible
+providers retain `max_tokens`.
+
+### Provider failure logs
+
+The shared LLM client emits structured `LLM provider request failed` warnings for
+OpenAI and compatible providers such as Helmcode. Fields include provider host,
+model, reasoning effort, streaming flag, configured timeout, elapsed milliseconds,
+output budget, request bytes, tool count and a generated `requestIdentifier`.
+That identifier is also sent as `X-Client-Request-Id` for provider-side correlation.
+When available, logs include HTTP status, recognized network/provider error codes,
+parameter name, provider request ID and numeric `Retry-After` seconds. Fixed hints
+identify token-parameter incompatibility, reasoning configuration, model access,
+billing/quota and rate-limit failures.
+
+Streaming HTTP errors are read as bounded JSON (8 KiB, 250 ms), then closed.
+Raw provider messages, request/response bodies, prompts, tool arguments,
+authorization headers and credentials are never logged. Unknown provider codes
+are omitted. Malformed or truncated completions emit `LLM response validation
+failed`. Public diagnostic errors remain sanitized.

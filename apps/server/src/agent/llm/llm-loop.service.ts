@@ -274,6 +274,14 @@ export class LlmLoopService {
 				}
 			}
 			const fresh = await actions.observe()
+			if (
+				!fresh.input.incident.active ||
+				fresh.input.incident.runKind === "replay"
+			)
+				return {
+					kind: "skipped",
+					reason: "Run is inactive or replaying",
+				}
 			if (stateFingerprint(fresh) !== fingerprint) {
 				await record(
 					state,

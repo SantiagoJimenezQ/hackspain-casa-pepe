@@ -794,6 +794,9 @@ export class IncidentsService {
 			},
 		]
 		await updateEntity(this.repository, current)
+		this.eventEmitter.emit(DOMAIN_EVENTS.INCIDENT_RUN_DEACTIVATED, {
+			runIdentifier: current.runIdentifier,
+		})
 	}
 
 	private buildBaselineEntity(

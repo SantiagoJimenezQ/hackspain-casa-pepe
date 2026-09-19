@@ -17,6 +17,11 @@ describe("live dashboard adapter", () => {
   it("does not invent topology status in the browser", () => {
     expect(topologyView(overview)[0].status).toBe("down");
   });
+  it("treats a missing topology as empty instead of crashing", () => {
+    const incomplete = { incident: { customers: [], services: [] } } as unknown as Overview;
+    expect(topologyView(incomplete)).toEqual([]);
+    expect(customerView(incomplete.incident)).toEqual([]);
+  });
   it("treats recuperado as healthy green", () => {
     expect(statusOf("recuperado")).toBe("up");
     expect(statusOf("recovered")).toBe("up");

@@ -14,8 +14,8 @@ export function statusOf(value: string): VisualStatus {
 }
 
 export function customerView(incident: Incident) {
-  return incident.customers.map((customer) => {
-    const services = incident.services.filter((service) => customer.serviceIdentifiers.includes(service.identifier));
+  return (incident.customers ?? []).map((customer) => {
+    const services = (incident.services ?? []).filter((service) => customer.serviceIdentifiers.includes(service.identifier));
     const healthy = services.filter((service) => service.status === "healthy").length;
     const active = services.some((service) => service.status === "recovering");
     const progress = services.length ? Math.round((healthy / services.length) * 100) : 0;
@@ -26,11 +26,11 @@ export function customerView(incident: Incident) {
 }
 
 export function topologyView(overview: Overview) {
-  return overview.incident.topology.nodes;
+  return overview.incident.topology?.nodes ?? [];
 }
 
 export function recoveryProgress(overview: Overview) {
-  const services = overview.incident.services;
+  const services = overview.incident.services ?? [];
   const completed = services.filter((service) => service.status === "healthy" && overview.incident.status !== "normal").length;
   return { completed, total: services.length, percent: services.length ? Math.round((completed / services.length) * 100) : 0 };
 }

@@ -3,6 +3,7 @@ import { feature } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import countries from "@/data/countries-110m.json";
 import type { Overview, ToolCall } from "@/lib/casa-pepe-types";
+import { topologyView } from "@/lib/live-dashboard";
 
 export const MAP_PADDING = 24;
 
@@ -55,7 +56,7 @@ export function toolNamesOf(toolCalls: readonly ToolCall[]): string[] {
 }
 
 export function failoverTarget(overview: Overview) {
-  return overview.incident.topology.nodes.find((node) => node.region === overview.incident.backupRegion) ?? null;
+  return topologyView(overview).find((node) => node.region === overview.incident.backupRegion) ?? null;
 }
 
 export function cameraForView(

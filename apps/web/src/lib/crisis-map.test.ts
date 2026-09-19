@@ -33,6 +33,7 @@ describe("crisis map camera and projection", () => {
       incident: { backupRegion: "me-south-1", topology: { nodes } },
     } as unknown as Overview;
     expect(failoverTarget(overview)?.identifier).toBe("bahrain");
+    expect(failoverTarget({ incident: { backupRegion: "me-south-1" } } as unknown as Overview)).toBeNull();
   });
 
   it("projects gulf sites with geographic order on Natural Earth", () => {

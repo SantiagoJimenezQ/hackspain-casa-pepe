@@ -492,13 +492,14 @@ describe("API curl walkthrough contract", () => {
 			`/api/plans/current?runIdentifier=${runIdentifier}`,
 			(body) =>
 				body.kind === "plan" &&
-				body.plan.status === "completed" &&
+				body.plan.status === "active" &&
+				body.plan.steps.every((step) => step.status === "completed") &&
 				body.plan.steps.some(
 					(step) =>
 						step.identifier === "stp_route-assignment_verify" &&
 						step.status === "completed",
 				),
-			"completed recovery plan",
+			"finished actions with unresolved recovery priorities",
 		)
 		expect(completed.kind).toBe("plan")
 

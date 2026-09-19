@@ -3,6 +3,7 @@ import { AGENT_TICK_INTERVAL_MILLISECONDS } from "@agent/constants/agent.constan
 import { AGENT_MESSAGES } from "@agent/constants/agent-messages.constant"
 import { interpretAnswer } from "@agent/helpers/answer-interpretation.helper"
 import { stepIdentifierFor } from "@agent/helpers/plan-builder.helper"
+import { isPlanSettled } from "@agent/helpers/plan-completion.helper"
 import {
 	LlmLoopService,
 	LlmLoopState,
@@ -48,6 +49,8 @@ import { PlansService } from "@plans/services/plans.service"
 import { PlanRecord, PlanStep } from "@plans/types/plan.type"
 import { RecoveryService } from "@recovery/services/recovery.service"
 import { ScenarioDefinition } from "@scenarios/types/scenario.type"
+import { TasksService } from "@tasks/services/tasks.service"
+import { TaskUpdatedEvent } from "@tasks/types/task.type"
 import { ToolsService } from "@tools/services/tools.service"
 import {
 	ToolCallFinishedEvent,
@@ -58,13 +61,6 @@ import {
 const RUNNABLE_STATUSES: ReadonlyArray<PlanStep["status"]> = [
 	"proposed",
 	"approved",
-]
-
-const OPEN_STATUSES: ReadonlyArray<PlanStep["status"]> = [
-	"proposed",
-	"approved",
-	"awaiting-approval",
-	"running",
 ]
 
 @Injectable()
@@ -86,6 +82,7 @@ export class AgentService {
 		private readonly cycleState: AgentCycleStateService,
 		private readonly incomingCalls: IncomingCallsService,
 		private readonly llmLoop: LlmLoopService,
+		private readonly tasksService: TasksService,
 	) {}
 
 	@OnEvent(DOMAIN_EVENTS.INCIDENT_RUN_DEACTIVATED)
@@ -180,6 +177,15 @@ export class AgentService {
 				})
 				return
 		}
+	}
+
+	@OnEvent(DOMAIN_EVENTS.TASK_UPDATED, { async: true, promisify: true })
+	async onTaskUpdated({ task }: TaskUpdatedEvent): Promise<void> {
+		await this.requestCycle(task.runIdentifier, {
+			description: `Task ${task.identifier} changed to ${task.status}; reassess its recorded evidence`,
+			harnessEventIdentifier: task.identifier,
+			kind: "conditions-changed",
+		})
 	}
 
 	@OnEvent(DOMAIN_EVENTS.APPROVAL_DECIDED, { async: true, promisify: true })
@@ -431,13 +437,7 @@ export class AgentService {
 				)
 				const updated =
 					await this.plansService.findLatestPlan(runIdentifier)
-				if (
-					updated?.status === "active" &&
-					!updated.steps.some((candidate) =>
-						OPEN_STATUSES.includes(candidate.status),
-					)
-				)
-					await this.plansService.markCompleted(updated.identifier)
+				await this.completePlanIfSettled(updated, runIdentifier)
 				return this.plansService.findLatestPlan(runIdentifier)
 			},
 			investigate: (invocation) =>
@@ -477,11 +477,7 @@ export class AgentService {
 		const finalPlan = await this.plansService.findLatestPlan(runIdentifier)
 		if (!(await this.runsService.getByRunIdentifier(runIdentifier)).active)
 			return { kind: "skipped", reason: "The run is no longer active" }
-		if (
-			finalPlan?.status === "active" &&
-			!finalPlan.steps.some((step) => OPEN_STATUSES.includes(step.status))
-		)
-			await this.plansService.markCompleted(finalPlan.identifier)
+		await this.completePlanIfSettled(finalPlan, runIdentifier)
 		if (
 			outcome.kind === "completed" &&
 			outcome.executedSteps >=
@@ -503,6 +499,16 @@ export class AgentService {
 		return outcome
 	}
 
+	private async completePlanIfSettled(
+		plan: PlanRecord | null,
+		runIdentifier: string,
+	): Promise<void> {
+		if (!plan || plan.status !== "active") return
+		const tasks = await this.tasksService.list(runIdentifier)
+		if (isPlanSettled(plan, tasks))
+			await this.plansService.markCompleted(plan.identifier)
+	}
+
 	private async observeForLlm(
 		runIdentifier: string,
 		trigger: AgentTrigger,
@@ -516,21 +522,30 @@ export class AgentService {
 			describeTrigger(trigger, this.messagesFor(incident)),
 			this.messagesFor(incident),
 		)
-		const [approvals, incomingCalls, calls, toolCalls, learning] =
+		const [approvals, incomingCalls, calls, toolCalls, learning, tasks] =
 			await Promise.all([
 				this.approvalsService.list(runIdentifier),
 				this.incomingCalls.list(runIdentifier),
 				this.engineersService.list(runIdentifier),
 				this.toolsService.list(runIdentifier),
 				this.learningService.list(this.scenarioOf(incident).family),
+				this.tasksService.list(runIdentifier),
 			])
 		return {
 			blocked: incomingCalls.some((call) => call.status === "pending"),
 			evidence: {
 				approvals,
 				calls,
+				engineerCall: {
+					mode: this.engineersService.mode,
+					provider: this.engineersService.provider,
+					technicalQuestionsSupported:
+						this.engineersService.mode === "simulated" ||
+						this.engineersService.provider === "happyrobot",
+				},
 				incomingCalls,
 				learning,
+				tasks,
 				toolCalls: toolCalls.slice(-30),
 			},
 			input,

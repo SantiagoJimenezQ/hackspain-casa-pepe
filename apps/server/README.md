@@ -175,3 +175,17 @@ The runtime now also exposes the agreed MVP names, operator email (simulated or 
 ## ElevenLabs outbound calls
 
 See [outbound voice setup](docs/ELEVENLABS.md) for the existing emergency agent, dynamic variables, post-call authorization evidence, and switching to HappyRobot.
+
+## Waiting on human work
+
+A finished `assign_task` step means the task was recorded, not that the assignee
+was contacted or the work was done. The agent reads current task statuses and
+notes each turn. `PATCH /tasks/:identifier/status` wakes the owning run so it can
+reassess; notes remain reported evidence and do not directly confirm capacity
+or authorize recovery.
+
+Plans stay `active` while priorities are postponed or waiting on dependencies,
+steps are unfinished, or tasks in the run are open/in progress. `completed` is
+reserved for settled plan work. An idle decision cycle does not mean the incident
+is resolved. The wait reason should identify the missing evidence, owner, and
+resuming event or operator action.

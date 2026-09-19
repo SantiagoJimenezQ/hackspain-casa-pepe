@@ -1,5 +1,6 @@
 import "reflect-metadata"
 import { LlmToolCall } from "@agent/llm/llm.types"
+import { subagentContext } from "@agent/llm/subagent-context"
 import { SubagentRunnerService } from "@agent/llm/subagent-runner.service"
 import { PlanBuildInput } from "@agent/types/agent.type"
 import { LlmLoopState } from "@agent/types/llm-loop.type"
@@ -522,5 +523,27 @@ describe("SubagentRunnerService", () => {
 		})
 		expect(actions.investigate).not.toHaveBeenCalled()
 		expect(actions.execute).not.toHaveBeenCalled()
+	})
+})
+
+describe("caller provider capabilities", () => {
+	it("exposes the permissions-only limitation without implying technical answers", () => {
+		const state = createState()
+		state.evidence.engineerCall = {
+			mode: "live",
+			provider: "elevenlabs",
+			technicalQuestionsSupported: false,
+		}
+		const context = subagentContext(
+			{
+				kind: "caller",
+				objective: "Confirm readiness",
+				remainingActions: 1,
+				state,
+			},
+			0,
+		)
+		expect(context.callCapabilities).toEqual(state.evidence.engineerCall)
+		expect(context.availableSteps).toEqual([])
 	})
 })

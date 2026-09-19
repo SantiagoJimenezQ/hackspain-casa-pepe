@@ -248,7 +248,13 @@ export const llmPlanSchema = {
 		priority: {
 			additionalProperties: false,
 			properties: {
-				blockedBy: { items: { type: "string" }, type: "array" },
+				blockedBy: {
+					description:
+						"Only unhealthy service dependency identifiers. No self references, fact identifiers or capacity blockers; describe those in reason.",
+					items: { type: "string" },
+					type: "array",
+					uniqueItems: true,
+				},
 				businessImpact: {
 					enum: ["critical", "high", "medium", "low"],
 					type: "string",

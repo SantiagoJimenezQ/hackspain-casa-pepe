@@ -250,8 +250,18 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		)
 		const finalPlan = await waitFor(async () => {
 			const plan = await plansService.findLatestPlan(runIdentifier)
-			return plan && plan.status === "completed" ? plan : null
-		}, "plan completion")
+			return plan?.steps.every((step) => step.status === "completed")
+				? plan
+				: null
+		}, "planned actions finishing")
+		expect(finalPlan.status).toBe("active")
+		expect(
+			finalPlan.priorities.some(
+				(priority) =>
+					priority.decision === "waiting-for-dependency" ||
+					priority.decision === "postpone",
+			),
+		).toBe(true)
 		const statuses = Object.fromEntries(
 			finalPlan.steps.map((step) => [step.identifier, step.status]),
 		)

@@ -10,6 +10,7 @@ import {
 	EngineerCallAdapter,
 	EngineerCallRecord,
 	EngineerCallResult,
+	EngineerQuestion,
 } from "@engineers/types/engineer.type"
 import { Injectable, Logger } from "@nestjs/common"
 import {
@@ -102,6 +103,7 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 					request.call.engineer.name,
 					request.incidentContext,
 					request.call.purpose,
+					request.call.questions,
 				),
 			},
 			to_number: destination,
@@ -335,6 +337,7 @@ function dynamicVariables(
 	contactName: string,
 	context: EngineerCallIncidentContext,
 	purpose: string,
+	questions: ReadonlyArray<EngineerQuestion>,
 ): Record<string, string> {
 	return {
 		contact_name: contactName,
@@ -343,6 +346,10 @@ function dynamicVariables(
 		),
 		location: context.location,
 		outage_time: formatOutageTime(context.outageStartedAt),
+		questions: questions
+			.map((question, index) => `${index + 1}. ${question.question}`)
+			.join(" "),
+		questions_count: String(questions.length),
 		services_down: context.servicesDown.join(", "),
 	}
 }

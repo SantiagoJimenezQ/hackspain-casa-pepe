@@ -146,6 +146,7 @@ describe("ElevenLabsEngineerCallAdapter", () => {
 			agent_phone_number_id: "phone_test",
 			conversation_initiation_client_data: {
 				dynamic_variables: {
+					call_identifier: "call_test",
 					contact_name: "Lucía Responsable",
 					incident_description: "First sentence. Second sentence.",
 					location: "eu-west-1",

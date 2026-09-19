@@ -87,6 +87,11 @@ export interface AgentMessages {
 	followUpTaskDescription(serviceIdentifier: string, detail: string): string
 	verificationFailed(status: string, detail: string): string
 	readonly informationGathered: string
+	servicesChecked(
+		healthyCount: number,
+		totalCount: number,
+		discrepancies: ReadonlyArray<string>,
+	): string
 	approvedBy(name: string, comment: string): string
 	rejectedBy(name: string, comment: string): string
 	readonly approvalExpiredRequestAgain: string

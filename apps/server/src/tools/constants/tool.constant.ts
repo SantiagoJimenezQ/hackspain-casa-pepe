@@ -12,7 +12,7 @@ export const TOOL_NAMES = [
 	"request_approval",
 	"execute_recovery",
 	"verify_recovery",
-	"read_incoming_emails",
+	"check_services_status",
 ] as const
 
 export const TOOL_CALL_STATUSES = [
@@ -124,6 +124,13 @@ export const TOOL_DEFINITIONS: ReadonlyArray<{
 			"Check with an independent query whether the recovery worked",
 		interaction: "test-environment",
 		name: "verify_recovery",
+	},
+	{
+		asynchronous: false,
+		description:
+			"Check the status of every service with an independent query and report discrepancies",
+		interaction: "test-environment",
+		name: "check_services_status",
 	},
 ]
 

@@ -29,6 +29,8 @@ import {
 	RecoveryActionRecord,
 	RecoveryAdapter,
 	RecoveryResult,
+	ServiceStatusCheck,
+	ServicesStatusReport,
 	VerificationResult,
 } from "@recovery/types/recovery.type"
 import { Repository } from "typeorm"
@@ -217,6 +219,63 @@ export class RecoveryService {
 			type: "recovery.verified",
 		})
 		return verification
+	}
+
+	async checkServices(
+		runIdentifier: string,
+		incidentIdentifier: string,
+		toolCallIdentifier: string,
+	): Promise<ServicesStatusReport> {
+		const incident =
+			await this.runsService.getByRunIdentifier(runIdentifier)
+		const checks: ServiceStatusCheck[] = []
+		for (const service of incident.services) {
+			const verification = await this.adapter.verify(
+				runIdentifier,
+				service.identifier,
+			)
+			checks.push({
+				detail: verification.detail,
+				healthy: verification.verified,
+				knownStatus: service.status,
+				matches: verification.status === service.status,
+				observedStatus: verification.status,
+				serviceIdentifier: service.identifier,
+				serviceName: service.name,
+			})
+		}
+		const discrepancies = checks
+			.filter((check) => !check.matches)
+			.map(
+				(check) =>
+					`${check.serviceName} is recorded as ${check.knownStatus} but the independent check reports ${check.observedStatus}`,
+			)
+		const report: ServicesStatusReport = {
+			checks,
+			discrepancies,
+			healthyCount: checks.filter((check) => check.healthy).length,
+			mode: this.adapter.mode,
+			totalCount: checks.length,
+		}
+		this.logger.log(LOG_MESSAGES.RECOVERY.SERVICES_CHECKED, {
+			discrepancies: discrepancies.length,
+			healthyCount: report.healthyCount,
+			totalCount: report.totalCount,
+		})
+		await this.activityService.record({
+			correlation: { toolCallIdentifier },
+			incidentIdentifier,
+			payload: { report },
+			runIdentifier,
+			simulated: report.mode === "simulated",
+			source: "tool",
+			summary: discrepancies.length
+				? `${report.healthyCount} of ${report.totalCount} services healthy (${report.mode}). Discrepancies: ${discrepancies.join("; ")}`
+				: `${report.healthyCount} of ${report.totalCount} services healthy (${report.mode}). The independent check matches the recorded state`,
+			title: "Service status checked",
+			type: "services.checked",
+		})
+		return report
 	}
 
 	async list(

@@ -48,6 +48,7 @@ export const LOG_MESSAGES = {
 		ACTION_FINISHED: "Recovery action finished",
 		ACTION_STARTED: "Recovery action started",
 		ENVIRONMENT_REQUEST_FAILED: "Failed to reach the recovery environment",
+		SERVICES_CHECKED: "Service status check finished",
 		VERIFICATION_FINISHED: "Recovery verification finished",
 	},
 	REPLAYS: {

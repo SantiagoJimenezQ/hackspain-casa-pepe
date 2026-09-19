@@ -150,6 +150,10 @@ const ENGLISH: AgentMessages = {
 	retryingAfterFailure: (reason) => `Retrying after failure: ${reason}`,
 	serviceChanged: (serviceIdentifier, status, reason) =>
 		`${serviceIdentifier} changed to ${status}: ${reason}`,
+	servicesChecked: (healthyCount, totalCount, discrepancies) =>
+		discrepancies.length
+			? `${healthyCount} of ${totalCount} services healthy. Discrepancies: ${discrepancies.join("; ")}`
+			: `${healthyCount} of ${totalCount} services healthy. The independent check matches the recorded state`,
 	stepWaiting: (title, status) => `${title} (${status})`,
 	summaryAllHealthy: "Every service is healthy. Nothing left to recover.",
 	summaryNothingFits: (totalUnits, unit, postponed) =>
@@ -295,6 +299,10 @@ const SPANISH: AgentMessages = {
 	retryingAfterFailure: (reason) => `Reintentando tras el fallo: ${reason}`,
 	serviceChanged: (serviceIdentifier, status, reason) =>
 		`${serviceIdentifier} pasó a ${labelOr(STATUS_LABELS_ES, status)}: ${reason}`,
+	servicesChecked: (healthyCount, totalCount, discrepancies) =>
+		discrepancies.length
+			? `${healthyCount} de ${totalCount} servicios sanos. Discrepancias: ${discrepancies.join("; ")}`
+			: `${healthyCount} de ${totalCount} servicios sanos. La comprobación independiente coincide con el estado registrado`,
 	stepWaiting: (title, status) =>
 		`${title} (${labelOr(STEP_STATUS_LABELS_ES, status)})`,
 	summaryAllHealthy:

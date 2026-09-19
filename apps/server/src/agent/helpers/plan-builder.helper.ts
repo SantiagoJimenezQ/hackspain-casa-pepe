@@ -606,6 +606,25 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 			messages,
 		),
 	)
+	const verifyIdentifiers = steps
+		.filter((s) => s.invocation.name === "verify_recovery")
+		.map((s) => s.identifier)
+	const checkIdentifier = `step-check-v${version}`
+	steps.push(
+		createStep(
+			checkIdentifier,
+			"Check the status of every service",
+			"Confirm with an independent query which services really work before communicating",
+			{ input: {}, name: "check_services_status" },
+			AGENT_ACTOR,
+			"",
+			0,
+			false,
+			verifyIdentifiers,
+			timestamp,
+			messages,
+		),
+	)
 	steps.push(
 		createStep(
 			`step-status-v${version}`,
@@ -616,9 +635,7 @@ export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 			"",
 			0,
 			false,
-			steps
-				.filter((s) => s.invocation.name === "verify_recovery")
-				.map((s) => s.identifier),
+			[...verifyIdentifiers, checkIdentifier],
 			timestamp,
 			messages,
 		),

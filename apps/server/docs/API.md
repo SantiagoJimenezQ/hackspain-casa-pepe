@@ -367,7 +367,7 @@ The eight tools with `name`, `description`, `interaction` (`harness` \| `simulat
 
 ### `GET /tools/calls?runIdentifier=`, `GET /tools/calls/:identifier`
 
-**ToolCallRecord**: `identifier`, `name`, `interaction`, `input`, `status` (`pending` \| `running` \| `succeeded` \| `failed` \| `cancelled`), `output` (union by `kind`: `incident-state`, `service-health`, `recovery-capacity`, `engineer-call`, `task`, `approval`, `recovery-execution`, `recovery-verification`), `error { code, message, retryable }`, `externalReference`, `simulated`, `attempt`, `idempotencyKey`, `planIdentifier`, `planVersion`, `planStepIdentifier`, `decisionIdentifier`, `startedAt`, `finishedAt`.
+**ToolCallRecord**: `identifier`, `name`, `interaction`, `input`, `status` (`pending` \| `running` \| `succeeded` \| `failed` \| `cancelled`), `output` (union by `kind`: `incident-state`, `service-health`, `recovery-capacity`, `engineer-call`, `task`, `approval`, `recovery-execution`, `recovery-verification`, `services-status`), `error { code, message, retryable }`, `externalReference`, `simulated`, `attempt`, `idempotencyKey`, `planIdentifier`, `planVersion`, `planStepIdentifier`, `decisionIdentifier`, `startedAt`, `finishedAt`.
 
 Error codes: `TIMEOUT`, `CALL_FAILED`, `APPROVAL_INVALID`, `CAPACITY_INSUFFICIENT`, `EXECUTION_FAILED`, `UNEXPECTED_ERROR`, `CANCELLED`.
 
@@ -660,6 +660,7 @@ POST /demo/twist
 POST /approvals/:id/decision approve
   → execute_recovery (reserves capacity) → result (timer or POST /webhooks/recovery) → verify_recovery
   → route-assignment runs without approval → verification → degraded services heal on their own
+  → check_services_status (independent status of every service, reports discrepancies) → publish_status_update
   → agent.cycle-finished: recovered / pending / next step
 ```
 
@@ -678,4 +679,4 @@ See [MVP tools rehearsal](../../../demo/MVP-TOOLS.md) for configuration, payload
 | `GET /status` | Public | Readable service-status page with a manual refresh link. |
 | `GET /status/public` | Public | Explicitly published, customer-safe JSON service status for the active run; no credentials, call details or internal plan data. |
 
-`GET /tools` now includes the eight MVP names plus the legacy tools. Email destinations are server configuration, never agent input. The email tool records provider acceptance separately from inbox delivery; simulated emails send nothing. HTTP `verify_recovery` submits a test delivery for `route-assignment`; other services use health queries scoped to the run.
+`GET /tools` now includes the eight MVP names plus the legacy tools. Email destinations are server configuration, never agent input. The email tool records provider acceptance separately from inbox delivery; simulated emails send nothing. HTTP `verify_recovery` submits a test delivery for `route-assignment`; other services use health queries scoped to the run. `check_services_status` runs after every verification and before the status publication: it queries the independent health read of every service (recovery environment in `http` mode, scenario state in `simulated` mode), compares it with the state the agent has recorded and returns `checks[]` with `knownStatus`, `observedStatus`, `matches` and `healthy`, plus `healthyCount`, `totalCount` and the list of `discrepancies`. Discrepancies are reported, never applied to the harness state. Each run records a `services.checked` activity event.

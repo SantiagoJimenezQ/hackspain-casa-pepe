@@ -9,6 +9,11 @@ import { TypeOrmModule } from "@nestjs/typeorm"
 			inject: [ConfigurationService],
 			useFactory: (configuration: ConfigurationService) => ({
 				autoLoadEntities: true,
+				extra: {
+					connectionTimeoutMillis: 5000,
+					idleTimeoutMillis: 10000,
+					max: 1,
+				},
 				logging: configuration.database.queryLogging
 					? ["query"]
 					: false,

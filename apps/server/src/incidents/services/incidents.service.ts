@@ -299,12 +299,10 @@ export class IncidentsService {
 
 	@Interval(1000)
 	async advanceAutomaticSimulation(): Promise<void> {
-		const entities = await this.runsService.listActiveEntities()
-		await Promise.all(
-			entities.map((entity) =>
-				this.advanceAutomaticSimulationFor(entity),
-			),
-		)
+		// Sequential on purpose: this runs every second over every run people keep open.
+		for (const entity of await this.runsService.listLiveEntities()) {
+			await this.advanceAutomaticSimulationFor(entity)
+		}
 	}
 
 	private async advanceAutomaticSimulationFor(

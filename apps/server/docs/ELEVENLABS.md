@@ -26,6 +26,53 @@ The supplied `elevenlabs/GUIA-AGENTE.md`, `agent.json`, and `llamada.json` were 
 - [Outbound call via Twilio](https://elevenlabs.io/docs/api-reference/integrations/twilio/outbound-call)
 - [Conversation details](https://elevenlabs.io/docs/api-reference/conversations/get)
 
+## Agent setup in the ElevenLabs dashboard
+
+The application never edits the hosted agent, so its prompt and its Analysis fields are configured
+once in the ElevenLabs dashboard.
+
+### Dynamic variables the server sends
+
+Every outbound call carries these, usable in the prompt as `{{name}}`:
+
+| Variable | Contents |
+|---|---|
+| `contact_name` | Person being called |
+| `incident_description` | Two-sentence summary of the incident |
+| `location` | Affected region |
+| `outage_time` | Start of the outage in `HH:MM UTC`, empty when unknown |
+| `services_down` | Comma-separated list of affected services |
+| `questions` | The agent's questions, numbered, as a single line |
+| `questions_count` | How many questions were sent |
+
+The prompt should ask the `{{questions}}` one at a time and wait for a clear answer to each,
+instead of following a fixed script, because the questions are written per incident by the agent.
+
+### Data collection fields
+
+Analysis, Data collection. Each field becomes an entry in `analysis.data_collection_results`.
+
+Authorizations, read into `result.authorizations`:
+
+| Identifier | Type |
+|---|---|
+| `notify_all_clients` | Boolean |
+| `traffic_failover_authorized` | Boolean |
+
+Question answers, read into `result.answers`, one field per question key used by the scenario:
+
+| Identifier | Type |
+|---|---|
+| `database-snapshot` | Boolean |
+| `route-assignment-readiness` | Boolean |
+| `backup-capacity` | Boolean |
+
+The identifier must match the question `key`. Separators are forgiving: `database-snapshot`,
+`database_snapshot` and `databaseSnapshot` all match. A Boolean field decides `confirmed` directly
+and its rationale becomes the answer text; a String field leaves the verdict to the server's answer
+interpretation. A question with no matching field simply produces no answer, and its fact stays
+pending.
+
 ## Runtime behavior
 
 The adapter sends `contact_name`, `location`, `outage_time`, `incident_description`, and `services_down` as `conversation_initiation_client_data.dynamic_variables`. Incident context comes from the persisted run. The incident description is limited to two sentences to keep the opening concise.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACTIVE_CALL_STALE_MS,
   ACTIVE_CALL_TERMINAL_WINDOW_MS,
   activeCallView,
   hasAuthorization,
@@ -448,5 +449,65 @@ describe("call permissions", () => {
 
     expect(view?.identifier).toBe("call_evt");
     expect(view?.authorized).toBe(true);
+  });
+});
+
+
+describe("a call that never reported an ending", () => {
+  it("stops showing it once the data is clearly stale", () => {
+    const startedAt = "2026-09-19T10:00:00.000Z";
+    const wayLater = Date.parse(startedAt) + ACTIVE_CALL_STALE_MS + 1_000;
+
+    const view = activeCallView(
+      {
+        engineerCalls: [call({ identifier: "call_stuck", status: "in-progress", startedAt })],
+        toolCalls: [],
+      },
+      [],
+      wayLater,
+    );
+
+    expect(view).toBeNull();
+  });
+
+  it("keeps showing it while the call could still be real", () => {
+    const startedAt = "2026-09-19T10:00:00.000Z";
+    const soonAfter = Date.parse(startedAt) + 30_000;
+
+    const view = activeCallView(
+      {
+        engineerCalls: [call({ identifier: "call_live", status: "in-progress", startedAt })],
+        toolCalls: [],
+      },
+      [],
+      soonAfter,
+    );
+
+    expect(view?.phase).toBe("calling");
+  });
+
+  it("stops showing a tool call that never finished either", () => {
+    const startedAt = "2026-09-19T10:00:00.000Z";
+    const wayLater = Date.parse(startedAt) + ACTIVE_CALL_STALE_MS + 1_000;
+
+    const view = activeCallView(
+      {
+        engineerCalls: [],
+        toolCalls: [
+          {
+            identifier: "tool_stuck",
+            name: "call_engineer",
+            status: "running",
+            startedAt,
+            finishedAt: "",
+            input: { engineerName: "Guillermo", engineerRole: "On-call" },
+          } as unknown as ToolCall,
+        ],
+      },
+      [],
+      wayLater,
+    );
+
+    expect(view).toBeNull();
   });
 });

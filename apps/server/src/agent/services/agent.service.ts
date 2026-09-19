@@ -896,6 +896,7 @@ export class AgentService {
 			case "assign_task":
 			case "request_approval":
 			case "check_services_status":
+			case "prioritize_customers":
 				return invocation
 		}
 	}
@@ -1084,6 +1085,7 @@ export class AgentService {
 			case "incident-state":
 			case "service-health":
 			case "recovery-capacity":
+			case "customer-priorities":
 				await this.plansService.updateStep(
 					plan.identifier,
 					step.identifier,

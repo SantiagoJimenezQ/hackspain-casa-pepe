@@ -14,6 +14,7 @@ export const TOOL_NAMES = [
 	"verify_recovery",
 	"read_incoming_emails",
 	"check_services_status",
+	"prioritize_customers",
 ] as const
 
 export const TOOL_CALL_STATUSES = [
@@ -132,6 +133,13 @@ export const TOOL_DEFINITIONS: ReadonlyArray<{
 			"Check the status of every service with an independent query and report discrepancies",
 		interaction: "test-environment",
 		name: "check_services_status",
+	},
+	{
+		asynchronous: false,
+		description:
+			"Rank the affected customers by recovery priority using business impact, blocked dependents, unavailable services, users, time down and recovery progress",
+		interaction: "harness",
+		name: "prioritize_customers",
 	},
 ]
 

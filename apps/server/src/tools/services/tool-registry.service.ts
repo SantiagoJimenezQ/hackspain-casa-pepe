@@ -16,6 +16,7 @@ import {
 	GetIncidentContextTool,
 	SaveRecoveryPlanTool,
 } from "@tools/implementations/mvp-tools"
+import { PrioritizeCustomersTool } from "@tools/implementations/prioritize-customers.tool"
 import {
 	ExecuteRecoveryTool,
 	VerifyRecoveryTool,
@@ -54,6 +55,7 @@ export class ToolRegistryService {
 		verifyRecovery: VerifyRecoveryTool,
 		readIncomingEmails: ReadIncomingEmailsTool,
 		checkServicesStatus: CheckServicesStatusTool,
+		prioritizeCustomers: PrioritizeCustomersTool,
 		private readonly engineersService: EngineersService,
 		private readonly recoveryService: RecoveryService,
 	) {
@@ -73,6 +75,7 @@ export class ToolRegistryService {
 			verifyRecovery,
 			readIncomingEmails,
 			checkServicesStatus,
+			prioritizeCustomers,
 		]
 		this.tools = new Map(registered.map((tool) => [tool.name, tool]))
 	}
@@ -101,6 +104,7 @@ export class ToolRegistryService {
 			case "get_incident_state":
 			case "get_service_health":
 			case "get_recovery_capacity":
+			case "prioritize_customers":
 				return true
 			case "call_engineer":
 			case "contact_engineer":

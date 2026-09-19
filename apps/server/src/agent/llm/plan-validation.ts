@@ -232,6 +232,7 @@ export const llmPlanSchema = {
 								"get_service_health",
 								"get_recovery_capacity",
 								"check_services_status",
+								"prioritize_customers",
 							],
 						},
 					},
@@ -399,6 +400,7 @@ const ALLOWED_READ_TOOLS = new Set([
 	"get_service_health",
 	"get_recovery_capacity",
 	"check_services_status",
+	"prioritize_customers",
 ])
 
 const ALLOWED_MODEL_TOOLS = new Set([

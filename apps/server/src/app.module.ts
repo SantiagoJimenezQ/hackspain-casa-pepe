@@ -4,6 +4,7 @@ import { ApprovalsModule } from "@approvals/approvals.module"
 import { AuthenticationModule } from "@authentication/authentication.module"
 import { CommonModule } from "@common/common.module"
 import { DatabaseModule } from "@common/database/database.module"
+import { CustomersModule } from "@customers/customers.module"
 import { EngineersModule } from "@engineers/engineers.module"
 import { HealthModule } from "@health/health.module"
 import { IncidentsModule } from "@incidents/incidents.module"
@@ -29,6 +30,7 @@ import { WebhooksModule } from "@webhooks/webhooks.module"
 		HealthModule,
 		ScenariosModule,
 		IncidentsModule,
+		CustomersModule,
 		ActivityModule,
 		PlansModule,
 		ApprovalsModule,

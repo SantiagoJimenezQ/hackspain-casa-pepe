@@ -214,12 +214,9 @@ function repairPriorities(
 			decision === "recover-now" || decision === "already-healthy"
 				? []
 				: unhealthy
-		return {
-			...priority,
-			blockedBy,
-			capacityUnits: service.recoveryCapacityUnits,
-			serviceName: service.name,
-		}
+		// The recovery cost stays the model's to get right: the validator must still catch a
+		// plan that miscounts what it is committing.
+		return { ...priority, blockedBy, serviceName: service.name }
 	})
 }
 

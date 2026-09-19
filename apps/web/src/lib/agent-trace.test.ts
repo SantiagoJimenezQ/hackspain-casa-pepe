@@ -683,10 +683,3 @@ describe("agent trace", () => {
     });
   });
 });
-
- it("V08 exposes concrete wait and failure reasons",()=>{
-  const overview=overviewWith([]);overview.agent.lastCycleOutcome={kind:"completed",waitingFor:["Waiting for Marta to confirm capacity"]};
-  expect(currentWork(overview).title).toBe("Waiting for Marta to confirm capacity");
-  overview.agent.lastCycleOutcome={kind:"failed",reason:"Provider unavailable; retry the cycle"};
-  expect(currentWork(overview)).toEqual({kind:"paused",title:"Provider unavailable; retry the cycle"});
- });

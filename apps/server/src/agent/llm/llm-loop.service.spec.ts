@@ -19,8 +19,6 @@ jest.mock("@agent/llm/plan-validation", () => ({
 		.LlmPlanValidationError,
 	llmPlanSchema: {
 		additionalProperties: true,
-		definitions: jest.requireActual("@agent/llm/plan-validation")
-			.llmPlanSchema.definitions,
 		properties: {},
 		type: "object",
 	},
@@ -730,11 +728,7 @@ describe("LlmLoopService", () => {
 				(record) => record.payload.subagent === "investigator",
 			),
 		).toHaveLength(2)
-		expect(
-			activityInputs(activity)
-				.filter((input) => input.type !== "agent.decision-timing")
-				.map((input) => input.type),
-		).toEqual([
+		expect(activityInputs(activity).map((input) => input.type)).toEqual([
 			"agent.llm-decision",
 			"agent.llm-decision",
 			"agent.llm-decision",
@@ -820,16 +814,8 @@ describe("LlmLoopService", () => {
 		expect(actions.save).not.toHaveBeenCalled()
 		expect(actions.execute).not.toHaveBeenCalled()
 		expect(actions.investigate).not.toHaveBeenCalled()
-		expect(
-			activityInputs(activity).filter(
-				(input) => input.type !== "agent.decision-timing",
-			),
-		).toHaveLength(1)
-		expect(
-			activityInputs(activity).find(
-				(input) => input.type === "agent.llm-failed",
-			),
-		).toMatchObject({
+		expect(activityInputs(activity)).toHaveLength(1)
+		expect(activityInputs(activity)[0]).toMatchObject({
 			type: "agent.llm-failed",
 		})
 	})
@@ -1139,107 +1125,5 @@ describe("complete public turn records", () => {
 			text: "Try a step",
 		})
 		expect(JSON.stringify(rejected)).not.toContain("private-value")
-	})
-})
-
-describe("combined model turn", () => {
-	it("C01/C02 starts the selected step before the next model request", async () => {
-		const state = createState()
-		const plan = createActivePlan(state.input.incident)
-		const { client, configuration, service, activity } = createHarness(2)
-		Object.assign(configuration.agent, { combinedPlanActionEnabled: true })
-		const actions = {
-			...createActions(() => state),
-			saveAndExecute: jest.fn(async () => {
-				expect(client.complete).toHaveBeenCalledTimes(1)
-				return { dispatchStatus: "dispatched" }
-			}),
-		}
-		validateLlmPlanMock.mockReturnValue(plan)
-		client.complete
-			.mockResolvedValueOnce(
-				completion([
-					toolCall("propose_plan_and_execute", {
-						firstStepIdentifier: plan.steps[1].identifier,
-						plan,
-					}),
-				]),
-			)
-			.mockResolvedValueOnce(
-				completion([
-					toolCall("wait_for_input", {
-						reason: "Waiting for result",
-					}),
-				]),
-			)
-		await service.run(actions)
-		expect(actions.saveAndExecute).toHaveBeenCalledWith(
-			plan,
-			plan.steps[1].identifier,
-			state,
-		)
-		expect(actions.execute).not.toHaveBeenCalled()
-		expect(
-			activityInputs(activity).filter(
-				(e) => e.type === "agent.decision-timing",
-			),
-		).toHaveLength(2)
-	})
-	it("C13 rejects combined tool when disabled", async () => {
-		const state = createState()
-		const { client, service } = createHarness(1)
-		const actions = {
-			...createActions(() => state),
-			saveAndExecute: jest.fn(),
-		}
-		client.complete.mockResolvedValue(
-			completion([
-				toolCall("propose_plan_and_execute", {
-					firstStepIdentifier: "S",
-					plan: {},
-				}),
-			]),
-		)
-		await service.run(actions)
-		expect(actions.saveAndExecute).not.toHaveBeenCalled()
-		expect(
-			client.complete.mock.calls[0][1].some(
-				(t: { function: { name: string } }) =>
-					t.function.name === "propose_plan_and_execute",
-			),
-		).toBe(false)
-	})
-	it("C08 enforces action budget before saving another plan", async () => {
-		const state = createState()
-		const plan = createActivePlan(state.input.incident)
-		const { client, service, configuration } = createHarness(2)
-		Object.assign(configuration.agent, { combinedPlanActionEnabled: true })
-		validateLlmPlanMock.mockReturnValue(plan)
-		const actions = {
-			...createActions(() => state),
-			saveAndExecute: jest
-				.fn()
-				.mockResolvedValue({ dispatchStatus: "dispatched" }),
-		}
-		client.complete.mockResolvedValue(
-			completion([
-				toolCall("propose_plan_and_execute", {
-					firstStepIdentifier: plan.steps[0].identifier,
-					plan,
-				}),
-			]),
-		)
-		await service.run(actions)
-		expect(actions.saveAndExecute).toHaveBeenCalledTimes(1)
-	})
-	it("M04 emits one terminal timing for provider failure", async () => {
-		const { client, service, activity } = createHarness(1)
-		client.complete.mockRejectedValue(new Error("synthetic"))
-		await service.run(createActions(() => createState()))
-		expect(
-			activityInputs(activity).filter(
-				(e) => e.type === "agent.decision-timing",
-			),
-		).toMatchObject([{ payload: { outcome: "failed" } }])
 	})
 })

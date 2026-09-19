@@ -728,11 +728,3 @@ The authenticated activity API and stream expose full public explanations in `pa
 Query: `runIdentifier` (defaults to active run), `limit` (1–500, default 100), optional `beforeSequence` (exclusive positive integer cursor). Returns `{ items: ActivityRecord[], nextBeforeSequence: number | null }` in descending sequence order. Request subsequent pages using the returned cursor; null means history is exhausted. No new Next.js proxy or history UI is included; the frontend team owns that integration. Keep the backend API key server-side. Older pre-upgrade records keep their original fields.
 
 The SSE endpoint now drains all backlog pages after the resume cursor and buffers concurrent live events during catch-up. The existing frontend behavior is unchanged, including its 100-event activity window. Consumers building a full transcript should load history through the cursor endpoint and deduplicate it against SSE events.
-
-### Agent speed additions
-
-`agent.decision-timing` records one terminal sample per commander model request. See `DecisionTiming` in `packages/contracts/agent.d.ts`; missing provider usage is not zero. `tool-call.dispatched` records external-action adapter acceptance and carries the same tool correlation/payload as tool-call activity. Acceptance is not verified recovery.
-
-Completed public model turns may include `actionResult` (`CombinedPlanActionResult`) with the saved plan/version, selected step, dispatch status, approval/tool identifiers and a blocking reason. Consumers must not infer successful execution from `disposition: accepted`.
-
-The Next.js proxy `GET /api/casa-pepe/activity/llm?runIdentifier=...&limit=100&beforeSequence=...` exposes existing backend LLM history. It validates positive integer pagination, limits pages to 500 events and keeps API authentication on the server. Responses and cursors retain the backend format.

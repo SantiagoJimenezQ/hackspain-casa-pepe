@@ -124,7 +124,6 @@ function formatTranscriptItem(
   services: ReadonlyArray<Pick<Service, "identifier" | "name">>,
   depth = 0,
 ): string {
-  if (item.kind === "decision") return indent(`[decision] ${item.decision.disposition}\n${item.decision.text}`, depth);
   if (item.kind === "thinking") return formatThinking(item, services, depth);
   if (item.kind === "tool") return formatTool(item.tool, services, depth);
   if (item.kind === "task") {

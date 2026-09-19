@@ -8,6 +8,7 @@ import {
 import { failureDetails } from "@agent/llm/llm-failure-details"
 import { readCompletionStream } from "@agent/llm/llm-stream"
 import { isAllowedLlmBaseURL } from "@common/configuration/configuration.factory"
+import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { LlmConfiguration } from "@common/types/configuration.type"
 import { HttpService } from "@nestjs/axios"
@@ -18,10 +19,19 @@ import { firstValueFrom } from "rxjs"
 const MAXIMUM_REQUEST_BYTES = 1024 * 1024
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024
 
+/** A rate limit or an overloaded provider clears on its own; anything else is the caller's. */
+const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([429, 500, 502, 503])
+const MAXIMUM_ATTEMPTS = 3
+const DEFAULT_RETRY_MILLISECONDS = 1000
+const MAXIMUM_RETRY_MILLISECONDS = 15000
+
 export class LlmClientError extends Error {
-	constructor(message: string) {
+	/** How long the provider asked the caller to wait; zero when the failure is the caller's. */
+	readonly retryAfterMilliseconds: number
+	constructor(message: string, retryAfterMilliseconds = 0) {
 		super(message)
 		this.name = "LlmClientError"
+		this.retryAfterMilliseconds = retryAfterMilliseconds
 	}
 }
 
@@ -48,7 +58,7 @@ export class LlmClientService {
 			this.providerConfiguration(),
 			overrides,
 		)
-		const responseData = await this.request(
+		const responseData = await this.attempt(
 			configuration,
 			messages,
 			tools,
@@ -126,6 +136,43 @@ export class LlmClientService {
 			reasoningEffort: configured.reasoningEffort,
 			streamOutput: configured.streamOutput === true,
 			timeoutMilliseconds: configured.timeoutMilliseconds,
+		}
+	}
+
+	/**
+	 * A rate limit is the provider asking for a pause, not a failed decision: pausing the whole
+	 * incident over it would strand the run. The wait the provider asks for is honoured, capped,
+	 * and the request is repeated a bounded number of times; every other failure surfaces at once.
+	 */
+	private async attempt(
+		configuration: LlmConfiguration,
+		messages: LlmMessage[],
+		tools: LlmToolDefinition[],
+		onText?: (text: string) => Promise<void>,
+	): Promise<unknown> {
+		for (let attempt = 1; ; attempt++) {
+			try {
+				return await this.request(
+					configuration,
+					messages,
+					tools,
+					onText,
+				)
+			} catch (error) {
+				const pause =
+					error instanceof LlmClientError
+						? error.retryAfterMilliseconds
+						: 0
+				if (pause === 0 || attempt >= MAXIMUM_ATTEMPTS) {
+					throw error
+				}
+				this.logger.warn(LOG_MESSAGES.AGENT.LLM_RETRYING, {
+					attempt,
+					model: configuration.model,
+					waitMilliseconds: pause * attempt,
+				})
+				await sleep(pause * attempt)
+			}
 		}
 	}
 
@@ -223,6 +270,7 @@ export class LlmClientService {
 				error instanceof LlmClientError
 					? error
 					: safeRequestError(error)
+
 			this.logger.warn("LLM provider request failed", {
 				elapsedMilliseconds: Date.now() - started,
 				maximumOutputTokens: configuration.maximumOutputTokens,
@@ -241,6 +289,29 @@ export class LlmClientService {
 			throw safeError
 		}
 	}
+}
+
+/**
+ * The pause the provider asked for, bounded, or zero when the status is the caller's to fix.
+ * A missing or unusable Retry-After falls back to a short pause.
+ */
+function providerPauseMilliseconds(status: number, headers: unknown): number {
+	if (!RETRYABLE_STATUSES.has(status)) {
+		return 0
+	}
+	const header = isRecord(headers) ? headers["retry-after"] : undefined
+	const requested =
+		typeof header === "string" && /^\d{1,6}$/.test(header)
+			? Number(header) * 1000
+			: DEFAULT_RETRY_MILLISECONDS
+	return Math.min(
+		Math.max(requested, DEFAULT_RETRY_MILLISECONDS),
+		MAXIMUM_RETRY_MILLISECONDS,
+	)
+}
+
+function sleep(milliseconds: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
 function mergeCompletionOverrides(
@@ -452,7 +523,10 @@ function safeRequestError(error: unknown): LlmClientError {
 					"LLM provider redirect is not allowed",
 				)
 			}
-			return new LlmClientError(`LLM provider returned HTTP ${status}`)
+			return new LlmClientError(
+				`LLM provider returned HTTP ${status}`,
+				providerPauseMilliseconds(status, error.response?.headers),
+			)
 		}
 		if (
 			error.code === "ECONNABORTED" ||

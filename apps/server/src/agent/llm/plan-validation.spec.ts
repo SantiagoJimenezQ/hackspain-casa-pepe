@@ -578,4 +578,47 @@ describe("repair followed by validation", () => {
 			validateLlmPlan(repairLlmPlanDraft(unsafe, input), input),
 		).toThrow()
 	})
+	it("sequences carried work the model omitted instead of rejecting a reused order", () => {
+		const { input, draft } = fixture()
+		const completed = draft.steps.map(
+			(step): PlanStep => ({
+				...step,
+				attempts: 1,
+				status: "completed",
+				statusReason: "Done",
+				toolCallIdentifier: `tool_${step.order}`,
+			}),
+		)
+		const carried: PlanBuildInput = {
+			...input,
+			previousPlan: prior({ ...draft, steps: completed }),
+		}
+		// The model omits the completed work, as the contract asks, and numbers its own step
+		// from one: the carried steps already hold that number.
+		const status: PlanStep = {
+			...draft.steps[1],
+			dependsOn: [],
+			identifier: "stp_status",
+			invocation: {
+				input: { planIdentifier: "" },
+				name: "publish_status_update",
+			},
+			order: 1,
+			serviceIdentifier: "",
+			status: "proposed",
+			statusReason: "",
+			title: "Report outage",
+		}
+
+		const result = validateLlmPlan(
+			repairLlmPlanDraft({ ...draft, steps: [status] }, carried),
+			carried,
+		)
+
+		expect(result.steps.map((step) => step.order)).toEqual([1, 2, 3])
+		expect(new Set(result.steps.map((step) => step.order)).size).toBe(3)
+		expect(
+			result.steps.filter((step) => step.status === "completed").length,
+		).toBe(completed.length)
+	})
 })

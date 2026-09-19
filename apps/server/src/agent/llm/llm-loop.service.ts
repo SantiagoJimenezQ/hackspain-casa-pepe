@@ -394,16 +394,14 @@ export class LlmLoopService {
 							throw new ToolArgumentsError(
 								"Expected a short, nonempty reason",
 							)
-						// A cycle that dispatched nothing and waits while a step is runnable
-						// leaves the run idle with no event left to wake it, so that step is
-						// surfaced once. Waiting after dispatching work stays legitimate.
-						const runnable =
-							executed === 0 ? runnableStepIdentifier(state) : ""
-						if (runnable.length && !waitChallenged) {
+						// A cycle that dispatched nothing and waits while work is pending
+						// leaves the run idle with no event left to wake it, so what is owed
+						// is surfaced once. Waiting after dispatching work stays legitimate.
+						const challenge =
+							executed === 0 ? waitChallenge(state) : ""
+						if (challenge.length && !waitChallenged) {
 							waitChallenged = true
-							throw new ToolArgumentsError(
-								`Step ${runnable} is runnable now: its dependencies are complete and it is neither running nor awaiting approval. Select it with execute_step, or explain in a new reason why it cannot run.`,
-							)
+							throw new ToolArgumentsError(challenge)
 						}
 						await decision("accepted")
 						await record(
@@ -619,6 +617,32 @@ function correctionFor(name: string): string {
  * The first step the server would accept right now: proposed, with every dependency
  * completed. An empty result means waiting is the only honest option.
  */
+/**
+ * Waiting is legitimate once the plan holds the work the incident needs. It is not while a
+ * step could run right now, nor while the run still carries only the engineer call the server
+ * dispatched before the first turn: that opening plan decides no recovery, no task and no
+ * communication, so parking on it leaves the incident unanswered with nothing left to wake the
+ * loop. Each case is surfaced once; a commander that insists is still allowed to wait.
+ */
+function waitChallenge(state: LlmLoopState): string {
+	const runnable = runnableStepIdentifier(state)
+	if (runnable.length) {
+		return `Step ${runnable} is runnable now: its dependencies are complete and it is neither running nor awaiting approval. Select it with execute_step, or explain in a new reason why it cannot run.`
+	}
+	if (callOnlyPlan(state)) {
+		return "The active plan is the opening engineer call the server dispatched: it carries no recovery, task or communication step, so nothing will resume this run. Propose the plan this incident needs with propose_plan, or explain in a new reason why no step at all can be planned."
+	}
+	return ""
+}
+
+function callOnlyPlan(state: LlmLoopState): boolean {
+	const plan = state.input.previousPlan
+	if (!plan) {
+		return false
+	}
+	return plan.steps.every((step) => step.invocation.name === "call_engineer")
+}
+
 function runnableStepIdentifier(state: LlmLoopState): string {
 	const plan = state.input.previousPlan
 	if (!plan) {

@@ -307,6 +307,66 @@ describe("LlmClientService", () => {
 		).rejects.toThrow(/redirect/i)
 	})
 
+	it("waits the pause a rate limit asks for and then completes", async () => {
+		jest.useFakeTimers()
+		const { client, post } = setup()
+		const limited = Object.assign(new Error("rate limited"), {
+			isAxiosError: true,
+			response: { headers: { "retry-after": "2" }, status: 429 },
+		})
+		post.mockReturnValueOnce(throwError(() => limited)).mockReturnValue(
+			of({ data: completion(), status: 200 }),
+		)
+
+		const pending = client.complete([{ content: "Go", role: "user" }], [])
+		await jest.advanceTimersByTimeAsync(2000)
+		const result = await pending
+
+		expect(result.message.content).toBe("Ready")
+		expect(post).toHaveBeenCalledTimes(2)
+		jest.useRealTimers()
+	})
+
+	it("gives up on a rate limit that outlives the allowed attempts", async () => {
+		jest.useFakeTimers()
+		const { client, post } = setup()
+		post.mockReturnValue(
+			throwError(() =>
+				Object.assign(new Error("rate limited"), {
+					isAxiosError: true,
+					response: { headers: {}, status: 429 },
+				}),
+			),
+		)
+
+		const pending = client
+			.complete([{ content: "Go", role: "user" }], [])
+			.catch((value: unknown) => value as Error)
+		await jest.advanceTimersByTimeAsync(10000)
+		const failure = await pending
+
+		expect(failure.message).toBe("LLM provider returned HTTP 429")
+		expect(post).toHaveBeenCalledTimes(3)
+		jest.useRealTimers()
+	})
+
+	it("surfaces a client error without retrying", async () => {
+		const { client, post } = setup()
+		post.mockReturnValue(
+			throwError(() =>
+				Object.assign(new Error("bad request"), {
+					isAxiosError: true,
+					response: { headers: {}, status: 400 },
+				}),
+			),
+		)
+
+		await expect(
+			client.complete([{ content: "Go", role: "user" }], []),
+		).rejects.toThrow("LLM provider returned HTTP 400")
+		expect(post).toHaveBeenCalledTimes(1)
+	})
+
 	it("sanitizes network and timeout errors", async () => {
 		const network = setup()
 		network.post.mockReturnValue(

@@ -11,6 +11,8 @@ export const LOG_MESSAGES = {
 		CYCLE_STARTED: "Agent cycle started",
 		ENGINEER_CALL_DISPATCHED:
 			"On-call engineer called immediately, before the first model turn",
+		LLM_RETRYING:
+			"Retrying the LLM request after the provider asked for a pause",
 		PLAN_CREATED: "Initial response plan created",
 		PLAN_REVISED: "Response plan revised after a change in conditions",
 		STALLED_RUN_RESUMED:
@@ -43,6 +45,8 @@ export const LOG_MESSAGES = {
 		CALL_AUTHORIZATION_IGNORED:
 			"Live authorization ignored because the call already finished",
 		CALL_FINISHED: "Engineer call finished",
+		CALL_RESULT_ALREADY_SETTLED:
+			"Engineer call result ignored because the call already has one",
 		CALL_RESULT_IGNORED:
 			"Engineer call result ignored because it does not belong to the active run",
 		CALL_STARTED: "Engineer call started",

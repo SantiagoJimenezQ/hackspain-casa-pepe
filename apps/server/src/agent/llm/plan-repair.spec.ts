@@ -225,4 +225,84 @@ describe("postponed capacity bookkeeping", () => {
 			).toMatchObject({ capacity: { postponedUnits: 999 } })
 		}
 	})
+	it("restores the configured role of a task recipient the model renamed", () => {
+		const repaired = repairLlmPlanDraft(
+			{
+				priorities: [],
+				steps: [
+					{
+						dependsOn: [],
+						identifier: "stp_orders-database_task",
+						invocation: {
+							input: {
+								assigneeName: "marta ruiz",
+								assigneeRole: "Ingeniera de guardia",
+								description: "Prepare the failover",
+								priority: "critical",
+								serviceIdentifier: "orders-database",
+								title: "Prepare the failover",
+							},
+							name: "assign_task",
+						},
+						owner: { kind: "agent", name: "Casa Pepe agent" },
+					},
+				],
+			},
+			input(),
+		)
+
+		expect(repaired).toMatchObject({
+			steps: [
+				{
+					invocation: {
+						input: {
+							assigneeName: "Marta Ruiz",
+							assigneeRole: "Platform on-call engineer",
+						},
+					},
+					owner: { kind: "engineer", name: "Marta Ruiz" },
+				},
+			],
+		})
+	})
+
+	it("leaves an invented task recipient for the validator to reject", () => {
+		const repaired = repairLlmPlanDraft(
+			{
+				priorities: [],
+				steps: [
+					{
+						dependsOn: [],
+						identifier: "stp_orders-database_task",
+						invocation: {
+							input: {
+								assigneeName: "Platform team",
+								assigneeRole: "Whoever answers",
+								description: "Prepare the failover",
+								priority: "critical",
+								serviceIdentifier: "orders-database",
+								title: "Prepare the failover",
+							},
+							name: "assign_task",
+						},
+						owner: { kind: "agent", name: "Casa Pepe agent" },
+					},
+				],
+			},
+			input(),
+		)
+
+		expect(repaired).toMatchObject({
+			steps: [
+				{
+					invocation: {
+						input: {
+							assigneeName: "Platform team",
+							assigneeRole: "Whoever answers",
+						},
+					},
+				},
+			],
+		})
+	})
 })

@@ -227,7 +227,94 @@ function createActivePlan(incident: IncidentSnapshot): PlanRecord {
 	}
 }
 
+function createOpeningPlan(incident: IncidentSnapshot): PlanRecord {
+	const plan = createActivePlan(incident)
+	return {
+		...plan,
+		steps: [
+			{
+				...plan.steps[0],
+				capacityUnits: 0,
+				identifier: "stp_contact-engineer",
+				invocation: {
+					input: {
+						engineerName: "Marta Ruiz",
+						engineerPhone: "+34600000000",
+						engineerRole: "Platform on-call engineer",
+						purpose: "Settle the pending facts",
+						questions: [
+							{
+								key: "backup-capacity",
+								question: "How much capacity is real?",
+							},
+						],
+					},
+					name: "call_engineer",
+				},
+				requiresApproval: false,
+				serviceIdentifier: "",
+				status: "completed",
+				title: "Call the on-call engineer",
+			},
+		],
+	}
+}
+
 describe("LlmLoopService", () => {
+	it("asks for the real plan before accepting a wait on the opening engineer call", async () => {
+		const { client, service } = createHarness(3)
+		const incident = createImpactedIncident(12)
+		const state = createState(
+			createInput(incident, createOpeningPlan(incident)),
+		)
+		client.complete
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("wait_for_input", {
+						reason: "The call collected no technical answer",
+					}),
+				]),
+			)
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("wait_for_input", {
+						reason: "Only the operator can supply the missing facts now",
+					}),
+				]),
+			)
+
+		const outcome = await service.run(createActions(() => state))
+
+		expect(JSON.stringify(client.complete.mock.calls[1][0])).toContain(
+			"opening engineer call the server dispatched",
+		)
+		expect(outcome).toMatchObject({ kind: "completed" })
+	})
+
+	it("accepts a wait once the plan carries work beyond the engineer call", async () => {
+		const { client, service } = createHarness(2)
+		const incident = createImpactedIncident(12)
+		const opening = createOpeningPlan(incident)
+		const plan = {
+			...opening,
+			steps: [...opening.steps, ...createActivePlan(incident).steps],
+		}
+		const state = createState(createInput(incident, plan))
+		client.complete.mockResolvedValue(
+			completion([
+				toolCall("wait_for_input", {
+					reason: "Waiting for the operator decision",
+				}),
+			]),
+		)
+
+		await service.run(createActions(() => state))
+
+		expect(JSON.stringify(client.complete.mock.calls[0][0])).not.toContain(
+			"opening engineer call the server dispatched",
+		)
+	})
+
 	it("restores rejection and waiting context in a new loop instance without replaying raw exchanges", async () => {
 		const first = createHarness(2)
 		const state = createState()

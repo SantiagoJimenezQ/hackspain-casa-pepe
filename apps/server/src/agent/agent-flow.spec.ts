@@ -27,6 +27,7 @@ import { PlansService } from "@plans/services/plans.service"
 import { PlanRecord } from "@plans/types/plan.type"
 import { RecoveryActionEntity } from "@recovery/entities/recovery-action.entity"
 import { RecoveryModule } from "@recovery/recovery.module"
+import { ApprovalScenariosFixture } from "@root/testing/approval-scenarios.fixture"
 import { InMemoryRepository } from "@root/testing/in-memory-repository"
 import {
 	createScriptedLlmClient,
@@ -38,6 +39,7 @@ import {
 	SPANISH_SCENARIO_IDENTIFIER,
 } from "@scenarios/constants/scenario.constant"
 import { ScenariosModule } from "@scenarios/scenarios.module"
+import { ScenariosService } from "@scenarios/services/scenarios.service"
 import { TaskEntity } from "@tasks/entities/task.entity"
 import { TasksService } from "@tasks/services/tasks.service"
 import { TasksModule } from "@tasks/tasks.module"
@@ -92,6 +94,9 @@ describe("agent flow (integration with in-memory repositories)", () => {
 				AgentModule,
 			],
 		})
+		builder = builder
+			.overrideProvider(ScenariosService)
+			.useClass(ApprovalScenariosFixture)
 		for (const entity of ENTITIES) {
 			builder = builder
 				.overrideProvider(getRepositoryToken(entity))

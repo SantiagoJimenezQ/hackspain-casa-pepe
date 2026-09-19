@@ -12,6 +12,8 @@ import {
 	Logger,
 	Optional,
 	Post,
+	RawBodyRequest,
+	Req,
 } from "@nestjs/common"
 import { ApiHeader, ApiOperation, ApiTags } from "@nestjs/swagger"
 import { RecoveryCallbackDTO } from "@recovery/dtos/recovery-callback.dto"
@@ -25,6 +27,7 @@ import {
 	InboundEmailsService,
 	ResendEmailReceivedEvent,
 } from "@webhooks/services/inbound-emails.service"
+import { Request } from "express"
 
 @ApiTags("Inbound webhooks")
 @Controller("webhooks")
@@ -49,7 +52,16 @@ export class InboundWebhooksController {
 	@Post("happyrobot/incoming")
 	@HttpCode(HttpStatus.ACCEPTED)
 	@HappyRobotInbound()
-	async incoming(@Body() body: IncomingCallDTO) {
+	async incoming(
+		@Body() body: IncomingCallDTO,
+		@Req() request: RawBodyRequest<Request>,
+	) {
+		// Preserve provider fields that DTO validation may strip from `body`.
+		const fullBody =
+			request.rawBody?.toString("utf8") ?? JSON.stringify(request.body)
+		this.logger.log(
+			`${LOG_MESSAGES.WEBHOOKS.INBOUND_RECEIVED} POST /api/webhooks/happyrobot/incoming body=${fullBody}`,
+		)
 		return this.incomingCalls.receive(body, "live")
 	}
 	@Post("happyrobot")

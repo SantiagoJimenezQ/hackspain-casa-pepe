@@ -8,7 +8,7 @@ import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { Panel } from "@/components/dashboard/panel";
 import { Button } from "@/components/ui/button";
 import { recoveryTimeline } from "@/lib/agent-trace";
-import { customerView, recoveryProgress, statusOf, type VisualStatus } from "@/lib/live-dashboard";
+import { customerView, recoveryProgress, statusOf, topologyView, type VisualStatus } from "@/lib/live-dashboard";
 
 const COLORS: Record<VisualStatus, string> = { up: "#3ee08f", degraded: "#f5a524", down: "#f04444" };
 const PHASE_LABEL = { recovering: "recuperando", recovered: "recuperado", queued: "en cola" } as const;
@@ -44,9 +44,9 @@ function Title({ children, meta }: { children: React.ReactNode; meta?: React.Rea
 function MapPanel() {
   const { overview } = useDashboard();
   if (!overview) return null;
-  const primary = overview.incident.topology.nodes.find((node) => node.role === "primary");
+  const primary = topologyView(overview).find((node) => node.role === "primary");
   const impacted = primary?.status === "down" || Boolean(overview.incident.impactedAt);
-  const unhealthy = overview.incident.services.filter((service) => service.status !== "healthy").length;
+  const unhealthy = (overview.incident.services ?? []).filter((service) => service.status !== "healthy").length;
   return (
     <Panel className="relative min-h-0 overflow-hidden p-0">
       <CrisisMap overview={overview} />
@@ -181,7 +181,7 @@ function Infrastructure() {
     <Panel className="shrink-0 px-4 py-3">
       <Title>Estado de la infraestructura</Title>
       <div className="scroll-fade-x flex gap-2 overflow-x-auto pb-0.5">
-        {overview.incident.services.map((service) => (
+        {(overview.incident.services ?? []).map((service) => (
           <motion.div
             key={service.identifier}
             layout

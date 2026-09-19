@@ -50,9 +50,9 @@ export type Incident = {
   impactedAt: string;
   businessImpactSummary: string;
   services: Service[];
-  topology: {
-    nodes: Array<{ identifier: string; label: string; region: string; latitude: number; longitude: number; role: "primary" | "backup"; status: "up" | "degraded" | "down"; priority?: number }>;
-    links: Array<{ identifier: string; from: string; to: string }>;
+  topology?: {
+    nodes?: Array<{ identifier: string; label: string; region: string; latitude: number; longitude: number; role: "primary" | "backup"; status: "up" | "degraded" | "down"; priority?: number }>;
+    links?: Array<{ identifier: string; from: string; to: string }>;
   };
     customers: Array<{
     identifier: string; name: string; shortName: string; sector: string; city?: string;

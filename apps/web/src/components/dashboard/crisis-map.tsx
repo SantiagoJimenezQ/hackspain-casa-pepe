@@ -15,7 +15,7 @@ import {
   toolNamesOf,
   worldPath,
 } from "@/lib/crisis-map";
-import { customerView, type VisualStatus } from "@/lib/live-dashboard";
+import { customerView, topologyView, type VisualStatus } from "@/lib/live-dashboard";
 
 const COLORS: Record<VisualStatus, string> = { up: "#3ee08f", degraded: "#f5a524", down: "#f04444" };
 
@@ -51,7 +51,7 @@ export function CrisisMap({ overview }: { overview: Overview }) {
   }
   const { width, height } = size;
   const projection = fitWorldProjection(width, height);
-  const nodes = overview.incident.topology.nodes;
+  const nodes = topologyView(overview);
   const primary = nodes.find((node) => node.role === "primary");
   const impacted = primary?.status === "down" || Boolean(overview.incident.impactedAt);
   const tools = toolNamesOf(overview.toolCalls);

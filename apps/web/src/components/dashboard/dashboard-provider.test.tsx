@@ -282,4 +282,22 @@ describe("live dashboard chrome", () => {
     expect(screen.getByText("Contexto del incidente cargado")).toBeInTheDocument();
     expect(screen.queryByText("Completado")).not.toBeInTheDocument();
   });
+
+  it("renders the map panel when the overview omits topology", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/overview")) {
+        return new Response(
+          JSON.stringify({ ...snapshot, incident: { ...snapshot.incident, topology: undefined } }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    });
+
+    renderWithProviders(<LiveOperationsDashboard />);
+
+    await waitFor(() => expect(screen.getByText("Topología operativa")).toBeInTheDocument());
+    expect(screen.getByText("Golfo · failover activo")).toBeInTheDocument();
+  });
 });

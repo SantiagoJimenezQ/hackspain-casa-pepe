@@ -391,10 +391,7 @@ export class LlmLoopService {
 					case "get_recovery_capacity":
 					case "check_services_status":
 					case "prioritize_customers":
-						if (Object.keys(object).length)
-							throw new ToolArgumentsError(
-								"This tool takes no arguments; received unexpected fields (see argumentDiagnostics).",
-							)
+						// Read tools take no arguments; stray fields from the model are ignored instead of costing a turn.
 						result = await actions.investigate({
 							input: {},
 							name: call.function.name,

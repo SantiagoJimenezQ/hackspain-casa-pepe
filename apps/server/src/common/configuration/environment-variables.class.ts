@@ -211,13 +211,4 @@ export class EnvironmentVariables {
 
 	@IsIn(LLM_REASONING_EFFORTS)
 	LLM_REASONING_EFFORT: LlmReasoningEffort = ""
-
-	@IsString()
-	LLM_FAST_MODEL: string = ""
-
-	@Type(() => Number)
-	@IsInt()
-	@Min(100)
-	@Max(120000)
-	LLM_FAST_TIMEOUT_MILLISECONDS: number = 5000
 }

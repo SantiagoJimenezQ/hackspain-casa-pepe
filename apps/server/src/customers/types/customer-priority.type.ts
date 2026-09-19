@@ -78,7 +78,4 @@ export interface CustomerPriorityReport {
 	readonly generatedAt: string
 	readonly criteria: ReadonlyArray<CustomerPriorityCriterion>
 	readonly customers: ReadonlyArray<CustomerPriority>
-	readonly source?: CustomerPrioritySource
-	readonly model?: string
-	readonly fallbackReason?: string
 }

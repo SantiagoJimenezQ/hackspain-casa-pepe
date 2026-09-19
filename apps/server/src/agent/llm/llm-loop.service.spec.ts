@@ -901,6 +901,43 @@ describe("LlmLoopService", () => {
 		})
 	})
 
+	it("surfaces a runnable step instead of idling when a cycle dispatched nothing", async () => {
+		const incident = createImpactedIncident(12)
+		const plan = createActivePlan(incident)
+		const { client, service } = createHarness(4)
+		const actions = createActions(() =>
+			createState(createInput(incident, plan)),
+		)
+		client.complete
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("wait_for_input", {
+						reason: "Waiting for the recovery that already finished",
+					}),
+				]),
+			)
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("execute_step", {
+						stepIdentifier: "stp_orders-database_execute",
+					}),
+				]),
+			)
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("wait_for_input", {
+						reason: "The dispatched recovery is running; wait for its result",
+					}),
+				]),
+			)
+
+		const outcome = await service.run(actions as unknown as LlmLoopActions)
+
+		// The first wait is challenged, the second one is accepted after real work.
+		expect(outcome).toMatchObject({ executedSteps: 1, kind: "completed" })
+		expect(actions.execute).toHaveBeenCalledTimes(1)
+	})
+
 	it("executes the step selected by the model instead of the first ordered step", async () => {
 		const incident = createImpactedIncident(12)
 		const plan = createActivePlan(incident)

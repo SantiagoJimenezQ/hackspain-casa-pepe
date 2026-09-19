@@ -162,12 +162,26 @@ describe("postponed capacity bookkeeping", () => {
 			priorities,
 			steps: [],
 		}
-		const result = repairLlmPlanDraft(draft, built) as typeof draft
-		expect(result.capacity).toEqual({
-			...draft.capacity,
+		const result = repairLlmPlanDraft(draft, built) as {
+			capacity: Record<string, unknown>
+			priorities: Array<Record<string, unknown>>
+		}
+		const resource = built.incident.resources[0]
+		expect(result.capacity).toMatchObject({
+			assumedCapacity: 7,
+			confirmed: resource.confirmed,
+			plannedUnits: 4,
 			postponedUnits: built.incident.services[0].recoveryCapacityUnits,
+			remainingUnits: 3,
+			totalCapacity: resource.totalCapacity,
 		})
-		expect(result.priorities).toEqual(priorities)
+		// Decisions stay the model's; only the derived labels and blockers are filled in.
+		expect(result.priorities.map((priority) => priority.decision)).toEqual(
+			priorities.map((priority) => priority.decision),
+		)
+		expect(result.priorities[0].serviceName).toBe(
+			built.incident.services[0].name,
+		)
 		expect(draft.capacity.postponedUnits).toBe(999)
 	})
 	it("sets zero when no services are explicitly postponed", () => {

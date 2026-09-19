@@ -392,9 +392,11 @@ export class LlmLoopService {
 							throw new ToolArgumentsError(
 								"Expected a short, nonempty reason",
 							)
-						// Waiting for work that already finished leaves the run idle with
-						// nothing left to wake it, so a runnable step is surfaced once.
-						const runnable = runnableStepIdentifier(state)
+						// A cycle that dispatched nothing and waits while a step is runnable
+						// leaves the run idle with no event left to wake it, so that step is
+						// surfaced once. Waiting after dispatching work stays legitimate.
+						const runnable =
+							executed === 0 ? runnableStepIdentifier(state) : ""
 						if (runnable.length && !waitChallenged) {
 							waitChallenged = true
 							throw new ToolArgumentsError(

@@ -73,3 +73,14 @@ Outbound POST requests are not retried inside the ElevenLabs adapter. If a start
 Set `ENGINEER_CALL_PROVIDER=happyrobot`, keep `ENGINEER_CALL_MODE=live`, and supply the existing `HAPPYROBOT_TRIGGER_URL`, `HAPPYROBOT_API_KEY`, `HAPPYROBOT_WEBHOOK_SECRET`, and publicly reachable `PUBLIC_BASE_URL`. Configure the workflow to return the existing `/api/webhooks/happyrobot` result contract. No tool or agent call-site changes are needed. Finish pending calls before changing provider configuration.
 
 To rehearse offline, set `ENGINEER_CALL_MODE=simulated`. For existing deployments that do not set it, `HAPPYROBOT_MODE` remains the compatibility fallback. Simulation does not call either provider.
+
+## Troubleshoot failed tests
+
+The public API keeps provider failures generic (`CALL_PROVIDER_ERROR`). Server logs now retain sanitized diagnostics. On Vercel, open the API project's **Logs**, choose the production deployment and the time of the attempt, and search for the returned `tool-test_...` identifier. Starting a call logs under `POST /api/tools/tests`; polling errors occur under `GET /api/tools/tests/:identifier`.
+
+Look for:
+
+- `elevenlabs_provider_failure`: failure stage, start/result operation, call identifier, conversation ID/call SID if available, elapsed time, configured timeout, HTTP status, provider request IDs, and sanitized provider error body. Request exceptions retain their message, stack and cause.
+- `tool_test_provider_failure`: test identifier, tool/provider/mode and the adapter failure reason or caught exception. This also covers standalone email and HappyRobot failures.
+
+Credentials, authorization/cookie fields, configured secret values, recipient details and conversation content are redacted; diagnostic depth and text length are bounded. Request headers and call payloads are not logged. API responses remain generic. A timeout can occur after the provider accepted a call, so check the conversation ID in ElevenLabs or the call SID in Twilio before retrying. These logs become available after deploying this change; they cannot recover details discarded by earlier deployments.

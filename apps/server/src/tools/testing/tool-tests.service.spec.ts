@@ -1,4 +1,5 @@
 import "reflect-metadata"
+import { Logger } from "@nestjs/common"
 import { ToolTestEntity } from "@tools/testing/tool-test.entity"
 import { ToolTestsService } from "@tools/testing/tool-tests.service"
 
@@ -308,10 +309,13 @@ describe("ToolTestsService", () => {
 	})
 
 	it("returns a safe failed result when the live provider rejects the call", async () => {
+		const log = jest
+			.spyOn(Logger.prototype, "error")
+			.mockImplementation(() => {})
 		const adapter = {
 			start: jest.fn().mockResolvedValue({
 				kind: "failed",
-				reason: "provider details must stay internal",
+				reason: "provider details must stay internal happyrobot-test-key",
 			}),
 		}
 		const { instance } = service(
@@ -339,6 +343,20 @@ describe("ToolTestsService", () => {
 			expect.objectContaining({ code: "CALL_PROVIDER_ERROR" }),
 		)
 		expect(JSON.stringify(result)).not.toContain("provider details")
+		expect(log).toHaveBeenCalledWith(
+			expect.objectContaining({
+				event: "tool_test_provider_failure",
+				provider: "happyrobot",
+				testIdentifier: result.identifier,
+			}),
+		)
+		expect(JSON.stringify(log.mock.calls)).toContain(
+			"provider details must stay internal",
+		)
+		expect(JSON.stringify(log.mock.calls)).not.toContain(
+			"happyrobot-test-key",
+		)
+		log.mockRestore()
 	})
 	it("reserves concurrent retries once before contacting the email provider", async () => {
 		const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue({

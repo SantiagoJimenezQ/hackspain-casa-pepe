@@ -1,3 +1,4 @@
+import { sanitizeProviderDiagnostic } from "@common/helpers/provider-diagnostic.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
 import {
 	ElevenLabsConfiguration,
@@ -10,7 +11,7 @@ import {
 	EngineerCallRecord,
 	EngineerCallResult,
 } from "@engineers/types/engineer.type"
-import { Injectable } from "@nestjs/common"
+import { Injectable, Logger } from "@nestjs/common"
 import {
 	EngineerCallAuthorizations,
 	EngineerCallIncidentContext,
@@ -61,6 +62,7 @@ const TERMINAL_FAILURE_STATUSES: ReadonlyMap<
 
 @Injectable()
 export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
+	private readonly logger = new Logger(ElevenLabsEngineerCallAdapter.name)
 	readonly mode: EngineerCallMode = "live"
 	readonly provider = "elevenlabs" as const
 
@@ -70,15 +72,24 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 		request: AdapterCallRequest,
 		_deliverResult: Parameters<EngineerCallAdapter["start"]>[1],
 	): Promise<AdapterCallOutcome> {
+		const startedAt = Date.now()
 		const configuration = this.configuration.elevenLabs
 		const configurationError = validateConfiguration(configuration)
 		if (configurationError) {
+			this.diagnostic(request.call, "start", startedAt, {
+				reason: configurationError,
+				stage: "configuration",
+			})
 			return { kind: "failed", reason: configurationError }
 		}
 
 		const destination = request.call.engineer.phone.trim()
 		const destinationError = validateDestination(destination)
 		if (destinationError) {
+			this.diagnostic(request.call, "start", startedAt, {
+				reason: destinationError,
+				stage: "validation",
+			})
 			return { kind: "failed", reason: destinationError }
 		}
 
@@ -96,7 +107,7 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 		}
 
 		try {
-			const { body, response } =
+			const { body, response, errorBody } =
 				await this.fetchJSON<ElevenLabsOutboundCallResponse>(
 					ELEVENLABS_OUTBOUND_CALL_URL,
 					{
@@ -109,6 +120,11 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 					},
 				)
 			if (!response.ok) {
+				this.diagnostic(request.call, "start", startedAt, {
+					stage: "http",
+					...responseDiagnostic(response),
+					body: errorBody,
+				})
 				return {
 					kind: "failed",
 					reason: `ElevenLabs outbound call returned HTTP ${response.status}`,
@@ -122,6 +138,11 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 				typeof body.callSid !== "string" ||
 				!body.callSid.length
 			) {
+				this.diagnostic(request.call, "start", startedAt, {
+					stage: "invalid_response",
+					...responseDiagnostic(response),
+					body,
+				})
 				return {
 					kind: "failed",
 					reason: "ElevenLabs returned an invalid outbound call response",
@@ -136,6 +157,10 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 			}
 			return outcome
 		} catch (error) {
+			this.diagnostic(request.call, "start", startedAt, {
+				error,
+				stage: "request",
+			})
 			return {
 				kind: "failed",
 				reason: describeRequestFailure("start", error),
@@ -150,6 +175,7 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 	async getResult(
 		call: EngineerCallRecord,
 	): Promise<EngineerCallResult | null> {
+		const startedAt = Date.now()
 		const configuration = this.configuration.elevenLabs
 		if (
 			validateConfiguration(configuration) ||
@@ -160,12 +186,17 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 
 		const url = `${ELEVENLABS_CONVERSATION_URL}/${encodeURIComponent(call.providerReference)}`
 		try {
-			const { body, response } =
+			const { body, response, errorBody } =
 				await this.fetchJSON<ElevenLabsConversationResponse>(url, {
 					headers: { "xi-api-key": configuration.apiKey },
 					method: "GET",
 				})
 			if (!response.ok || !body) {
+				this.diagnostic(call, "result", startedAt, {
+					stage: response.ok ? "invalid_response" : "http",
+					...responseDiagnostic(response),
+					body: errorBody,
+				})
 				return null
 			}
 
@@ -174,12 +205,21 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 				(typeof body.agent_id === "string" &&
 					body.agent_id !== configuration.agentId)
 			) {
+				this.diagnostic(call, "result", startedAt, {
+					stage: "identity_mismatch",
+					...responseDiagnostic(response),
+				})
 				return null
 			}
 
 			const status = typeof body.status === "string" ? body.status : ""
 			const failureOutcome = TERMINAL_FAILURE_STATUSES.get(status)
 			if (failureOutcome) {
+				this.diagnostic(call, "result", startedAt, {
+					metadata: body.metadata,
+					stage: "conversation",
+					status,
+				})
 				return buildResult(body, null, failureOutcome)
 			}
 
@@ -188,15 +228,57 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 			}
 
 			return buildResult(body, body.analysis, "completed")
-		} catch {
+		} catch (error) {
+			this.diagnostic(call, "result", startedAt, {
+				error,
+				stage: "request",
+			})
 			return null
 		}
+	}
+
+	private diagnostic(
+		call: EngineerCallRecord,
+		operation: string,
+		startedAt: number,
+		details: Record<string, unknown>,
+	): void {
+		this.logger.error(
+			sanitizeProviderDiagnostic(
+				{
+					callIdentifier: call.identifier,
+					elapsedMilliseconds: Date.now() - startedAt,
+					endpoint:
+						operation === "start"
+							? ELEVENLABS_OUTBOUND_CALL_URL
+							: ELEVENLABS_CONVERSATION_URL,
+					event: "elevenlabs_provider_failure",
+					method: operation === "start" ? "POST" : "GET",
+					operation,
+					provider: this.provider,
+					providerCallSid: call.providerCallSid,
+					providerReference: call.providerReference,
+					timeoutMilliseconds:
+						this.configuration.agent.toolTimeoutMilliseconds,
+					...details,
+				},
+				[
+					this.configuration.elevenLabs?.apiKey,
+					call.engineer.name,
+					call.engineer.phone,
+				].filter((value): value is string => typeof value === "string"),
+			),
+		)
 	}
 
 	private async fetchJSON<T>(
 		url: string,
 		init: RequestInit,
-	): Promise<{ readonly body: T | null; readonly response: Response }> {
+	): Promise<{
+		readonly body: T | null
+		readonly response: Response
+		readonly errorBody: unknown
+	}> {
 		const controller = new AbortController()
 		const timeoutHandle = setTimeout(
 			() => controller.abort(),
@@ -209,7 +291,8 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 				signal: controller.signal,
 			})
 			const body = response.ok ? await readJSON<T>(response) : null
-			return { body, response }
+			const errorBody = response.ok ? null : await readErrorBody(response)
+			return { body, errorBody, response }
 		} finally {
 			clearTimeout(timeoutHandle)
 		}
@@ -365,4 +448,37 @@ function describeRequestFailure(
 		return `ElevenLabs ${operation} request timed out`
 	}
 	return `ElevenLabs ${operation} request failed; inspect the provider before retrying`
+}
+
+function responseDiagnostic(response: Response): Record<string, unknown> {
+	const requestIds: Record<string, string> = {}
+	for (const key of [
+		"request-id",
+		"x-request-id",
+		"xi-request-id",
+		"trace-id",
+		"x-correlation-id",
+	]) {
+		const value = response.headers?.get(key)
+		if (value) requestIds[key] = value
+	}
+	return {
+		httpStatus: response.status,
+		httpStatusText: response.statusText,
+		requestIds,
+	}
+}
+
+async function readErrorBody(response: Response): Promise<unknown> {
+	let text: string
+	try {
+		text = await response.text()
+	} catch (error) {
+		return { bodyReadError: error }
+	}
+	try {
+		return JSON.parse(text)
+	} catch {
+		return text
+	}
 }

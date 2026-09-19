@@ -4,6 +4,7 @@ import { CircleDashed } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { ActiveCallBanner } from "@/components/dashboard/active-call-banner";
 import { AgentPanel } from "@/components/dashboard/agent-panel";
+import { CompanyLogo } from "@/components/dashboard/company-logo";
 import { CrisisMap } from "@/components/dashboard/crisis-map";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { Panel } from "@/components/dashboard/panel";
@@ -174,17 +175,12 @@ function Companies() {
                 style={{ borderLeftColor: ACTION_ACCENT[customer.action] }}
               >
                 <div className="flex min-w-0 items-center gap-2">
-                  {customer.logo ? (
-                    <span
-                      className="size-5 shrink-0 rounded-md bg-contain bg-center bg-no-repeat"
-                      style={{ backgroundImage: `url(${customer.logo})` }}
-                      aria-hidden
-                    />
-                  ) : (
-                    <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-[9px] font-bold text-white" style={{ background: customer.accent }}>
-                      {customer.shortName[0]}
-                    </span>
-                  )}
+                  <CompanyLogo
+                    name={customer.name}
+                    shortName={customer.shortName}
+                    accent={customer.accent}
+                    logo={customer.logo}
+                  />
                   <div className="min-w-0">
                     <p className="truncate font-medium">{customer.name}</p>
                     <p className="truncate text-[10px] text-muted-foreground">{customer.city ?? customer.sector}</p>

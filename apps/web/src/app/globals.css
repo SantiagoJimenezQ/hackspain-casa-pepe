@@ -46,6 +46,7 @@
   --color-map-land: var(--map-land);
   --color-map-stroke: var(--map-stroke);
   --color-map-inset: var(--map-inset);
+  --color-logo-plate: var(--logo-plate);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -98,6 +99,8 @@
   --map-glow: rgb(0 0 0 / 6%);
   --map-node-fill: #ffffff;
   --map-callout: #ffffff;
+  --logo-plate: #ffffff;
+  --logo-plate-border: rgb(0 0 0 / 12%);
 }
 
 .dark {
@@ -142,6 +145,8 @@
   --map-glow: rgb(255 255 255 / 4%);
   --map-node-fill: #1a212b;
   --map-callout: #1c2430;
+  --logo-plate: #f4f6f8;
+  --logo-plate-border: rgb(255 255 255 / 22%);
 }
 
 @layer base {

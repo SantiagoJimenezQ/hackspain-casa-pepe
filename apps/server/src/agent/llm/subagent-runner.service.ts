@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { ActivityService } from "@activity/services/activity.service"
+import { AGENT_MESSAGES } from "@agent/constants/agent-messages.constant"
 import {
 	SUBAGENT_INBOX_LIMIT,
 	SUBAGENT_MAXIMUM_TURNS,
@@ -80,6 +81,7 @@ export class SubagentRunnerService {
 		actions: LlmLoopActions,
 	): Promise<SubagentOutcome> {
 		const { kind } = request
+		const agentMessages = AGENT_MESSAGES[request.state.input.language]
 		const definitions = subagentToolDefinitions(kind)
 		const history: LlmMessage[] = []
 		let executedSteps = 0
@@ -111,7 +113,7 @@ export class SubagentRunnerService {
 					request,
 					"agent.llm-failed",
 					"unavailable",
-					`${detail}. The specialist returned no result; the commander decides how to continue.`,
+					`${detail}. ${agentMessages.specialistWithoutResult}`,
 					{ turn },
 				)
 				return {
@@ -127,7 +129,7 @@ export class SubagentRunnerService {
 				"agent.llm-decision",
 				"decision",
 				response.message.content?.slice(0, 1000) ||
-					"Selecting the next specialist action",
+					agentMessages.selectingNextSpecialistAction,
 				{
 					model: response.model,
 					outputIdentifier: randomUUID(),
@@ -183,13 +185,13 @@ export class SubagentRunnerService {
 					error:
 						error instanceof SubagentArgumentsError
 							? error.message
-							: "The action failed or the state changed before dispatch. Reassess and report what you know.",
+							: agentMessages.specialistActionNoLongerValid,
 				}
 				await this.record(
 					request,
 					"agent.llm-rejected",
 					"action rejected",
-					"The specialist action did not pass runtime validation and was not performed.",
+					agentMessages.specialistActionRejected,
 					{
 						result,
 						tool: safeToolName(definitions, call.function.name),
@@ -218,7 +220,7 @@ export class SubagentRunnerService {
 			request,
 			"agent.limit-reached",
 			"turn limit reached",
-			"The specialist reached its turn budget without reporting a result.",
+			agentMessages.specialistTurnBudgetReached,
 			{ executedSteps },
 		)
 		return {

@@ -291,6 +291,20 @@ export class AgentService {
 		if (Date.now() - nudgedAt < AGENT_STALLED_RUN_MILLISECONDS) {
 			return
 		}
+		// A cycle that failed never reached a decision, so there is no parked plan to respect
+		// and no runnable step to look for: the provider simply refused. The run gets another
+		// cycle, spaced like every other nudge, instead of ending on a rate limit.
+		const { lastOutcome } = this.cycleState.get(active.runIdentifier)
+		if (lastOutcome && lastOutcome.kind === "failed") {
+			this.stalledNudges.set(active.runIdentifier, Date.now())
+			this.logger.warn(LOG_MESSAGES.AGENT.STALLED_RUN_RESUMED, {
+				runIdentifier: active.runIdentifier,
+			})
+			await this.requestCycle(active.runIdentifier, {
+				kind: "follow-up",
+			})
+			return
+		}
 		const plan = await this.plansService.findActivePlan(
 			active.runIdentifier,
 		)

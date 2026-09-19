@@ -87,6 +87,30 @@ export interface AgentMessages {
 	stepRunnableNow(stepIdentifier: string): string
 	/** Shown when the agent wants to wait on the opening engineer call alone. */
 	openingCallPlanOnly: string
+	/** Placeholder decision text while the commander picks its next move. */
+	selectingNextAction: string
+	/** Placeholder decision text while a specialist picks its next move. */
+	selectingNextSpecialistAction: string
+	/** Shown when fresh evidence invalidates a decision the agent had drafted. */
+	newEvidenceReassessing: string
+	/** Shown when the run the decision belongs to is no longer the live one. */
+	runNoLongerLive: string
+	/** Shown when the model answered with something other than a single tool call. */
+	expectedSingleToolCall: string
+	/** Shown when the agent has spent the actions this cycle allows. */
+	actionBudgetReached: string
+	/** Shown when a proposed action did not pass runtime validation. */
+	decisionRejectedDetail: string
+	/** Shown when the cycle stops because the turn budget ran out. */
+	turnBudgetReached: string
+	/** Shown when a specialist call to the model failed. */
+	specialistWithoutResult: string
+	/** Shown when a specialist action did not pass runtime validation. */
+	specialistActionRejected: string
+	/** Correction handed to a specialist whose action no longer matches the state. */
+	specialistActionNoLongerValid: string
+	/** Shown when a specialist used up its turns without reporting. */
+	specialistTurnBudgetReached: string
 	readonly toolWithoutResult: string
 	factsConfirmed(count: number, mode: string): string
 	taskCreated(taskIdentifier: string): string

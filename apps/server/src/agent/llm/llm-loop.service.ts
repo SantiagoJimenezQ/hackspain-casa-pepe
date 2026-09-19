@@ -293,7 +293,8 @@ export class LlmLoopService {
 					"LLM decision",
 					text?.slice(0, 2000) ||
 						reason ||
-						"Selecting the next investigation or action",
+						AGENT_MESSAGES[state.input.language]
+							.selectingNextAction,
 					{
 						...publicTurn,
 						disposition,
@@ -311,7 +312,7 @@ export class LlmLoopService {
 			) {
 				await decision(
 					"stale",
-					"Run is inactive, replaced or replaying",
+					AGENT_MESSAGES[state.input.language].runNoLongerLive,
 				)
 				return {
 					kind: "skipped",
@@ -321,7 +322,7 @@ export class LlmLoopService {
 			if (stateFingerprint(fresh) !== fingerprint) {
 				await decision(
 					"stale",
-					"New evidence arrived; reassessing before taking action",
+					AGENT_MESSAGES[state.input.language].newEvidenceReassessing,
 				)
 				history.length = 0
 				continue
@@ -330,7 +331,7 @@ export class LlmLoopService {
 			if (calls.length !== 1) {
 				await decision(
 					"rejected",
-					"Expected exactly one declared tool call",
+					AGENT_MESSAGES[state.input.language].expectedSingleToolCall,
 				)
 				history.push({
 					content:
@@ -377,7 +378,8 @@ export class LlmLoopService {
 							this.configuration.agent.maximumStepsPerCycle
 						)
 							throw new Error(
-								"Action budget reached; wait for operator or next event",
+								AGENT_MESSAGES[state.input.language]
+									.actionBudgetReached,
 							)
 						result = await actions.execute(
 							object.stepIdentifier,
@@ -479,7 +481,7 @@ export class LlmLoopService {
 					state,
 					"agent.llm-rejected",
 					"Decision rejected",
-					"The proposed action did not pass runtime validation; the model must revise it.",
+					AGENT_MESSAGES[state.input.language].decisionRejectedDetail,
 					{
 						...publicTurn,
 						disposition: "rejected",
@@ -510,7 +512,7 @@ export class LlmLoopService {
 			state,
 			"agent.limit-reached",
 			"LLM turn limit reached",
-			"Autonomous decisions paused at the turn budget. Review activity and request another cycle to continue.",
+			AGENT_MESSAGES[state.input.language].turnBudgetReached,
 			{ executedSteps: executed },
 		)
 		return {

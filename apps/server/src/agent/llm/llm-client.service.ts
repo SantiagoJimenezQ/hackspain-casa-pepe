@@ -33,15 +33,13 @@ export class LlmClientService {
 	async complete(
 		messages: LlmMessage[],
 		tools: LlmToolDefinition[],
-		onTextOrOverrides?:
-			| ((text: string) => Promise<void>)
-			| LlmCompletionOverrides,
+		onText?: (text: string) => Promise<void>,
+		overrides: LlmCompletionOverrides = {},
 	): Promise<{ message: LlmMessage; usage: unknown; model: string }> {
-		const configuration = this.providerConfiguration(onTextOrOverrides)
-		const onText =
-			typeof onTextOrOverrides === "function"
-				? onTextOrOverrides
-				: undefined
+		const configuration = {
+			...this.providerConfiguration(),
+			...overrides,
+		}
 		const responseData = await this.request(
 			configuration,
 			messages,
@@ -100,31 +98,18 @@ export class LlmClientService {
 			throw new LlmClientError("LLM provider configuration is invalid")
 		}
 
-		return mergeCompletionOverrides(
-			{
-				apiKey,
-				baseURL,
-				fastModel:
-					typeof configured.fastModel === "string"
-						? configured.fastModel.trim()
-						: "",
-				fastTimeoutMilliseconds:
-					Number.isInteger(configured.fastTimeoutMilliseconds) &&
-					configured.fastTimeoutMilliseconds >= 100 &&
-					configured.fastTimeoutMilliseconds <= 120000
-						? configured.fastTimeoutMilliseconds
-						: configured.timeoutMilliseconds,
-				maximumOutputTokens: configured.maximumOutputTokens,
-				maximumTurns: configured.maximumTurns,
-				model,
-				reasoningEffort: configured.reasoningEffort,
-				streamOutput: configured.streamOutput === true,
-				timeoutMilliseconds: configured.timeoutMilliseconds,
-			},
-			typeof onTextOrOverrides === "object"
-				? onTextOrOverrides
-				: undefined,
-		)
+		return {
+			apiKey,
+			baseURL,
+			fastModel: configured.fastModel.trim(),
+			fastTimeoutMilliseconds: configured.fastTimeoutMilliseconds,
+			maximumOutputTokens: configured.maximumOutputTokens,
+			maximumTurns: configured.maximumTurns,
+			model,
+			reasoningEffort: configured.reasoningEffort,
+			streamOutput: configured.streamOutput === true,
+			timeoutMilliseconds: configured.timeoutMilliseconds,
+		}
 	}
 
 	private async request(

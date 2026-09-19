@@ -25,6 +25,6 @@ export class CustomersController {
 		const runIdentifier = await this.runsService.resolveRunIdentifier(
 			query.runIdentifier,
 		)
-		return this.priorities.prioritize(runIdentifier)
+		return this.priorities.prioritize(runIdentifier, query.mode)
 	}
 }

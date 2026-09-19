@@ -20,6 +20,7 @@ export interface RuntimeConfiguration {
 export interface DatabaseConfiguration {
 	readonly url: string
 	readonly queryLogging: boolean
+	readonly poolMaximum: number
 }
 
 export interface AuthenticationConfiguration {

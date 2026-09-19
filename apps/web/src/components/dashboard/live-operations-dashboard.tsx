@@ -72,9 +72,9 @@ function Status({ label, status }: { label: string; status: VisualStatus }) {
   );
 }
 
-function Title({ children, meta }: { children: React.ReactNode; meta?: React.ReactNode }) {
+function Title({ children, meta, className }: { children: React.ReactNode; meta?: React.ReactNode; className?: string }) {
   return (
-    <div className="mb-3 flex items-center justify-between gap-2">
+    <div className={cn("mb-3 flex items-center justify-between gap-2", className)}>
       <h2 className="text-[13px] font-medium">{children}</h2>
       {meta}
     </div>
@@ -218,6 +218,7 @@ function Recovery() {
     <Panel className="min-h-0">
       <div className="px-4 pt-3">
         <Title
+          className="mb-2"
           meta={
             <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
               {recovery.completed}/{recovery.total}
@@ -227,29 +228,29 @@ function Recovery() {
           {t("migration.title")}
         </Title>
       </div>
-      <div className="px-4 pb-3">
-        <div className="flex items-baseline gap-2">
-          <motion.span
-            className="font-mono text-[26px] leading-none font-semibold tabular-nums"
-            animate={{ color: complete ? COLORS.up : "var(--foreground)" }}
-            transition={{ duration: 0.4 }}
-          >
-            {recovery.percent}%
-          </motion.span>
-          <span className="text-[10px] text-muted-foreground">
+      <div className="flex items-center gap-3 px-4 pb-2.5">
+        <motion.span
+          className="font-mono text-[22px] leading-none font-semibold tabular-nums"
+          animate={{ color: complete ? COLORS.up : "var(--foreground)" }}
+          transition={{ duration: 0.4 }}
+        >
+          {recovery.percent}%
+        </motion.span>
+        <div className="min-w-0 flex-1">
+          <p className="mb-1 text-[9px] leading-none text-muted-foreground">
             {t("migration.servicesDone", { done: recovery.completed, total: recovery.total })}
-          </span>
-        </div>
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-          <motion.div
-            className="h-full rounded-full"
-            style={{ background: `linear-gradient(90deg, color-mix(in srgb, ${COLORS.up} 55%, transparent), ${COLORS.up})` }}
-            animate={{ width: `${recovery.percent}%` }}
-            transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-          />
+          </p>
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            <motion.div
+              className="h-full rounded-full"
+              style={{ background: `linear-gradient(90deg, color-mix(in srgb, ${COLORS.up} 55%, transparent), ${COLORS.up})` }}
+              animate={{ width: `${recovery.percent}%` }}
+              transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+            />
+          </div>
         </div>
       </div>
-      <ol ref={scrollRef} className={cn(scrollFadeClass, "flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 pb-3")}>
+      <ol ref={scrollRef} className={cn(scrollFadeClass, "flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 pb-3")}>
         <LayoutGroup>
           <AnimatePresence initial={false}>
             {items.map((item) => (
@@ -261,7 +262,7 @@ function Recovery() {
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.3, layout: { duration: 0.35, ease: [0.23, 1, 0.32, 1] } }}
                 className={cn(
-                  "flex min-h-9 flex-1 basis-0 items-center gap-2.5 overflow-hidden rounded-md border border-l-2 px-2.5 py-1.5",
+                  "flex min-h-7 flex-1 basis-0 items-center gap-2.5 overflow-hidden rounded-md border border-l-2 px-2.5 py-1",
                   PHASE_ROW[item.phase],
                 )}
                 style={{ borderLeftColor: PHASE_ACCENT[item.phase] }}

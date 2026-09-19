@@ -172,4 +172,24 @@ describe("live dashboard adapter", () => {
     expect(customerViewOrdered(later).map((customer) => customer.identifier)).toEqual(["beta", "alpha", "gamma"]);
     expect(customerViewOrdered(later).map((customer) => customer.action)).toEqual(["recovered", "migrating", "offline"]);
   });
+  it("lifts recovered companies above the ones still migrating", () => {
+    const board = customerOverview({
+      services: [
+        { identifier: "svc-a", status: "recovering", lastChangedAt: "2026-09-19T10:00:05.000Z" },
+        { identifier: "svc-b", status: "healthy", lastChangedAt: "2026-09-19T10:00:30.000Z" },
+        { identifier: "svc-c", status: "down" },
+      ],
+      customers: [
+        { identifier: "alpha", serviceIdentifiers: ["svc-a"] },
+        { identifier: "beta", serviceIdentifiers: ["svc-b"] },
+        { identifier: "gamma", serviceIdentifiers: ["svc-c"] },
+      ],
+      tools: [
+        tool({ identifier: "t1", name: "execute_recovery", status: "running", startedAt: "2026-09-19T10:00:05.000Z", input: { serviceIdentifier: "svc-a" } }),
+        tool({ identifier: "t2", name: "execute_recovery", status: "succeeded", startedAt: "2026-09-19T10:00:30.000Z", input: { serviceIdentifier: "svc-b" } }),
+      ],
+    });
+    expect(customerViewOrdered(board).map((customer) => customer.identifier)).toEqual(["beta", "alpha", "gamma"]);
+    expect(customerViewOrdered(board).map((customer) => customer.action)).toEqual(["recovered", "migrating", "offline"]);
+  });
 });

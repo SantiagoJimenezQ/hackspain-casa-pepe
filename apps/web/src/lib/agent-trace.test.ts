@@ -100,6 +100,25 @@ describe("agent trace", () => {
     expect(mapToolState("failed")).toBe("output-error");
   });
 
+  it("labels every tool in the selected language, including the delegation verbs", () => {
+    expect(toolTitle({ name: "check_services_status", input: {} }, [], "es")).toBe(
+      "Comprobando cada servicio por su cuenta",
+    );
+    expect(toolTitle({ name: "check_services_status", input: {} }, [], "en")).toBe(
+      "Checking every service independently",
+    );
+    expect(
+      toolTitle({ name: "delegate_investigation", input: {}, status: "succeeded" }, [], "en"),
+    ).toBe("Asked the investigator for evidence");
+    expect(
+      toolTitle({ name: "call_engineer", input: { engineerName: "Guillermo" }, status: "succeeded" }, [], "en"),
+    ).toBe("Called the on-call engineer: Guillermo");
+  });
+
+  it("falls back to the raw tool name when nothing is translated", () => {
+    expect(toolTitle({ name: "brand_new_tool", input: {} }, [], "en")).toBe("brand new tool");
+  });
+
   it("uses Spanish titles with the recovered service name", () => {
     expect(toolTitle({ name: "get_incident_context", input: {} })).toBe("Leyendo el contexto del incidente");
     expect(toolTitle({ name: "propose_plan", input: {} })).toBe("Redactando el plan");

@@ -84,7 +84,7 @@ export class InboundWebhooksController {
 		const call = await this.engineersService.recordLiveAuthorizations(body)
 		return {
 			accepted: true as const,
-			authorizations: call.liveAuthorizations,
+			authorizations: call.result?.authorizations,
 			callIdentifier: call.identifier,
 		}
 	}

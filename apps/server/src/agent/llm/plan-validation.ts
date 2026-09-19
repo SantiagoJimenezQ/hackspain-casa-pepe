@@ -842,7 +842,9 @@ function validatePriorities(
 		) {
 			fail(
 				`${path}.capacityUnits`,
-				"must match the incident service recovery cost",
+				service.status === "healthy"
+					? "must be zero for a healthy service"
+					: "must match the incident service recovery cost",
 			)
 		}
 

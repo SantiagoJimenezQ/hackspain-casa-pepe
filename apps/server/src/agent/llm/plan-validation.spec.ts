@@ -554,8 +554,9 @@ describe("repair followed by validation", () => {
 		expect(result.capacity.postponedUnits).toBe(4)
 		expect(result.priorities[0].decision).toBe("postpone")
 	})
-	it("still rejects invalid priority costs and over-capacity recovery plans", () => {
+	it("repairs a misquoted priority cost and still rejects over-capacity recovery plans", () => {
 		const { input, draft } = fixture()
+		const service = input.incident.services[0]
 		const invalidCost = {
 			...draft,
 			priorities: draft.priorities.map((priority) => ({
@@ -563,9 +564,15 @@ describe("repair followed by validation", () => {
 				capacityUnits: 999,
 			})),
 		}
-		expect(() =>
-			validateLlmPlan(repairLlmPlanDraft(invalidCost, input), input),
-		).toThrow("must match the incident service recovery cost")
+		// The cost is trusted state, so the repair restores it instead of sinking the plan.
+		expect(
+			validateLlmPlan(repairLlmPlanDraft(invalidCost, input), input)
+				.priorities[0].capacityUnits,
+		).toBe(service.recoveryCapacityUnits)
+		// A plan built by hand still has to carry the right number.
+		expect(() => validateLlmPlan(invalidCost, input)).toThrow(
+			"must match the incident service recovery cost",
+		)
 		const unsafe = {
 			...draft,
 			capacity: {

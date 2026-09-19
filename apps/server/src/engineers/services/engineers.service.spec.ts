@@ -211,7 +211,9 @@ describe("EngineersService live permissions", () => {
 			trafficFailoverAuthorized: false,
 		})
 
-		expect(record.result?.authorizations?.notifyAllClients.value).toBe(false)
+		expect(record.result?.authorizations?.notifyAllClients.value).toBe(
+			false,
+		)
 	})
 
 	it("lets the provider analysis overwrite the live report when the call ends", async () => {

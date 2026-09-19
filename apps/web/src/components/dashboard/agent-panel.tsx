@@ -99,12 +99,26 @@ function ApprovalRemainder({ title, decision }: { title: string; decision: strin
   );
 }
 
+/**
+ * A proposal turns red only when it was actually rejected. One that was superseded by newer
+ * evidence, or whose disposition has not landed yet, is neither finished nor failed: it reads
+ * grey, because the agent is still working rather than erroring.
+ */
+function proposedToolState(
+  item: Extract<TranscriptItem, { kind: "thinking" }>,
+): "input-streaming" | "input-available" | "output-available" | "output-error" {
+  if (item.disposition === "accepted") return "output-available";
+  if (item.disposition === "rejected") return "output-error";
+  if (item.status === "streaming" || item.disposition === "pending") return "input-available";
+  return "input-streaming";
+}
+
 function ProposedTool({
   call,
   state,
 }: {
   call: LlmPublicToolCall;
-  state: "input-available" | "output-available" | "output-error";
+  state: "input-streaming" | "input-available" | "output-available" | "output-error";
 }) {
   const input = call.arguments && typeof call.arguments === "object" && !Array.isArray(call.arguments)
     ? (call.arguments as Record<string, unknown>)
@@ -161,13 +175,7 @@ function ReasoningRow({
             <ProposedTool
               key={call.id}
               call={call}
-              state={
-                item.disposition === "accepted"
-                  ? "output-available"
-                  : item.status === "streaming" || item.disposition === "pending"
-                    ? "input-available"
-                    : "output-error"
-              }
+              state={proposedToolState(item)}
             />
           ))}
         </div>

@@ -65,6 +65,9 @@ import {
 } from "@tools/types/tool.type"
 import { EngineerCallAuthorizations } from "../../../../../packages/contracts/outbound-calls"
 
+/** Marks a fact the engineer settled by authorizing the work rather than by answering it. */
+const AUTHORIZED_BY_VOICE = "authorized by voice"
+
 const RUNNABLE_STATUSES: ReadonlyArray<PlanStep["status"]> = [
 	"proposed",
 	"approved",
@@ -1368,6 +1371,20 @@ export class AgentService {
 				true,
 				`Authorized by ${this.configuration.demo.engineerName}`,
 			)
+			// The engineer who owns these facts has told us to go ahead, so the questions the
+			// call was meant to settle are settled by that decision. The source says where the
+			// confirmation came from, so an operator can tell a voice go-ahead from an answer.
+			const authorizedSource = `${source} ${AUTHORIZED_BY_VOICE}`
+			for (const question of this.scenarioOf(incident).engineerBriefing
+				.questions) {
+				await this.incidentsService.recordFact(
+					incident.runIdentifier,
+					question.confirmsFact,
+					"confirmed",
+					authorizedSource,
+				)
+				recorded += 1
+			}
 		}
 		return recorded
 	}

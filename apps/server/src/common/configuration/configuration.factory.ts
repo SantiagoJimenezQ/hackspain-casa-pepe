@@ -129,6 +129,7 @@ export function createApplicationConfiguration(
 			maximumOutputTokens: variables.LLM_MAXIMUM_OUTPUT_TOKENS,
 			maximumTurns: variables.LLM_MAXIMUM_TURNS,
 			model: variables.LLM_MODEL,
+			reasoningEffort: variables.LLM_REASONING_EFFORT,
 			timeoutMilliseconds: variables.LLM_TIMEOUT_MILLISECONDS,
 		},
 		recovery: {

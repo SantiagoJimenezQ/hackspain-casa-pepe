@@ -4,6 +4,7 @@ NestJS is the only backend. Its authenticated API is rooted at `/api`, and its g
 
 - `incident.d.ts` describes the incident snapshot, harness events and demo controls.
 - `simulation.d.ts` describes the seeded scenario configuration and stored clock state.
+- `agent.d.ts` describes LLM decision activity events and public audit metadata.
 
 The canonical endpoint reference is [`apps/server/docs/API.md`](../../apps/server/docs/API.md). The server's DTOs validate requests at runtime; these declarations are for consumers and must be updated with the DTOs when the API changes.
 

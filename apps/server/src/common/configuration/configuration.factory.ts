@@ -25,7 +25,48 @@ export function validateEnvironmentVariables(
 			`Invalid environment configuration -> ${descriptions.join(" | ")}`,
 		)
 	}
+	if (
+		variables.LLM_BASE_URL.length > 0 &&
+		!isAllowedLlmBaseURL(variables.LLM_BASE_URL)
+	) {
+		throw new Error(
+			"Invalid environment configuration -> LLM_BASE_URL: use an HTTPS URL; HTTP is only allowed for loopback tests",
+		)
+	}
 	return variables
+}
+
+export function isAllowedLlmBaseURL(baseURL: string): boolean {
+	try {
+		const parsed = new URL(baseURL)
+		if (
+			parsed.username ||
+			parsed.password ||
+			!parsed.hostname ||
+			(parsed.protocol !== "https:" && parsed.protocol !== "http:")
+		) {
+			return false
+		}
+		return (
+			parsed.protocol === "https:" || isLoopbackHostname(parsed.hostname)
+		)
+	} catch {
+		return false
+	}
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+	const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "")
+	if (normalized === "localhost" || normalized === "::1") return true
+	if (!normalized.startsWith("127.")) return false
+	const octets = normalized.split(".")
+	return (
+		octets.length === 4 &&
+		octets.every((octet) => {
+			const value = Number(octet)
+			return /^\d{1,3}$/.test(octet) && value >= 0 && value <= 255
+		})
+	)
 }
 
 export function createApplicationConfiguration(
@@ -66,6 +107,14 @@ export function createApplicationConfiguration(
 				variables.SIMULATED_CALL_DELAY_MILLISECONDS,
 			triggerURL: variables.HAPPYROBOT_TRIGGER_URL,
 			webhookSecret: variables.HAPPYROBOT_WEBHOOK_SECRET,
+		},
+		llm: {
+			apiKey: variables.LLM_API_KEY,
+			baseURL: variables.LLM_BASE_URL,
+			maximumOutputTokens: variables.LLM_MAXIMUM_OUTPUT_TOKENS,
+			maximumTurns: variables.LLM_MAXIMUM_TURNS,
+			model: variables.LLM_MODEL,
+			timeoutMilliseconds: variables.LLM_TIMEOUT_MILLISECONDS,
 		},
 		recovery: {
 			environmentAPIKey: variables.RECOVERY_ENVIRONMENT_API_KEY,

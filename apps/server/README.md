@@ -31,7 +31,7 @@ Other commands: `pnpm build`, `pnpm start`, `pnpm test`, `pnpm lint`, `pnpm form
 
 The repository root is a pnpm workspace (`pnpm-workspace.yaml`), so `pnpm install` can also run from the root. If `pnpm exec` hangs, run the binaries directly (`./node_modules/.bin/nest start`, `./node_modules/.bin/jest`); see the note about `allowBuilds` in the workspace file.
 
-With the default configuration the engineer call and the recovery run in **simulated** mode. The whole demo can be rehearsed without external credentials.
+With the default configuration the engineer call and the recovery run in **simulated** mode. The LLM still requires provider credentials. Tests inject scripted model responses explicitly; see [LLM setup and runtime](docs/LLM-AGENT.md).
 
 ### Supabase
 
@@ -136,14 +136,9 @@ A result that arrives after a reset is rejected with `409 Stale Run` and does no
 
 ## How the agent decides
 
-1. **Observe.** It separates confirmed facts from pending ones. It calls the on-call engineer to confirm the snapshot age, deployment readiness and backup capacity.
-2. **Prioritize.** It scores every failing service by business impact plus a bonus for each service that depends on it. It walks the list in order and reserves capacity for the service and its failing dependencies; when it does not fit, it **postpones the service with the reason**. Services degraded only because of their dependencies are marked `waiting-for-dependency`.
-3. **Coordinate and execute.** It assigns a preparation task per service, asks for approval when the action is risky (database failover), executes recoveries one at a time in priority order and verifies each one with an independent check before marking it complete.
-4. **Adapt.** A change of conditions creates a new plan version, invalidates pending approvals (`superseded`) and explains the changes in `changesFromPrevious`. A rejected approval is respected: the service stays postponed with the operator comment.
+The LLM selects what to investigate, proposes validated plans, chooses individual actions and revises its decisions when new evidence arrives mid-execution. Each turn includes current state and durable evidence. The runtime enforces capacity, dependencies, approvals and stale-state guards. Provider failures or exhausted turn budgets pause autonomous decisions visibly.
 
-5. **Learn.** After each run the agent keeps insights per scenario family: how much backup capacity was really available compared with what the dashboard reported, and the outcome of each recovery action. In the next run, while the capacity is still unconfirmed, it plans with the lowest capacity observed and states that assumption in the plan (`assumptions`) and in the decision explanation. `GET /learning/insights` shows what it knows and `DELETE /learning/insights` makes it forget for a clean demo. `GET /learning/reports/:run` produces the post-incident report.
-
-Limits: cycles per run, steps per cycle, attempts per step, approval and tool timeouts (`AGENT_*` in `.env.example`). Tool calls are idempotent per step and attempt, so actions are never duplicated.
+See [LLM setup, execution semantics and demo acceptance](docs/LLM-AGENT.md).
 
 ## Structure
 

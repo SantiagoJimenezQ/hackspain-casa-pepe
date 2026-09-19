@@ -1,6 +1,7 @@
 import { ActivityModule } from "@activity/activity.module"
 import { ActivityEventEntity } from "@activity/entities/activity-event.entity"
 import { AgentModule } from "@agent/agent.module"
+import { LlmClientService } from "@agent/llm/llm-client.service"
 import { ApprovalsModule } from "@approvals/approvals.module"
 import { ApprovalEntity } from "@approvals/entities/approval.entity"
 import { ApprovalsService } from "@approvals/services/approvals.service"
@@ -27,6 +28,10 @@ import { PlanRecord } from "@plans/types/plan.type"
 import { RecoveryActionEntity } from "@recovery/entities/recovery-action.entity"
 import { RecoveryModule } from "@recovery/recovery.module"
 import { InMemoryRepository } from "@root/testing/in-memory-repository"
+import {
+	createScriptedLlmClient,
+	ScriptedLlmClient,
+} from "@root/testing/scripted-llm.helper"
 import { waitFor } from "@root/testing/wait-for.helper"
 import {
 	DEFAULT_SCENARIO_IDENTIFIER,
@@ -65,6 +70,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 	let tasksService: TasksService
 	let learningService: LearningService
 	let runReportService: RunReportService
+	let scriptedLlm: ScriptedLlmClient
 
 	beforeAll(async () => {
 		let builder = Test.createTestingModule({
@@ -89,6 +95,10 @@ describe("agent flow (integration with in-memory repositories)", () => {
 				.overrideProvider(getRepositoryToken(entity))
 				.useValue(new InMemoryRepository())
 		}
+		scriptedLlm = createScriptedLlmClient()
+		builder = builder
+			.overrideProvider(LlmClientService)
+			.useValue(scriptedLlm)
 		const moduleReference = await builder.compile()
 		application = moduleReference.createNestApplication()
 		await application.init()
@@ -249,7 +259,16 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		)
 		expect(statuses["stp_orders-database_verify"]).toBe("completed")
 		expect(statuses["stp_route-assignment_verify"]).toBe("completed")
-		expect(statuses["stp_package-tracking_execute"]).toBe("postponed")
+		expect(
+			finalPlan.priorities.find(
+				(priority) => priority.serviceIdentifier === "package-tracking",
+			)?.decision,
+		).toBe("postpone")
+		expect(
+			finalPlan.steps.some(
+				(step) => step.identifier === "stp_package-tracking_execute",
+			),
+		).toBe(false)
 		expect(statuses["stp_support-communication"]).toBe("completed")
 
 		const finalIncident =
@@ -276,6 +295,31 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		expect(
 			report.lessons.some((lesson) => lesson.includes("reported 12")),
 		).toBe(true)
+		const firstFlowCalls = scriptedLlm.calls.slice()
+		expect(firstFlowCalls.length).toBeGreaterThan(0)
+		expect(firstFlowCalls.map(({ call }) => call.function.name)).toEqual(
+			expect.arrayContaining(["propose_plan", "execute_step"]),
+		)
+		expect(
+			firstFlowCalls.some(
+				({ call }) => call.function.name === "wait_for_input",
+			),
+		).toBe(true)
+		expect(
+			firstFlowCalls.some(({ messages }) =>
+				messages.some((message) => message.role === "tool"),
+			),
+		).toBe(true)
+		expect(new Set(firstFlowCalls.map(({ call }) => call.id)).size).toBe(
+			firstFlowCalls.length,
+		)
+		expect(firstFlowCalls[0].currentState.input.language).toBe("es")
+		expect(
+			firstFlowCalls[0].currentState.input.incident,
+		).not.toHaveProperty("simulation")
+		expect(
+			firstFlowCalls[0].currentState.input.briefing.questions[0],
+		).not.toHaveProperty("simulatedAnswer")
 	})
 
 	it("uses the capacity learned in the previous run when planning a new one, in either language", async () => {

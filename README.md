@@ -36,7 +36,7 @@ This is a hackathon prototype under active development.
 | Learning | Persisted capacity and recovery-outcome insights, plus per-run reports |
 | Dashboard–backend integration | Implemented through authenticated Next.js server-side proxy routes |
 
-The backend currently uses rule-based recovery prioritization. Engineer calls and recovery actions default to simulated mode; live integrations require configuration and end-to-end validation.
+The backend uses an LLM for investigation, recovery priorities, action selection and mid-plan reassessment. Model configuration is required; provider failure visibly pauses autonomous decisions. Engineer calls and recovery actions default to simulated mode; live integrations require configuration and end-to-end validation.
 
 ## Architecture
 
@@ -59,7 +59,7 @@ harness event or provider callback
 The main backend boundaries are:
 
 - `scenarios` and `incidents`: scenario definitions, live runs, manual controls, and seeded randomized simulation.
-- `agent`, `plans`, `approvals`, and `tasks`: rule-based prioritization, plan versions, human gates, ownership, and replanning.
+- `agent`, `plans`, `approvals`, and `tasks`: LLM investigation and prioritization, validated plan versions, human gates, ownership, and replanning.
 - `tools`, `engineers`, and `recovery`: the tool registry, idempotent tool-call records, simulated/live adapters, asynchronous callbacks, and independent verification.
 - `activity`, `webhooks`, `learning`, and `replays`: audit history, live delivery, cross-run insights, reports, and reproducible replays.
 

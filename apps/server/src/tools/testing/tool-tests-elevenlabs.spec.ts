@@ -246,6 +246,7 @@ describe("ToolTestsService with ElevenLabs", () => {
 			agent_phone_number_id: "phone_test",
 			conversation_initiation_client_data: {
 				dynamic_variables: {
+					call_identifier: expect.any(String),
 					contact_name: "Marta Ruiz",
 					incident_description:
 						"This is a standalone integration test. No real incident or recovery action is in progress.",

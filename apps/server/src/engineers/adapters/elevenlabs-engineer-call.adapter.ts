@@ -37,6 +37,7 @@ type JSONRecord = Record<string, unknown>
 
 interface ElevenLabsOutboundCallResponse extends JSONRecord {
 	readonly success?: unknown
+	readonly message?: unknown
 	readonly conversation_id?: unknown
 	readonly callSid?: unknown
 }
@@ -143,9 +144,16 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 					...responseDiagnostic(response),
 					body,
 				})
+				const providerMessage =
+					typeof body?.message === "string" &&
+					body.message.trim().length
+						? body.message.trim()
+						: ""
 				return {
 					kind: "failed",
-					reason: "ElevenLabs returned an invalid outbound call response",
+					reason: providerMessage.length
+						? `ElevenLabs rejected the call: ${providerMessage}`
+						: "ElevenLabs returned an invalid outbound call response",
 				}
 			}
 

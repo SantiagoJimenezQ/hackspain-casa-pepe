@@ -1,4 +1,8 @@
-export const SUBAGENT_KINDS = ["investigator", "caller", "communicator"] as const
+export const SUBAGENT_KINDS = [
+	"investigator",
+	"caller",
+	"communicator",
+] as const
 
 /** Each specialist answers one bounded objective, so it needs far fewer turns than the commander. */
 export const SUBAGENT_MAXIMUM_TURNS = 6

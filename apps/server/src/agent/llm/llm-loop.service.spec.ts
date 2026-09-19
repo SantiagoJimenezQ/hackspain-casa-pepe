@@ -300,9 +300,7 @@ describe("LlmLoopService", () => {
 		const actions = createActions(() => state)
 		client.complete
 			.mockResolvedValueOnce(
-				completion([
-					toolCall("delegate_investigation", { input: {} }),
-				]),
+				completion([toolCall("delegate_investigation", { input: {} })]),
 			)
 			.mockImplementationOnce(async () => {
 				state = {
@@ -608,9 +606,27 @@ describe("LlmLoopService", () => {
 		client.complete
 			.mockResolvedValueOnce(
 				completion(
-					[toolCall("get_service_health", {})],
+					[
+						toolCall("delegate_investigation", {
+							objective:
+								"Check current service health before planning.",
+						}),
+					],
 					"I need current service health before planning.",
 				),
+			)
+			.mockResolvedValueOnce(
+				completion([toolCall("get_service_health", {})]),
+			)
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("report_result", {
+						details: ["Orders database is down."],
+						pending: [],
+						summary:
+							"Service health confirms Orders database is down.",
+					}),
+				]),
 			)
 			.mockResolvedValueOnce(
 				completion(
@@ -635,7 +651,7 @@ describe("LlmLoopService", () => {
 			input: {},
 			name: "get_service_health",
 		})
-		expect(client.complete).toHaveBeenCalledTimes(2)
+		expect(client.complete).toHaveBeenCalledTimes(4)
 		expect(JSON.stringify(client.complete.mock.calls[0][0])).not.toContain(
 			HIDDEN_SIMULATION_ANSWER,
 		)
@@ -649,6 +665,9 @@ describe("LlmLoopService", () => {
 			HIDDEN_SIMULATION_SCRIPT,
 		)
 		expect(activityInputs(activity).map((input) => input.type)).toEqual([
+			"agent.llm-decision",
+			"agent.llm-decision",
+			"agent.llm-decision",
 			"agent.llm-decision",
 			"agent.llm-decision",
 			"agent.llm-decision",

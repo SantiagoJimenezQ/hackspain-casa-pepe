@@ -62,9 +62,7 @@ export function subagentAvailableSteps(
 			.map((step) => step.identifier),
 	)
 	return plan.steps
-		.filter((step) =>
-			scope.some((name) => name === step.invocation.name),
-		)
+		.filter((step) => scope.some((name) => name === step.invocation.name))
 		.filter((step) =>
 			RUNNABLE_STEP_STATUSES.some((status) => status === step.status),
 		)
@@ -171,11 +169,13 @@ export function subagentContext(
 		case "investigator":
 			return modelVisible({
 				...shared,
-				facts: incident.facts.slice(-SUBAGENT_LIST_LIMIT).map((fact) => ({
-					source: fact.source,
-					statement: fact.statement,
-					status: fact.status,
-				})),
+				facts: incident.facts
+					.slice(-SUBAGENT_LIST_LIMIT)
+					.map((fact) => ({
+						source: fact.source,
+						statement: fact.statement,
+						status: fact.status,
+					})),
 				plan: planSummary(input.previousPlan),
 				resources: incident.resources.map((resource) => ({
 					allocatedCapacity: resource.allocatedCapacity,
@@ -212,7 +212,10 @@ export function subagentContext(
 						}),
 					),
 				},
-				engineer: { name: input.engineer.name, role: input.engineer.role },
+				engineer: {
+					name: input.engineer.name,
+					role: input.engineer.role,
+				},
 				unresolvedFacts: incident.facts
 					.filter((fact) => fact.status !== "confirmed")
 					.slice(-SUBAGENT_LIST_LIMIT)

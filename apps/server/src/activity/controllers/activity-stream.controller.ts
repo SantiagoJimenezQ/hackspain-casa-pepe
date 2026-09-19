@@ -3,7 +3,7 @@ import { ActivityService } from "@activity/services/activity.service"
 import { ActivityRecordedEvent } from "@activity/types/activity.type"
 import { DOMAIN_EVENTS } from "@common/constants/domain-events.constant"
 import { RunsService } from "@incidents/services/runs.service"
-import { Controller, MessageEvent, Query, Sse } from "@nestjs/common"
+import { Controller, Headers, MessageEvent, Query, Sse } from "@nestjs/common"
 import { EventEmitter2 } from "@nestjs/event-emitter"
 import { ApiOperation, ApiSecurity, ApiTags } from "@nestjs/swagger"
 import {
@@ -14,6 +14,8 @@ import {
 	map,
 	mergeMap,
 	Observable,
+	takeUntil,
+	timer,
 } from "rxjs"
 
 @ApiTags("Activity")
@@ -31,14 +33,25 @@ export class ActivityStreamController {
 		summary:
 			"Server-sent events with the activity of a run. Replays events after `afterSequence`, then pushes new ones live. Browsers can authenticate with ?apiKey=",
 	})
-	stream(@Query() query: ListActivityDTO): Observable<MessageEvent> {
+	stream(
+		@Query() query: ListActivityDTO,
+		@Headers("last-event-id") lastEventId?: string,
+	): Observable<MessageEvent> {
+		// EventSource keeps its original URL when reconnecting; the header is newer.
+		const resumeSequence = Number(lastEventId)
+		const afterSequence =
+			lastEventId &&
+			Number.isSafeInteger(resumeSequence) &&
+			resumeSequence >= 0
+				? resumeSequence
+				: query.afterSequence
 		const backlog = from(
 			this.runsService.resolveRunIdentifier(query.runIdentifier),
 		).pipe(
 			mergeMap((runIdentifier) =>
 				from(
 					this.activityService.list({
-						afterSequence: query.afterSequence,
+						afterSequence,
 						limit: query.limit,
 						offset: 0,
 						runIdentifier,
@@ -74,6 +87,8 @@ export class ActivityStreamController {
 			),
 		)
 		return concat(backlog, live).pipe(
+			// End normally before Vercel kills the invocation at 300 seconds.
+			takeUntil(timer(240_000)),
 			map(({ record }) => ({
 				data: record,
 				id: String(record.sequence),

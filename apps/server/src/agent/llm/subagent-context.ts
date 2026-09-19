@@ -212,6 +212,7 @@ export function subagentContext(
 						}),
 					),
 				},
+				callCapabilities: request.state.evidence.engineerCall ?? null,
 				engineer: {
 					name: input.engineer.name,
 					role: input.engineer.role,

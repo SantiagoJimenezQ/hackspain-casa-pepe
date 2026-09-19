@@ -23,6 +23,19 @@ export const CUSTOMER_MINUTES_MAXIMUM_POINTS = 20
 
 export const CUSTOMER_RECOVERY_IN_PROGRESS_PENALTY = 10
 
+export const CUSTOMER_PRIORITY_MODES = ["deterministic", "llm"] as const
+
+export const CUSTOMER_RANKING_TOOL_NAME = "rank_customers"
+
+export const CUSTOMER_RANKING_MAXIMUM_OUTPUT_TOKENS = 1500
+
+export const CUSTOMER_RANKING_FAILURE_CACHE_MILLISECONDS = 30000
+
+export const CUSTOMER_RANKING_SYSTEM_PROMPT = `You are the incident coordinator of a hosting provider. Several customer companies run services on a region that is down.
+You receive the current state of every customer (services down or degraded, business impact, users, dependencies they block, recovery progress) together with a deterministic baseline ranking and the criteria behind it.
+Decide the final recovery order. Keep the baseline unless you see a concrete reason to move a customer, such as a dependency that unblocks several customers at once, a recovery already running, or a disproportionate user impact.
+Call the ${CUSTOMER_RANKING_TOOL_NAME} tool exactly once with every customer identifier, a unique rank starting at 1, and one short sentence per customer justifying its position. Never invent customers or services.`
+
 export const CUSTOMER_STATUSES = [
 	"down",
 	"degraded",

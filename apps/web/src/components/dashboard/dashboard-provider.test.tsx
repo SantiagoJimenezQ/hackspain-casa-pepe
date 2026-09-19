@@ -159,7 +159,6 @@ describe("live dashboard provider", () => {
     let removed = false;
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
-      if (url.includes("/activity/llm?")) return Response.json({ items: [], nextBeforeSequence: null });
       if (url.endsWith("/overview")) return Response.json(idleSnapshot);
       if (url.endsWith("/learning/insights") && init?.method === "DELETE") {
         if (!succeeds) return Response.json({ message: "No se pudieron borrar los aprendizajes" }, { status: 500 });
@@ -192,7 +191,6 @@ describe("live dashboard provider", () => {
     let started = false;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.includes("/activity/llm?")) return Response.json({ items: [], nextBeforeSequence: null });
       if (isOverview(url)) {
         if (!started) {
           return new Response(
@@ -222,7 +220,6 @@ describe("live dashboard provider", () => {
     let started = false;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
-      if (url.includes("/activity/llm?")) return Response.json({ items: [], nextBeforeSequence: null });
       calls.push(`${init?.method ?? "GET"} ${url}`);
       if (isOverview(url)) {
         if (!started) {
@@ -251,7 +248,6 @@ describe("live dashboard provider", () => {
     vi.stubGlobal("EventSource", FakeEventSource);
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.includes("/activity/llm?")) return Response.json({ items: [], nextBeforeSequence: null });
       if (isOverview(url)) {
         const runIdentifier = overviewCalls++ === 0 ? "run-1" : "run-2";
         const sequence = runIdentifier === "run-1" ? 5 : 1;
@@ -291,7 +287,6 @@ describe("live dashboard chrome", () => {
     let started = false;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.includes("/activity/llm?")) return Response.json({ items: [], nextBeforeSequence: null });
       if (isOverview(url)) {
         if (!started) return new Response(JSON.stringify({ message: "no run" }), { status: 409 });
         return new Response(JSON.stringify(idleSnapshot), { status: 200 });
@@ -323,7 +318,6 @@ describe("live dashboard chrome", () => {
     let runIdentifier = "run-1";
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.includes("/activity/llm?")) return Response.json({ items: [], nextBeforeSequence: null });
       if (isOverview(url)) {
         return new Response(
           JSON.stringify({
@@ -358,7 +352,6 @@ describe("live dashboard chrome", () => {
   it("shows impact, twist, reset and the elapsed timer once a run is live", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.includes("/activity/llm?")) return Response.json({ items: [], nextBeforeSequence: null });
       if (isOverview(url)) {
         return new Response(JSON.stringify(snapshot), { status: 200 });
       }
@@ -400,7 +393,6 @@ describe("live dashboard chrome", () => {
   it("renders the map panel when the overview omits topology", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.includes("/activity/llm?")) return Response.json({ items: [], nextBeforeSequence: null });
       if (isOverview(url)) {
         return new Response(
           JSON.stringify({ ...snapshot, incident: { ...snapshot.incident, topology: undefined } }),
@@ -419,7 +411,6 @@ describe("live dashboard chrome", () => {
   it("holds the incident clock at zero until impact", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.includes("/activity/llm?")) return Response.json({ items: [], nextBeforeSequence: null });
       if (isOverview(url)) {
         return new Response(
           JSON.stringify({
@@ -448,7 +439,6 @@ describe("live dashboard chrome", () => {
   it("freezes the incident clock as Resuelto when the run recovers", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.includes("/activity/llm?")) return Response.json({ items: [], nextBeforeSequence: null });
       if (isOverview(url)) {
         return new Response(
           JSON.stringify({
@@ -514,7 +504,7 @@ describe("live dashboard chrome", () => {
     expect(screen.queryByText("Preparando el siguiente paso")).not.toBeInTheDocument();
   });
 
-  it("shows completed decision text and keeps executed tool details separate", async () => {
+  it("collapses finished reasoning until expanded and keeps tool details separate", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (isOverview(url)) {
@@ -544,10 +534,11 @@ describe("live dashboard chrome", () => {
 
     const { user } = renderWithProviders(<LiveOperationsDashboard />);
 
-    await waitFor(() => expect(screen.getByText("Necesito el contexto actual del incidente.")).toBeVisible());
+    await waitFor(() => expect(screen.getByRole("button", { name: /Necesito el contexto actual del incidente\. · <1s/ })).toBeInTheDocument());
     expect(screen.getByText("Leyó el contexto del incidente")).toBeInTheDocument();
     expect(screen.queryByText("Razonamiento")).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: /Necesito el contexto actual del incidente\. · <1s/ }));
     expect(screen.getByText("Necesito el contexto actual del incidente.")).toBeVisible();
 
     await user.click(screen.getByText("Leyó el contexto del incidente"));
@@ -618,7 +609,7 @@ describe("live dashboard chrome", () => {
     renderWithProviders(<LiveOperationsDashboard />);
 
     await waitFor(() => expect(screen.getAllByText("Comprobando capacidad de recuperación").length).toBeGreaterThan(0));
-    expect(screen.getByText(/Rechazada/)).toBeInTheDocument();
+    expect(screen.getByText(/Rechazado/)).toBeInTheDocument();
     expect(screen.queryByText("Razonamiento")).not.toBeInTheDocument();
     expect(screen.queryByText("Selecting the next investigation or action")).not.toBeInTheDocument();
     expect(screen.queryByText("En espera")).not.toBeInTheDocument();
@@ -838,46 +829,4 @@ describe("live dashboard chrome", () => {
     expect(screen.getByRole("status", { name: /Llamando a Marta Ruiz/ })).toHaveTextContent(/\d{2}:\d{2}/);
     expect(screen.getByText("Ingeniera de plataforma")).toBeInTheDocument();
   });
-});
-
-function HistoryProbe() {
- const { decisionEvents, loadOlderDecisions, hasOlderDecisions, historyError, resetDemo }=useDashboard();
- return <><output data-testid="decision-events">{decisionEvents.map(e=>e.summary).join("|")}</output><button onClick={()=>void loadOlderDecisions()} disabled={!hasOlderDecisions}>Older</button><button onClick={()=>void resetDemo()}>Reset history</button>{historyError ? <p role="alert">{historyError}</p> : null}</>;
-}
-
-describe("decision history recovery",()=>{
- it("V11 ignores history that resolves after reset and exposes exhausted pagination",async()=>{
-  let run="A";let release!: (response:Response)=>void;
-  vi.spyOn(globalThis,"fetch").mockImplementation(async input=>{
-   const url=String(input);
-   if(url.includes("/activity/llm?")) {
-    if(url.includes("runIdentifier=A")) return new Promise<Response>(resolve=>{release=resolve});
-    return Response.json({items:[{identifier:"B1",sequence:1,runIdentifier:"B",type:"agent.llm-decision",summary:"New run",payload:{text:"New run",outputIdentifier:"B1",disposition:"accepted"}}],nextBeforeSequence:null});
-   }
-   if(url.endsWith("/demo/reset")) {run="B";return Response.json({});}
-   if(isOverview(url)) return Response.json({...idleSnapshot,incident:{...idleSnapshot.incident,runIdentifier:run},recentActivity:[]});
-   return Response.json([]);
-  });
-  const {user}=renderWithProviders(<HistoryProbe/>);
-  await waitFor(()=>expect(release).toBeDefined());
-  await user.click(screen.getByRole("button",{name:"Reset history"}));
-  await waitFor(()=>expect(screen.getByTestId("decision-events")).toHaveTextContent("New run"));
-  release(Response.json({items:[{identifier:"A1",sequence:1,runIdentifier:"A",type:"agent.llm-decision",summary:"Old run"}],nextBeforeSequence:null}));
-  await waitFor(()=>expect(screen.getByRole("button",{name:"Older"})).toBeDisabled());
-  expect(screen.getByTestId("decision-events")).not.toHaveTextContent("Old run");
- });
- it("V10 exposes a history failure and permits retry",async()=>{
-  let attempts=0;
-  vi.spyOn(globalThis,"fetch").mockImplementation(async input=>{
-   const url=String(input);
-   if(url.includes("/activity/llm?")) return ++attempts===1 ? Response.json({message:"unavailable"},{status:503}) : Response.json({items:[],nextBeforeSequence:null});
-   if(isOverview(url)) return Response.json(idleSnapshot);
-   return Response.json([]);
-  });
-  const {user}=renderWithProviders(<HistoryProbe/>);
-  expect(await screen.findByRole("alert")).toBeVisible();
-  await user.click(screen.getByRole("button",{name:"Older"}));
-  await waitFor(()=>expect(screen.getByRole("button",{name:"Older"})).toBeDisabled());
-  expect(screen.queryByRole("alert")).not.toBeInTheDocument();expect(attempts).toBe(2);
- });
 });

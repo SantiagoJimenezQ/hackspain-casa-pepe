@@ -15,8 +15,6 @@ import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Task, TaskContent, TaskTrigger } from "@/components/ai-elements/task";
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
-import { CurrentDecision } from "@/components/dashboard/current-decision";
-import { DecisionCard } from "@/components/dashboard/decision-card";
 import { Panel } from "@/components/dashboard/panel";
 import { PlanTodosCard } from "@/components/dashboard/plan-todos-card";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
@@ -224,7 +222,6 @@ function TranscriptItemView({
   open: Record<string, boolean>;
   onOpenChange: (id: string, next: boolean) => void;
 }) {
-  if (item.kind === "decision") return <DecisionCard decision={item.decision} />;
   if (item.kind === "thinking") {
     return (
       <ReasoningRow
@@ -268,7 +265,6 @@ function TranscriptItemView({
 }
 
 function transcriptKey(item: TranscriptItem) {
-  if (item.kind === "decision") return item.decision.id;
   if (item.kind === "tool") return item.tool.identifier;
   if (item.kind === "task") return item.id;
   if (item.kind === "approval") return item.approval.identifier;
@@ -276,16 +272,15 @@ function transcriptKey(item: TranscriptItem) {
 }
 
 export function AgentPanel() {
-  const { overview, activity, decisionEvents, historyLoading, historyError, hasOlderDecisions, loadOlderDecisions, busyAction, decideApproval } = useDashboard();
-  const { t, locale } = useI18n();
-  const es = locale === "es";
+  const { overview, activity, busyAction, decideApproval } = useDashboard();
+  const { t } = useI18n();
   const [manualOpen, setManualOpen] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const work = useMemo(() => (overview ? currentWork(overview, activity) : null), [overview, activity]);
   const tools = useMemo(() => (overview ? mergedToolCalls(overview, activity) : []), [overview, activity]);
-  const items = useMemo(() => (overview ? buildTranscript(overview, activity, decisionEvents) : []), [overview, activity, decisionEvents]);
+  const items = useMemo(() => (overview ? buildTranscript(overview, activity) : []), [overview, activity]);
 
   useEffect(() => () => {
     if (copiedTimer.current) window.clearTimeout(copiedTimer.current);
@@ -355,7 +350,6 @@ export function AgentPanel() {
           DEBUG
         </Button>
       </div>
-      <CurrentDecision overview={overview} />
       {overview.pendingApprovals.length ? (
         <div className="space-y-3 px-4 pb-3">
           {overview.pendingApprovals.map((approval) => (
@@ -385,8 +379,6 @@ export function AgentPanel() {
         <MessageScroller className="min-h-0 flex-1">
           <MessageScrollerViewport className="px-4" aria-label="Trabajo del agente">
             <MessageScrollerContent className="gap-0.5 py-1 pb-4" aria-busy={live}>
-              <button type="button" className="py-2 text-xs text-muted-foreground" disabled={historyLoading} onClick={() => void loadOlderDecisions()}>{historyLoading ? (es ? "Cargando…" : "Loading…") : hasOlderDecisions ? (es ? "Cargar decisiones anteriores" : "Load older decisions") : (es ? "Actualizar historial" : "Refresh history")}</button>
-              {historyError ? <p role="alert" className="text-xs text-status-down">{historyError}</p> : null}
               {items.map((item) => (
                 <MessageScrollerItem key={transcriptKey(item)} messageId={transcriptKey(item)} className="[content-visibility:visible]">
                   <TranscriptItemView

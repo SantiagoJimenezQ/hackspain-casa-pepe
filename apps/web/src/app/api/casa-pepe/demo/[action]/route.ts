@@ -1,6 +1,6 @@
 import { proxyJSON } from "@/lib/casa-pepe-server";
 
-const ACTIONS = new Set(["start", "impact", "twist", "reset"]);
+const ACTIONS = new Set(["start", "impact", "twist", "reset", "language"]);
 
 type DemoRouteContext = {
   params: Promise<{ action: string }>;
@@ -19,7 +19,8 @@ export async function POST(
   if (!ACTIONS.has(action)) {
     return Response.json({ message: "Control de demo no permitido." }, { status: 404 });
   }
-  const body = action === "start" ? await request.text() : undefined;
+  const carriesBody = action === "start" || action === "language";
+  const body = carriesBody ? await request.text() : undefined;
   return proxyJSON(`/demo/${action}${runQuery(request)}`, {
     method: "POST",
     body: body || undefined,

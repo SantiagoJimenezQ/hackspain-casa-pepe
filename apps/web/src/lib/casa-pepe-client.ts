@@ -1,4 +1,5 @@
 import type { LearningInsight, LlmHistoryPage, Overview, RunReport } from "@/lib/casa-pepe-types";
+import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n";
 
 export class CasaPepeClientError extends Error {
   constructor(
@@ -60,6 +61,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 type RunScoped = { runIdentifier?: string };
 
+/** Each locale has its own scenario: the language of a run is the language it is written in. */
+const SCENARIO_BY_LOCALE: Record<Locale, string> = {
+  es: "meteorite-me-south-1-es",
+  en: "meteorite-me-south-1",
+};
+
 async function startRun(path: string, body?: string): Promise<RunScoped> {
   const snapshot = await request<RunScoped>(path, { method: "POST", body });
   if (snapshot.runIdentifier) rememberRun(snapshot.runIdentifier);
@@ -82,10 +89,15 @@ export const casaPepeClient = {
   insights: () => request<LearningInsight[]>("/api/casa-pepe/learning/insights"),
   resetLearnings: () => request<{ removed: number }>("/api/casa-pepe/learning/insights", { method: "DELETE" }),
   report: () => request<RunReport>(withRun("/api/casa-pepe/learning/reports/current")),
-  start: () =>
+  start: (locale: Locale = DEFAULT_LOCALE) =>
     startRun(
       "/api/casa-pepe/demo/start",
-      JSON.stringify({ scenarioIdentifier: "meteorite-me-south-1-es" }),
+      JSON.stringify({ scenarioIdentifier: SCENARIO_BY_LOCALE[locale] }),
+    ),
+  switchLanguage: (locale: Locale) =>
+    startRun(
+      withRun("/api/casa-pepe/demo/language"),
+      JSON.stringify({ language: locale }),
     ),
   impact: () => request(withRun("/api/casa-pepe/demo/impact"), { method: "POST" }),
   twist: () => request(withRun("/api/casa-pepe/demo/twist"), { method: "POST" }),

@@ -60,6 +60,15 @@ export const LOG_MESSAGES = {
 		FINISHED: "Replay finished",
 		STARTED: "Replay started",
 	},
+	SUBAGENTS: {
+		DELEGATION_FAILED: "Failed to complete the specialist delegation",
+		DELEGATION_FINISHED: "Specialist delegation finished",
+		DELEGATION_STARTED: "Specialist delegation started",
+		DISPATCH_OUT_OF_SCOPE:
+			"Specialist tried to dispatch a step outside its own scope",
+		TURN_LIMIT_REACHED:
+			"Specialist reached its turn budget without reporting a result",
+	},
 	TASKS: {
 		ASSIGNED: "Task assigned",
 		UPDATED: "Task updated",

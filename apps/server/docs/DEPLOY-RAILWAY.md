@@ -41,11 +41,12 @@ HAPPYROBOT_WEBHOOK_SECRET=<long random string>
 RECOVERY_MODE=simulated
 RECOVERY_WEBHOOK_SECRET=<long random string>
 
-# LLM (Helmcode)
-LLM_BASE_URL=https://api.helmcode.com/v1
-LLM_API_KEY=<key>
-LLM_MODEL=gpt-5.6-luna
-LLM_FAST_MODEL=gpt-5.6-luna
+# LLM. One variable switches provider; each preset has its own credentials
+LLM_PROVIDER=openai
+LLM_OPENAI_API_KEY=<OpenAI key>
+LLM_OPENAI_MODEL=gpt-5.6-luna
+LLM_OPENAI_FAST_MODEL=gpt-5.4-nano
+LLM_OPENAI_REASONING_EFFORT=none
 LLM_REASONING_EFFORT=low
 LLM_MAXIMUM_OUTPUT_TOKENS=32768
 LLM_TIMEOUT_MILLISECONDS=120000
@@ -72,15 +73,14 @@ call to `DEMO_ENGINEER_PHONE` follows.
 
 ## Model requirements
 
-`gpt-5.6-luna` is a third-party model on Helmcode billed per token from prepaid credit. The
-organisation needs a credit balance or an active subscription, otherwise every agent cycle stops
-with `HTTP 402` and the incident never gets a plan. Models included in the base plan that answer
-with function calling are `deepseek-v4-flash` (about 2.4s on a real planning request), `qwen3.6`
-(about 32s) and `glm5.3-flash` (about 28s); switching is a single variable and needs no redeploy
-of the code.
+`LLM_PROVIDER` chooses between the `LLM_OPENAI_*` and `LLM_DEEPSEEK_*` blocks, so both providers
+can stay configured and switching needs no redeploy.
 
-`LLM_REASONING_EFFORT` is forwarded as `reasoning_effort`. Leave it empty if the chosen model
-rejects that parameter.
+Against OpenAI, gpt-5 models require `reasoning_effort=none` to accept function tools on
+`/chat/completions`, and the client sends `max_completion_tokens` automatically. Through Helmcode
+the gpt-5 family is billed from prepaid credit and answers `HTTP 402` without balance; the models
+included in its base plan are `deepseek-v4-flash` (about 2.4s on a real planning request),
+`qwen3.6` (about 32s) and `glm5.3-flash` (about 28s).
 
 ## Local build check
 

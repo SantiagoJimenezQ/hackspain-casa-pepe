@@ -221,8 +221,10 @@ export class AgentService {
 
 	@Interval(AGENT_TICK_INTERVAL_MILLISECONDS)
 	async tick(): Promise<void> {
-		const activeRuns = await this.runsService.listActiveEntities()
-		await Promise.all(activeRuns.map((active) => this.tickRun(active)))
+		// Sequential on purpose: a parallel sweep over every run exhausts the connection pool.
+		for (const active of await this.runsService.listLiveEntities()) {
+			await this.tickRun(active)
+		}
 	}
 
 	private async tickRun(active: IncidentEntity): Promise<void> {

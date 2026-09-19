@@ -1,3 +1,4 @@
+import { RUN_IDLE_TIMEOUT_MILLISECONDS } from "@agent/constants/agent.constant"
 import {
 	EntityNotFoundException,
 	NoActiveRunException,
@@ -32,6 +33,21 @@ export class RunsService {
 		return this.repository.find({
 			order: { createdAt: "DESC" },
 			where: { active: true },
+		})
+	}
+
+	/**
+	 * Active runs that background work should still follow. An abandoned demo stops being
+	 * ticked so it cannot starve the connection pool of the runs people are actually using.
+	 */
+	async listLiveEntities(): Promise<IncidentEntity[]> {
+		const oldestAllowed = Date.now() - RUN_IDLE_TIMEOUT_MILLISECONDS
+		return (await this.listActiveEntities()).filter((entity) => {
+			const updatedAt = new Date(entity.updatedAt).getTime()
+			if (Number.isNaN(updatedAt)) {
+				return true
+			}
+			return updatedAt >= oldestAllowed
 		})
 	}
 

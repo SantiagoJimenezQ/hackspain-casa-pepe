@@ -49,6 +49,10 @@ Payload: `{ outputIdentifier, turn, text, provisional: true }`. Append `text` in
 
 Tools execute only after the stream terminates, the complete response is validated, and current incident state is rechecked. Missing termination, malformed or oversized output, truncation, and timeouts pause autonomous decisions. Disable the flag to roll back without frontend changes.
 
+## Outbound call contract
+
+See [call_engineer input and outcome](CALL-ENGINEER-CONTRACT.md) for exact plan inputs, provider payloads, pending/completed/failed results, and the permission decision table. The current ElevenLabs agent collects notification and failover permissions through one combined question, not arbitrary technical answers. The runtime system prompt carries the same guidance so the model receives it on each decision cycle.
+
 ## Check configured models
 
 `POST /api/agent/models/test` requires the usual operator API key and no request body.

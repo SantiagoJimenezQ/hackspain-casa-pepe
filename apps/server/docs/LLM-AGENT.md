@@ -48,3 +48,7 @@ The existing authenticated `/api/activity/stream` and Next.js proxy deliver `age
 Payload: `{ outputIdentifier, turn, text, provisional: true }`. Append `text` in activity sequence order and deduplicate by sequence on reconnect. The first fragment is emitted immediately; subsequent fragments are batched at 160 characters, with a final flush and a 2,000-character public output limit per turn. Output is persisted like other activity for replay. Correlate terminal `agent.llm-decision`, `agent.llm-failed`, or `agent.llm-stale` via `outputIdentifier`; discard provisional output on failure or stale evidence. The final decision summary remains authoritative.
 
 Tools execute only after the stream terminates, the complete response is validated, and current incident state is rechecked. Missing termination, malformed or oversized output, truncation, and timeouts pause autonomous decisions. Disable the flag to roll back without frontend changes.
+
+## Outbound call contract
+
+See [call_engineer input and outcome](CALL-ENGINEER-CONTRACT.md) for exact plan inputs, provider payloads, pending/completed/failed results, and the permission decision table. The current ElevenLabs agent collects notification and failover permissions through one combined question, not arbitrary technical answers. The runtime system prompt carries the same guidance so the model receives it on each decision cycle.

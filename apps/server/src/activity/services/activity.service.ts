@@ -13,7 +13,7 @@ import { Page } from "@common/types/pagination.type"
 import { Injectable } from "@nestjs/common"
 import { EventEmitter2 } from "@nestjs/event-emitter"
 import { InjectRepository } from "@nestjs/typeorm"
-import { FindOptionsWhere, In, MoreThan, Repository } from "typeorm"
+import { FindOptionsWhere, In, LessThan, MoreThan, Repository } from "typeorm"
 
 interface ReplayRecordInput extends RecordActivityInput {
 	readonly replayOfEventIdentifier: string
@@ -56,6 +56,38 @@ export class ActivityService {
 			limit: query.limit,
 			offset: query.offset,
 			total,
+		}
+	}
+
+	async llmHistory(
+		runIdentifier: string,
+		limit: number,
+		beforeSequence?: number,
+	) {
+		const entities = await this.repository.find({
+			order: { sequence: "DESC" },
+			take: limit + 1,
+			where: {
+				runIdentifier,
+				type: In([
+					"agent.llm-output",
+					"agent.llm-decision",
+					"agent.llm-rejected",
+					"agent.llm-stale",
+					"agent.llm-failed",
+				]),
+				...(beforeSequence === undefined
+					? {}
+					: { sequence: LessThan(beforeSequence) }),
+			},
+		})
+		const items = entities.slice(0, limit).map(toActivityRecord)
+		return {
+			items,
+			nextBeforeSequence:
+				entities.length > limit
+					? items[items.length - 1].sequence
+					: null,
 		}
 	}
 

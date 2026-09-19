@@ -41,3 +41,5 @@ This is a single coordinator hackathon runtime. It uses the existing database-ba
 ## Outbound voice providers
 
 NestJS owns the `EngineerCallAdapter` boundary, persisted call records and completion handling. ElevenLabs uses server-side polling; HappyRobot uses its callback. See [voice setup](../../apps/server/docs/ELEVENLABS.md) and the [shared outbound contract](../contracts/outbound-calls.d.ts).
+
+For agent integration, see the [call_engineer input, outcome, and next-action contract](../../apps/server/docs/CALL-ENGINEER-CONTRACT.md).

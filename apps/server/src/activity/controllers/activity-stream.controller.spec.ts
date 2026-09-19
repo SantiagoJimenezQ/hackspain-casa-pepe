@@ -58,3 +58,54 @@ describe("ActivityStreamController", () => {
 		},
 	)
 })
+
+describe("stream backlog recovery", () => {
+	it("drains multiple pages and buffers concurrent live events without duplicates", async () => {
+		const emitter = new EventEmitter2()
+		const record = (sequence: number) => ({
+			runIdentifier: "run-1",
+			sequence,
+			type: "agent.llm-decision",
+		})
+		const list = jest
+			.fn()
+			.mockImplementationOnce(async () => {
+				emitter.emit(DOMAIN_EVENTS.ACTIVITY_RECORDED, {
+					record: record(3),
+				})
+				emitter.emit(DOMAIN_EVENTS.ACTIVITY_RECORDED, {
+					record: record(4),
+				})
+				return { items: [record(1), record(2)] }
+			})
+			.mockResolvedValueOnce({ items: [record(3)] })
+		const controller = new ActivityStreamController(
+			{ list } as unknown as ActivityService,
+			{
+				resolveRunIdentifier: async () => "run-1",
+			} as unknown as RunsService,
+			emitter,
+		)
+		const query = new ListActivityDTO()
+		query.runIdentifier = "run-1"
+		query.limit = 2
+		const received: string[] = []
+		const sequences: number[] = []
+		const subscription = controller.stream(query).subscribe((message) => {
+			received.push(String(message.id))
+			sequences.push((message.data as { sequence: number }).sequence)
+		})
+		await new Promise<void>((resolve) => setImmediate(resolve))
+		expect(received).toEqual(["1", "2", "3", "4"])
+		emitter.emit(DOMAIN_EVENTS.ACTIVITY_RECORDED, { record: record(6) })
+		emitter.emit(DOMAIN_EVENTS.ACTIVITY_RECORDED, { record: record(5) })
+		expect(sequences).toEqual([1, 2, 3, 4, 6, 5])
+		expect(received.slice(-2)).toEqual(["6", "6"])
+
+		expect(list).toHaveBeenLastCalledWith(
+			expect.objectContaining({ afterSequence: 2 }),
+		)
+		subscription.unsubscribe()
+		expect(emitter.listenerCount(DOMAIN_EVENTS.ACTIVITY_RECORDED)).toBe(0)
+	})
+})

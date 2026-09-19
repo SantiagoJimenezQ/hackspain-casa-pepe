@@ -15,6 +15,22 @@ export class ActivityController {
 		private readonly runsService: RunsService,
 	) {}
 
+	@Get("llm")
+	@ApiOperation({
+		summary:
+			"Newest public model-turn events, with cursor pagination for older history",
+	})
+	async llmHistory(@Query() query: ListActivityDTO) {
+		const runIdentifier = await this.runsService.resolveRunIdentifier(
+			query.runIdentifier,
+		)
+		return this.activityService.llmHistory(
+			runIdentifier,
+			query.limit,
+			query.beforeSequence,
+		)
+	}
+
 	@Get()
 	@ApiOperation({
 		summary:

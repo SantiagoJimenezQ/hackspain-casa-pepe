@@ -48,7 +48,8 @@ export const TOOL_DEFINITIONS: ReadonlyArray<{
 	},
 	{
 		asynchronous: true,
-		description: "Call the engineer and collect answers",
+		description:
+			"Start an asynchronous engineer call. ElevenLabs collects separate notifyAllClients and trafficFailoverAuthorized values (true/false/null), not technical answers. Completion is not authorization; voice permission never replaces plan approval. See docs/CALL-ENGINEER-CONTRACT.md.",
 		interaction: "real-call",
 		name: "call_engineer",
 	},

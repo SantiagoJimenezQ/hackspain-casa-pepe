@@ -148,7 +148,7 @@ async function startManualRun(baseURL: string): Promise<IncidentSnapshot> {
 			body: {
 				automaticEvents: false,
 				mode: "manual",
-				scenarioIdentifier: "meteorite-eu-west-1",
+				scenarioIdentifier: "meteorite-me-south-1",
 				seed: 42,
 			},
 			method: "POST",
@@ -252,15 +252,15 @@ describe("API curl walkthrough contract", () => {
 		)
 		expect(scenarios.status).toBe(200)
 		expect(scenarios.body.map((scenario) => scenario.identifier)).toContain(
-			"meteorite-eu-west-1",
+			"meteorite-me-south-1",
 		)
 
 		const scenario = await request<ScenarioDefinition>(
 			baseURL,
-			"/api/scenarios/meteorite-eu-west-1",
+			"/api/scenarios/meteorite-me-south-1",
 		)
 		expect(scenario.status).toBe(200)
-		expect(scenario.body.resource.identifier).toBe("backup-compute")
+		expect(scenario.body.resources[0].identifier).toBe("backup-oman")
 
 		const tools = await request<ReadonlyArray<ToolDefinitionView>>(
 			baseURL,
@@ -661,7 +661,7 @@ describe("API curl walkthrough contract", () => {
 					difficulty: "medium",
 					maxConcurrentDisruptions: 2,
 					mode: "randomized",
-					scenarioIdentifier: "meteorite-eu-west-1",
+					scenarioIdentifier: "meteorite-me-south-1",
 					seed: 42,
 				},
 				method: "POST",

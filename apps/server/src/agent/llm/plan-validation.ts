@@ -1,6 +1,7 @@
 import { AGENT_ACTOR_NAME } from "@agent/constants/agent.constant"
 import { PlanBuildInput, PlanDraft } from "@agent/types/agent.type"
 import { Actor, ActorKind } from "@common/types/identity.type"
+import { selectBackupResource } from "@incidents/helpers/incident-state.helper"
 import {
 	IncidentSnapshot,
 	ResourceState,
@@ -434,7 +435,7 @@ export function validateLlmPlan(
 	value: unknown,
 	input: PlanBuildInput,
 ): PlanDraft {
-	const context = createValidationContext(input)
+	let context = createValidationContext(input)
 	const rawPlan = record(value, "plan")
 	exactKeys(
 		rawPlan,
@@ -449,6 +450,12 @@ export function validateLlmPlan(
 		MAX_ASSUMPTIONS,
 	)
 	const capacity = validateCapacity(rawPlan.capacity, context)
+	const selected = resourceByIdentifier(
+		context,
+		capacity.resourceIdentifier,
+		"plan.capacity.resourceIdentifier",
+	)
+	context = { ...context, resource: selected }
 	if (
 		capacity.assumedCapacity < context.resource.totalCapacity &&
 		assumptions.length === 0
@@ -592,7 +599,7 @@ function createValidationContext(input: PlanBuildInput): ValidationContext {
 		)
 	}
 
-	const resource = incident.resources[0]
+	const resource = selectBackupResource(incident)
 	if (input.capacityAssumption) {
 		finiteNonNegative(
 			input.capacityAssumption.assumedCapacity,
@@ -637,6 +644,20 @@ function createValidationContext(input: PlanBuildInput): ValidationContext {
 		resource,
 		services,
 	}
+}
+
+function resourceByIdentifier(
+	context: ValidationContext,
+	resourceIdentifier: string,
+	path: string,
+): ResourceState {
+	const resource = context.incident.resources.find(
+		(candidate) => candidate.identifier === resourceIdentifier,
+	)
+	if (!resource) {
+		fail(path, "must identify one of the incident backup resources")
+	}
+	return resource
 }
 
 function validatePreviousSteps(
@@ -896,17 +917,16 @@ function validateCapacity(
 		capacity.resourceIdentifier,
 		"plan.capacity.resourceIdentifier",
 	)
-	if (resourceIdentifier !== context.resource.identifier) {
-		fail(
-			"plan.capacity.resourceIdentifier",
-			"must identify the incident's selected backup resource",
-		)
-	}
+	const resource = resourceByIdentifier(
+		context,
+		resourceIdentifier,
+		"plan.capacity.resourceIdentifier",
+	)
 	const totalCapacity = finiteNonNegativeNumber(
 		capacity.totalCapacity,
 		"plan.capacity.totalCapacity",
 	)
-	if (totalCapacity !== context.resource.totalCapacity) {
+	if (totalCapacity !== resource.totalCapacity) {
 		fail("plan.capacity.totalCapacity", "must match the incident resource")
 	}
 	const assumedCapacity = finiteNonNegativeNumber(
@@ -928,7 +948,7 @@ function validateCapacity(
 		capacity.postponedUnits,
 		"plan.capacity.postponedUnits",
 	)
-	if (capacity.confirmed !== context.resource.confirmed) {
+	if (capacity.confirmed !== resource.confirmed) {
 		fail(
 			"plan.capacity.confirmed",
 			"must match the incident resource confirmation state",
@@ -940,7 +960,7 @@ function validateCapacity(
 			"plannedUnits plus remainingUnits must equal assumedCapacity",
 		)
 	}
-	if (plannedUnits < context.resource.allocatedCapacity) {
+	if (plannedUnits < resource.allocatedCapacity) {
 		fail(
 			"plan.capacity.plannedUnits",
 			"cannot be below already allocated capacity",
@@ -948,7 +968,7 @@ function validateCapacity(
 	}
 	return {
 		assumedCapacity,
-		confirmed: context.resource.confirmed,
+		confirmed: resource.confirmed,
 		plannedUnits,
 		postponedUnits,
 		remainingUnits,

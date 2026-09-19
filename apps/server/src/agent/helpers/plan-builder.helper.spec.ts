@@ -220,6 +220,15 @@ describe("buildPlanDraft", () => {
 			check?.identifier,
 		])
 	})
+	it("fails over from Oman to Bahrain when Oman cannot cover the next recovery", () => {
+		const draft = buildPlanDraft(createInput(1))
+
+		expect(draft.capacity.resourceIdentifier).toBe("backup-bahrain")
+		expect(decisionOf(draft, "orders-database").decision).toBe(
+			"recover-now",
+		)
+	})
+
 	it("recovers every failing service when the reported capacity is enough", () => {
 		const draft = buildPlanDraft(createInput(12))
 

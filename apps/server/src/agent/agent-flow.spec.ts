@@ -174,12 +174,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			planOne.priorities
 				.filter((priority) => priority.decision === "recover-now")
 				.map((priority) => priority.serviceIdentifier),
-		).toEqual([
-			"orders-database",
-			"route-assignment",
-			"package-tracking",
-			"events-stream",
-		])
+		).toEqual(["orders-database"])
 
 		const incidentAfterCall =
 			await runsService.getByRunIdentifier(runIdentifier)
@@ -205,21 +200,22 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		)
 		expect(firstApprovals).toHaveLength(1)
 		expect(firstApprovals[0].planVersion).toBe(1)
-		expect((await tasksService.list(runIdentifier)).length).toBe(4)
+		expect((await tasksService.list(runIdentifier)).length).toBe(2)
 
 		await incidentsService.applyScenarioTwist()
 		const planTwo = await waitForPlanVersion(runIdentifier, 2)
-		expect(planTwo.capacity.totalCapacity).toBe(7)
+		expect(planTwo.capacity.resourceIdentifier).toBe("backup-bahrain")
+		expect(planTwo.capacity.totalCapacity).toBe(12)
 		expect(
 			planTwo.priorities.find(
 				(priority) => priority.serviceIdentifier === "package-tracking",
 			)?.decision,
-		).toBe("postpone")
+		).toBe("recover-now")
 		expect(
 			planTwo.priorities.find(
 				(priority) => priority.serviceIdentifier === "events-stream",
 			)?.decision,
-		).toBe("postpone")
+		).toBe("recover-now")
 		expect(
 			planTwo.changesFromPrevious.some(
 				(change) => change.kind === "capacity-changed",
@@ -261,16 +257,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		)
 		expect(statuses["stp_orders-database_verify"]).toBe("completed")
 		expect(statuses["stp_route-assignment_verify"]).toBe("completed")
-		expect(
-			finalPlan.priorities.find(
-				(priority) => priority.serviceIdentifier === "package-tracking",
-			)?.decision,
-		).toBe("postpone")
-		expect(
-			finalPlan.steps.some(
-				(step) => step.identifier === "stp_package-tracking_execute",
-			),
-		).toBe(false)
+		expect(statuses["stp_package-tracking_verify"]).toBe("completed")
 		expect(statuses["stp_support-communication"]).toBe("completed")
 
 		const finalIncident =
@@ -282,11 +269,20 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			]),
 		)
 		expect(finalIncident.status).toBe("partially-recovered")
-		expect(serviceStatuses["orders-database"]).toBe("healthy")
-		expect(serviceStatuses["route-assignment"]).toBe("healthy")
-		expect(serviceStatuses["driver-mobile-api"]).toBe("healthy")
-		expect(serviceStatuses["package-tracking"]).toBe("down")
-		expect(finalIncident.resources[0].allocatedCapacity).toBe(7)
+		expect(finalIncident.backupRegion).toBe("me-south-1")
+		expect(serviceStatuses).toEqual({
+			"customer-notifications": "degraded",
+			"driver-mobile-api": "healthy",
+			"events-stream": "healthy",
+			"orders-database": "healthy",
+			"package-tracking": "healthy",
+			"route-assignment": "healthy",
+		})
+		expect(
+			finalIncident.resources.find(
+				(resource) => resource.identifier === "backup-bahrain",
+			)?.allocatedCapacity,
+		).toBe(12)
 
 		const report = await runReportService.build(runIdentifier)
 		expect(report.planVersions).toHaveLength(2)
@@ -295,7 +291,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		).toEqual(["approved", "superseded"])
 		expect(report.toolCalls.failed).toBe(0)
 		expect(
-			report.lessons.some((lesson) => lesson.includes("reported 12")),
+			report.lessons.some((lesson) => lesson.includes("reported 4")),
 		).toBe(true)
 		const firstFlowCalls = scriptedLlm.calls.slice()
 		expect(firstFlowCalls.length).toBeGreaterThan(0)
@@ -327,9 +323,9 @@ describe("agent flow (integration with in-memory repositories)", () => {
 	it("uses the capacity learned in the previous run when planning a new one, in either language", async () => {
 		const insight = await learningService.findCapacityInsight(
 			DEFAULT_SCENARIO_IDENTIFIER,
-			"backup-compute",
+			"backup-oman",
 		)
-		expect(insight?.confirmedCapacity).toBe(7)
+		expect(insight?.confirmedCapacity).toBe(1)
 
 		const restarted = await incidentsService.startRun(
 			DEFAULT_SCENARIO_IDENTIFIER,
@@ -340,15 +336,14 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		)
 		const plan = await waitForPlanVersion(restarted.runIdentifier, 1)
 
+		expect(plan.capacity.resourceIdentifier).toBe("backup-bahrain")
 		expect(plan.capacity.totalCapacity).toBe(12)
-		expect(plan.capacity.assumedCapacity).toBe(7)
-		expect(plan.assumptions).toHaveLength(1)
-		expect(plan.assumptions[0]).toContain("Planning with 7")
+		expect(plan.capacity.assumedCapacity).toBe(12)
 		expect(
 			plan.priorities.find(
 				(priority) => priority.serviceIdentifier === "package-tracking",
 			)?.decision,
-		).toBe("postpone")
+		).toBe("recover-now")
 		await waitForStepStatus(
 			restarted.runIdentifier,
 			"stp_contact-engineer",

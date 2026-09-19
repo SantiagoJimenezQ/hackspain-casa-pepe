@@ -33,7 +33,7 @@ export const casaPepeClient = {
   start: () =>
     request("/api/casa-pepe/demo/start", {
       method: "POST",
-      body: JSON.stringify({ scenarioIdentifier: "meteorite-eu-west-1-es" }),
+      body: JSON.stringify({ scenarioIdentifier: "meteorite-me-south-1-es" }),
     }),
   impact: () => request("/api/casa-pepe/demo/impact", { method: "POST" }),
   twist: () => request("/api/casa-pepe/demo/twist", { method: "POST" }),

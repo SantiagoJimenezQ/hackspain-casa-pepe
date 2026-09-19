@@ -126,18 +126,29 @@ export class AgentService {
 				return
 			case "capacity-limited": {
 				const scenario = this.scenarioOf(incident)
+				const availableCapacity = applied.event.availableCapacity
+				const limited =
+					incident.resources.find(
+						(resource) =>
+							resource.totalCapacity === availableCapacity,
+					) ?? incident.resources[0]
+				const definition =
+					scenario.resources.find(
+						(resource) =>
+							resource.identifier === limited.identifier,
+					) ?? scenario.resources[0]
 				await this.learningService.recordCapacityObservation(
 					scenario.family,
-					scenario.resource.identifier,
-					scenario.resource.reportedCapacity,
-					applied.event.availableCapacity,
+					definition.identifier,
+					definition.reportedCapacity,
+					availableCapacity,
 					incident.runIdentifier,
 				)
 				await this.requestCycle(incident.runIdentifier, {
 					description: AGENT_MESSAGES[
 						scenario.language
 					].capacityConfirmed(
-						applied.event.availableCapacity,
+						availableCapacity,
 						applied.event.reason,
 					),
 					harnessEventIdentifier: applied.identifier,
@@ -582,6 +593,19 @@ export class AgentService {
 		messages: AgentMessages,
 		draft: PlanDraft,
 	): Promise<PlanRecord> {
+		const selectedResource = incident.resources.find(
+			(resource) =>
+				resource.identifier === draft.capacity.resourceIdentifier,
+		)
+		if (
+			selectedResource &&
+			selectedResource.region !== incident.backupRegion
+		) {
+			await this.incidentsService.setBackupRegion(
+				incident.runIdentifier,
+				selectedResource.region,
+			)
+		}
 		const changes = previous
 			? diffPlans(
 					previous,
@@ -670,25 +694,28 @@ export class AgentService {
 		incident: IncidentSnapshot,
 		scenario: ScenarioDefinition,
 	): Promise<CapacityAssumption | null> {
-		const resource = incident.resources[0]
-		if (resource.confirmed) {
-			return null
+		for (const resource of incident.resources) {
+			if (resource.confirmed) {
+				continue
+			}
+			const insight = await this.learningService.findCapacityInsight(
+				scenario.family,
+				resource.identifier,
+			)
+			if (!insight) {
+				continue
+			}
+			if (insight.confirmedCapacity >= resource.totalCapacity) {
+				continue
+			}
+			return {
+				assumedCapacity: insight.confirmedCapacity,
+				observations: insight.observations,
+				reportedCapacity: insight.reportedCapacity,
+				resourceIdentifier: resource.identifier,
+			}
 		}
-		const insight = await this.learningService.findCapacityInsight(
-			scenario.family,
-			resource.identifier,
-		)
-		if (!insight) {
-			return null
-		}
-		if (insight.confirmedCapacity >= resource.totalCapacity) {
-			return null
-		}
-		return {
-			assumedCapacity: insight.confirmedCapacity,
-			observations: insight.observations,
-			reportedCapacity: insight.reportedCapacity,
-		}
+		return null
 	}
 
 	private async executeStep(

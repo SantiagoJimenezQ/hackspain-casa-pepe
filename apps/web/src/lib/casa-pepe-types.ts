@@ -20,6 +20,7 @@ export type ActivityRecord = {
   summary: string;
   simulated: boolean;
   replayed: boolean;
+  payload?: Record<string, unknown>;
 };
 
 export type Service = {
@@ -49,6 +50,15 @@ export type Incident = {
   impactedAt: string;
   businessImpactSummary: string;
   services: Service[];
+  topology: {
+    nodes: Array<{ identifier: string; label: string; region: string; latitude: number; longitude: number; role: "primary" | "backup"; status: "up" | "degraded" | "down"; priority?: number }>;
+    links: Array<{ identifier: string; from: string; to: string }>;
+  };
+    customers: Array<{
+    identifier: string; name: string; shortName: string; sector: string; city?: string;
+    latitude?: number; longitude?: number; logo?: string; users: number;
+    serviceIdentifiers: string[]; accent: string;
+  }>;
   resources: Array<{
     identifier: string;
     name: string;
@@ -114,6 +124,8 @@ export type Plan = {
     resultSummary: string;
     attempts: number;
     updatedAt: string;
+    toolCallIdentifier?: string;
+    invocation?: { name: string; input: Record<string, unknown> };
   }>;
 };
 
@@ -151,14 +163,28 @@ export type EngineerCall = {
   failureReason: string;
 };
 
+export type ToolCallSubagent = {
+  id: string;
+  name: string;
+  status: string;
+};
+
 export type ToolCall = {
   identifier: string;
   name: string;
   interaction: string;
   status: string;
   simulated: boolean;
-  error: { message: string } | null;
+  error: { message: string; code?: string; retryable?: boolean } | null;
+  startedAt: string;
   finishedAt: string;
+  createdAt?: string;
+  input: Record<string, unknown>;
+  output: Record<string, unknown> | null;
+  planStepIdentifier?: string;
+  attempt?: number;
+  parentIdentifier?: string;
+  subagent?: ToolCallSubagent;
 };
 
 export type LearningInsight = {

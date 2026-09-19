@@ -7,6 +7,7 @@ import {
 	RunSummary,
 	ServiceState,
 } from "@incidents/types/incident.type"
+import { BUSINESS_IMPACT_WEIGHTS } from "@scenarios/constants/scenario.constant"
 import {
 	ScenarioDefinition,
 	ServiceHealthStatus,
@@ -41,19 +42,17 @@ export function buildBaselineResources(
 	scenario: ScenarioDefinition,
 	timestamp: string,
 ): ResourceState[] {
-	return [
-		{
-			allocatedCapacity: 0,
-			confirmed: false,
-			identifier: scenario.resource.identifier,
-			lastChangedAt: timestamp,
-			name: scenario.resource.name,
-			note: scenario.resource.note,
-			region: scenario.resource.region,
-			totalCapacity: scenario.resource.reportedCapacity,
-			unit: scenario.resource.unit,
-		},
-	]
+	return scenario.resources.map((resource) => ({
+		allocatedCapacity: 0,
+		confirmed: false,
+		identifier: resource.identifier,
+		lastChangedAt: timestamp,
+		name: resource.name,
+		note: resource.note,
+		region: resource.region,
+		totalCapacity: resource.reportedCapacity,
+		unit: resource.unit,
+	}))
 }
 
 export function applyImpact(
@@ -157,6 +156,39 @@ export function remainingCapacity(resource: ResourceState): number {
 	return resource.totalCapacity - resource.allocatedCapacity
 }
 
+export function nextRecoveryUnits(incident: {
+	readonly services: ReadonlyArray<ServiceState>
+}): number {
+	const remaining = incident.services.filter(
+		(service) =>
+			service.status !== "healthy" && service.status !== "recovering",
+	)
+	if (!remaining.length) {
+		return 1
+	}
+	return [...remaining].sort(
+		(left, right) =>
+			BUSINESS_IMPACT_WEIGHTS[right.businessImpact] -
+			BUSINESS_IMPACT_WEIGHTS[left.businessImpact],
+	)[0].recoveryCapacityUnits
+}
+
+export function selectBackupResource(
+	incident: {
+		readonly resources: ReadonlyArray<ResourceState>
+		readonly services: ReadonlyArray<ServiceState>
+	},
+	remainingOf: (resource: ResourceState) => number = remainingCapacity,
+): ResourceState {
+	const needed = nextRecoveryUnits(incident)
+	const ordered = incident.resources
+	const fitting = ordered.find((resource) => remainingOf(resource) >= needed)
+	if (fitting) {
+		return fitting
+	}
+	return ordered.find((resource) => remainingOf(resource) > 0) ?? ordered[0]
+}
+
 export function toIncidentSnapshot(entity: IncidentEntity): IncidentSnapshot {
 	return {
 		active: entity.active,
@@ -165,6 +197,7 @@ export function toIncidentSnapshot(entity: IncidentEntity): IncidentSnapshot {
 		businessImpactSummary: entity.businessImpactSummary,
 		company: entity.company,
 		createdAt: entity.createdAt,
+		customers: entity.customers,
 		facts: entity.facts,
 		harnessEvents: entity.harnessEvents,
 		identifier: entity.identifier,
@@ -196,6 +229,7 @@ export function toIncidentSnapshot(entity: IncidentEntity): IncidentSnapshot {
 		startedAt: entity.startedAt,
 		status: entity.status,
 		title: entity.title,
+		topology: { links: entity.topologyLinks, nodes: entity.topologyNodes },
 		updatedAt: entity.updatedAt,
 	}
 }

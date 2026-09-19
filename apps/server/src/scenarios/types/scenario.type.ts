@@ -51,6 +51,37 @@ export interface ScenarioResource {
 	readonly note: string
 }
 
+export interface ScenarioTopologyNode {
+	readonly identifier: string
+	readonly label: string
+	readonly region: string
+	readonly latitude: number
+	readonly longitude: number
+	readonly role: "primary" | "backup"
+	readonly status: "up" | "degraded" | "down"
+	readonly priority?: number
+}
+
+export interface ScenarioTopologyLink {
+	readonly identifier: string
+	readonly from: string
+	readonly to: string
+}
+
+export interface ScenarioCustomer {
+	readonly identifier: string
+	readonly name: string
+	readonly shortName: string
+	readonly sector: string
+	readonly city: string
+	readonly latitude: number
+	readonly longitude: number
+	readonly logo: string
+	readonly users: number
+	readonly serviceIdentifiers: ReadonlyArray<string>
+	readonly accent: string
+}
+
 export interface ScenarioFact {
 	readonly statement: string
 	readonly confirmed: boolean
@@ -94,7 +125,12 @@ export interface ScenarioDefinition {
 	readonly narrative: string
 	readonly businessImpactSummary: string
 	readonly services: ReadonlyArray<ScenarioService>
-	readonly resource: ScenarioResource
+	readonly resources: ReadonlyArray<ScenarioResource>
+	readonly topology: {
+		readonly nodes: ReadonlyArray<ScenarioTopologyNode>
+		readonly links: ReadonlyArray<ScenarioTopologyLink>
+	}
+	readonly customers: ReadonlyArray<ScenarioCustomer>
 	readonly initialFacts: ReadonlyArray<ScenarioFact>
 	readonly engineerBriefing: ScenarioEngineerBriefing
 	readonly twist: ScenarioTwist

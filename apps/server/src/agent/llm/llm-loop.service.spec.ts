@@ -635,6 +635,19 @@ describe("LlmLoopService", () => {
 				),
 			)
 			.mockResolvedValueOnce(
+				completion([toolCall("get_service_health", {})]),
+			)
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("report_result", {
+						details: ["Orders database is down."],
+						pending: [],
+						summary:
+							"Service health confirms Orders database is down.",
+					}),
+				]),
+			)
+			.mockResolvedValueOnce(
 				completion(
 					[
 						toolCall("wait_for_input", {
@@ -688,6 +701,9 @@ describe("LlmLoopService", () => {
 			(record) => record.payload.specialist === "investigator",
 		)
 		expect(activityInputs(activity).map((input) => input.type)).toEqual([
+			"agent.llm-decision",
+			"agent.llm-decision",
+			"agent.llm-decision",
 			"agent.llm-decision",
 			"agent.llm-decision",
 			"agent.llm-decision",

@@ -26,50 +26,15 @@ import {
 import { SubagentRunnerService } from "@agent/llm/subagent-runner.service"
 import { isText } from "@agent/llm/subagent-tools"
 import { CycleOutcome } from "@agent/types/agent.type"
-import { LlmLoopActions, LlmLoopState } from "@agent/types/llm-loop.type"
+import type { LlmLoopActions, LlmLoopState } from "@agent/types/llm-loop.type"
 import { SubagentOutcome } from "@agent/types/subagent.type"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { Injectable } from "@nestjs/common"
-import { PlanRecord } from "@plans/types/plan.type"
-import { ToolInvocation } from "@tools/types/tool.type"
 import type { LlmPublicTurn } from "../../../../../packages/contracts/agent"
 import { PublicOutput } from "./public-output"
 
-export interface LlmLoopState {
-	input: PlanBuildInput
-	/** Durable evidence: calls, approvals, tool results, previous decisions and learning. */
-	evidence: Record<string, unknown>
-	blocked: boolean
-}
-
-export interface LlmLoopActions {
-	observe(): Promise<LlmLoopState>
-	save(draft: PlanDraft, expected: LlmLoopState): Promise<PlanRecord>
-	execute(stepIdentifier: string, expected: LlmLoopState): Promise<unknown>
-	investigate(invocation: ToolInvocation): Promise<unknown>
-}
-
-/** Excludes bookkeeping counters; includes all decision-relevant durable state. */
-export function stateFingerprint(state: LlmLoopState): string {
-	const {
-		agentCycles: _cycles,
-		updatedAt: _time,
-		simulation: _simulation,
-		...incident
-	} = state.input.incident
-	return createHash("sha256")
-		.update(
-			JSON.stringify({
-				blocked: state.blocked,
-				evidence: state.evidence,
-				input: { ...state.input, incident },
-			}),
-		)
-		.digest("hex")
-}
-
 export { modelVisible, stateFingerprint } from "@agent/llm/llm-state"
-export { LlmLoopActions, LlmLoopState } from "@agent/types/llm-loop.type"
+export type { LlmLoopActions, LlmLoopState } from "@agent/types/llm-loop.type"
 
 const SYSTEM = `You are Casa Pepe's incident commander. You own investigation, prioritization, coordination and adaptation.
 Delegate investigation and human contact to your specialists, create or revise a plan, select one next step, then reassess its result.

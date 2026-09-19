@@ -3,8 +3,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { TopBar } from "@/components/dashboard/top-bar";
 import { LiveOperationsDashboard } from "@/components/dashboard/live-operations-dashboard";
+import { casaPepeClient } from "@/lib/casa-pepe-client";
 import { renderWithProviders } from "@/test/render";
 import { MockEventSource } from "@/test/setup";
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status });
+}
+
+function isOverview(url: string) {
+  return url.includes("/overview");
+}
+
+function isLlmHistory(url: string) {
+  return url.includes("/activity/llm");
+}
 
 function Probe() {
   const { status, error, startDemo, busyAction } = useDashboard();
@@ -137,6 +150,7 @@ class FakeEventSource {
 describe("live dashboard provider", () => {
   afterEach(() => {
     FakeEventSource.instances = [];
+    casaPepeClient.forgetRun();
     vi.stubGlobal("EventSource", MockEventSource);
     vi.restoreAllMocks();
   });
@@ -145,7 +159,7 @@ describe("live dashboard provider", () => {
     let started = false;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.endsWith("/overview")) {
+      if (isOverview(url)) {
         if (!started) {
           return new Response(
             JSON.stringify({
@@ -175,7 +189,7 @@ describe("live dashboard provider", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       calls.push(`${init?.method ?? "GET"} ${url}`);
-      if (url.endsWith("/overview")) {
+      if (isOverview(url)) {
         if (!started) {
           return new Response(JSON.stringify({ message: "no run" }), { status: 409 });
         }
@@ -202,7 +216,7 @@ describe("live dashboard provider", () => {
     vi.stubGlobal("EventSource", FakeEventSource);
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.endsWith("/overview")) {
+      if (isOverview(url)) {
         const runIdentifier = overviewCalls++ === 0 ? "run-1" : "run-2";
         const sequence = runIdentifier === "run-1" ? 5 : 1;
         return new Response(
@@ -232,6 +246,7 @@ describe("live dashboard provider", () => {
 
 describe("live dashboard chrome", () => {
   afterEach(() => {
+    casaPepeClient.forgetRun();
     vi.stubGlobal("EventSource", MockEventSource);
     vi.restoreAllMocks();
   });
@@ -240,7 +255,7 @@ describe("live dashboard chrome", () => {
     let started = false;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.endsWith("/overview")) {
+      if (isOverview(url)) {
         if (!started) return new Response(JSON.stringify({ message: "no run" }), { status: 409 });
         return new Response(JSON.stringify(idleSnapshot), { status: 200 });
       }
@@ -271,7 +286,7 @@ describe("live dashboard chrome", () => {
     let runIdentifier = "run-1";
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.endsWith("/overview")) {
+      if (isOverview(url)) {
         return new Response(
           JSON.stringify({
             ...idleSnapshot,
@@ -305,7 +320,7 @@ describe("live dashboard chrome", () => {
   it("shows impact, twist, reset and the elapsed timer once a run is live", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.endsWith("/overview")) {
+      if (isOverview(url)) {
         return new Response(JSON.stringify(snapshot), { status: 200 });
       }
       return new Response(JSON.stringify([]), { status: 200 });
@@ -345,7 +360,7 @@ describe("live dashboard chrome", () => {
   it("renders the map panel when the overview omits topology", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.endsWith("/overview")) {
+      if (isOverview(url)) {
         return new Response(
           JSON.stringify({ ...snapshot, incident: { ...snapshot.incident, topology: undefined } }),
           { status: 200 },
@@ -363,7 +378,7 @@ describe("live dashboard chrome", () => {
   it("holds the incident clock at zero until impact", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.endsWith("/overview")) {
+      if (isOverview(url)) {
         return new Response(
           JSON.stringify({
             ...snapshot,
@@ -391,7 +406,7 @@ describe("live dashboard chrome", () => {
   it("freezes the incident clock as Resuelto when the run recovers", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.endsWith("/overview")) {
+      if (isOverview(url)) {
         return new Response(
           JSON.stringify({
             ...snapshot,
@@ -419,5 +434,331 @@ describe("live dashboard chrome", () => {
     expect(screen.getByText("01:23")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Impacto" })).toBeDisabled();
     expect(screen.queryByText("Tiempo de incidente")).not.toBeInTheDocument();
+  });
+
+  it("shows live public reasoning while a cycle is in progress", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (isOverview(url)) {
+        return new Response(
+          JSON.stringify({
+            ...snapshot,
+            toolCalls: [],
+            recentActivity: [{
+              identifier: "act_out",
+              sequence: 1,
+              occurredAt: "2026-09-19T10:00:03.000Z",
+              type: "agent.llm-output",
+              source: "agent",
+              title: "Draft decision summary",
+              summary: "Compruebo la capacidad restante",
+              simulated: false,
+              replayed: false,
+              payload: { outputIdentifier: "out_1", provisional: true, text: "Compruebo la capacidad restante", turn: 0 },
+            }],
+            agent: { ...snapshot.agent, cycleInProgress: true, runningToolCalls: 0 },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    });
+
+    renderWithProviders(<LiveOperationsDashboard />);
+
+    await waitFor(() => expect(screen.getAllByText("Pensando").length).toBeGreaterThan(0));
+    expect(screen.getByText("Compruebo la capacidad restante")).toBeVisible();
+    expect(screen.queryByText("Preparando el siguiente paso")).not.toBeInTheDocument();
+  });
+
+  it("collapses finished reasoning until expanded and keeps tool details separate", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (isOverview(url)) {
+        return new Response(
+          JSON.stringify({
+            ...snapshot,
+            toolCalls: [snapshot.toolCalls[0]],
+            recentActivity: [{
+              identifier: "act_decision",
+              sequence: 2,
+              occurredAt: "2026-09-19T10:00:02.000Z",
+              type: "agent.llm-decision",
+              source: "agent",
+              title: "LLM decision",
+              summary: "Necesito el contexto actual del incidente.",
+              simulated: false,
+              replayed: false,
+              payload: { outputIdentifier: "out_ctx", turn: 0 },
+            }],
+            agent: { ...snapshot.agent, cycleInProgress: false, runningToolCalls: 0 },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    });
+
+    const { user } = renderWithProviders(<LiveOperationsDashboard />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Necesito el contexto actual del incidente\. · <1s/ })).toBeInTheDocument());
+    expect(screen.getByText("Leyó el contexto del incidente")).toBeInTheDocument();
+    expect(screen.queryByText("Razonamiento")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Necesito el contexto actual del incidente\. · <1s/ }));
+    expect(screen.getByText("Necesito el contexto actual del incidente.")).toBeVisible();
+
+    await user.click(screen.getByText("Leyó el contexto del incidente"));
+    expect(screen.getByText("Parámetros")).toBeInTheDocument();
+    expect(screen.getByText("Contexto del incidente cargado")).toBeInTheDocument();
+  });
+
+  it("keeps a reasoning trail when the model only emits placeholder decisions", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (isOverview(url)) {
+        return new Response(
+          JSON.stringify({
+            ...snapshot,
+            toolCalls: [],
+            recentActivity: [
+              {
+                identifier: "act_d1",
+                sequence: 1,
+                occurredAt: "2026-09-19T10:00:03.000Z",
+                type: "agent.llm-decision",
+                source: "agent",
+                title: "LLM decision",
+                summary: "Selecting the next investigation or action",
+                simulated: false,
+                replayed: false,
+                payload: {
+                  outputIdentifier: "out_a",
+                  tools: ["get_recovery_capacity"],
+                  toolCalls: [{ id: "call_a", name: "get_recovery_capacity", arguments: {} }],
+                  turn: 0,
+                  text: null,
+                  disposition: "rejected",
+                  dispositionReason: "The proposed action did not pass runtime validation; the model must revise it.",
+                  redacted: false,
+                },
+              },
+              {
+                identifier: "act_d2",
+                sequence: 3,
+                occurredAt: "2026-09-19T10:00:05.000Z",
+                type: "agent.llm-decision",
+                source: "agent",
+                title: "LLM decision",
+                summary: "Selecting the next investigation or action",
+                simulated: false,
+                replayed: false,
+                payload: {
+                  outputIdentifier: "out_b",
+                  tools: ["get_recovery_capacity"],
+                  toolCalls: [{ id: "call_b", name: "get_recovery_capacity", arguments: {} }],
+                  turn: 1,
+                  text: null,
+                  disposition: "pending",
+                  redacted: false,
+                },
+              },
+            ],
+            agent: { ...snapshot.agent, cycleInProgress: true, runningToolCalls: 0 },
+          }),
+          { status: 200 },
+        );
+      }
+      if (isLlmHistory(url)) return jsonResponse({ items: [], nextBeforeSequence: null });
+      return new Response(JSON.stringify([]), { status: 200 });
+    });
+
+    renderWithProviders(<LiveOperationsDashboard />);
+
+    await waitFor(() => expect(screen.getAllByText("Comprobando capacidad de recuperación").length).toBeGreaterThan(0));
+    expect(screen.getByText(/Rechazado/)).toBeInTheDocument();
+    expect(screen.queryByText("Razonamiento")).not.toBeInTheDocument();
+    expect(screen.queryByText("Selecting the next investigation or action")).not.toBeInTheDocument();
+    expect(screen.queryByText("En espera")).not.toBeInTheDocument();
+  });
+
+  it("renders live plan to-dos with checks, spinner and pending rows", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (isOverview(url)) {
+        return new Response(
+          JSON.stringify({
+            ...snapshot,
+            plan: {
+              kind: "plan",
+              plan: {
+                identifier: "plan_1",
+                version: 1,
+                status: "active",
+                summary: "Recuperar Flujo de eventos",
+                reason: "impacto crítico",
+                capacity: {
+                  resourceIdentifier: "engineers",
+                  totalCapacity: 5,
+                  assumedCapacity: 5,
+                  plannedUnits: 2,
+                  remainingUnits: 3,
+                  postponedUnits: 0,
+                  confirmed: true,
+                },
+                assumptions: [],
+                changesFromPrevious: [],
+                priorities: [],
+                steps: [
+                  {
+                    identifier: "stp_prepare",
+                    order: 1,
+                    title: "Preparar la recuperación de Flujo de eventos",
+                    reason: "",
+                    owner: { kind: "agent", name: "Casa Pepe agent" },
+                    serviceIdentifier: "events-stream",
+                    capacityUnits: 2,
+                    requiresApproval: false,
+                    status: "completed",
+                    statusReason: "",
+                    resultSummary: "",
+                    attempts: 1,
+                    updatedAt: "2026-09-19T10:00:06.000Z",
+                  },
+                  {
+                    identifier: "stp_execute",
+                    order: 2,
+                    title: "Ejecutar la recuperación de Flujo de eventos",
+                    reason: "",
+                    owner: { kind: "agent", name: "Casa Pepe agent" },
+                    serviceIdentifier: "events-stream",
+                    capacityUnits: 2,
+                    requiresApproval: false,
+                    status: "running",
+                    statusReason: "",
+                    resultSummary: "",
+                    attempts: 1,
+                    updatedAt: "2026-09-19T10:00:08.000Z",
+                  },
+                  {
+                    identifier: "stp_verify",
+                    order: 3,
+                    title: "Verificar Flujo de eventos",
+                    reason: "",
+                    owner: { kind: "agent", name: "Casa Pepe agent" },
+                    serviceIdentifier: "events-stream",
+                    capacityUnits: 0,
+                    requiresApproval: false,
+                    status: "proposed",
+                    statusReason: "",
+                    resultSummary: "",
+                    attempts: 0,
+                    updatedAt: "2026-09-19T10:00:04.000Z",
+                  },
+                ],
+              },
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    });
+
+    const { user } = renderWithProviders(<LiveOperationsDashboard />);
+
+    await waitFor(() => expect(screen.getByText("1 de 3 tareas")).toBeInTheDocument());
+    expect(screen.getByText("Preparar la recuperación de Flujo de eventos")).toBeVisible();
+    expect(screen.getByText("Ejecutar la recuperación de Flujo de eventos")).toBeVisible();
+    expect(screen.getByText("Verificar Flujo de eventos")).toBeVisible();
+    expect(screen.getByText("Ejecutar la recuperación de Flujo de eventos").closest("li")).toHaveAttribute(
+      "aria-current",
+      "step",
+    );
+    expect(screen.queryByText("Plan v1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recuperar Flujo de eventos")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "1 de 3 tareas" }));
+    await waitFor(() => expect(screen.queryByText("Verificar Flujo de eventos")).not.toBeInTheDocument());
+  });
+
+  it("labels a finished plan as completed", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (isOverview(url)) {
+        return new Response(
+          JSON.stringify({
+            ...snapshot,
+            toolCalls: [snapshot.toolCalls[0]],
+            agent: { ...snapshot.agent, runningToolCalls: 0 },
+            plan: {
+              kind: "plan",
+              plan: {
+                identifier: "plan_1",
+                version: 2,
+                status: "completed",
+                summary: "Plan terminado",
+                reason: "",
+                capacity: {
+                  resourceIdentifier: "engineers",
+                  totalCapacity: 5,
+                  assumedCapacity: 5,
+                  plannedUnits: 2,
+                  remainingUnits: 3,
+                  postponedUnits: 0,
+                  confirmed: true,
+                },
+                assumptions: [],
+                changesFromPrevious: [],
+                priorities: [],
+                steps: [
+                  {
+                    identifier: "stp_a",
+                    order: 1,
+                    title: "Preparar la recuperación",
+                    reason: "",
+                    owner: { kind: "agent", name: "Casa Pepe agent" },
+                    serviceIdentifier: "events-stream",
+                    capacityUnits: 2,
+                    requiresApproval: false,
+                    status: "completed",
+                    statusReason: "",
+                    resultSummary: "",
+                    attempts: 1,
+                    updatedAt: "2026-09-19T10:00:06.000Z",
+                  },
+                  {
+                    identifier: "stp_b",
+                    order: 2,
+                    title: "Recuperar y verificar",
+                    reason: "",
+                    owner: { kind: "agent", name: "Casa Pepe agent" },
+                    serviceIdentifier: "events-stream",
+                    capacityUnits: 2,
+                    requiresApproval: false,
+                    status: "completed",
+                    statusReason: "",
+                    resultSummary: "",
+                    attempts: 1,
+                    updatedAt: "2026-09-19T10:00:12.000Z",
+                  },
+                ],
+              },
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    });
+
+    const { user } = renderWithProviders(<LiveOperationsDashboard />);
+
+    await waitFor(() => expect(screen.getByText("2 de 2 tareas completadas")).toBeInTheDocument());
+    expect(screen.queryByText("Preparar la recuperación")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "2 de 2 tareas completadas" }));
+    expect(screen.getByText("Preparar la recuperación")).toBeVisible();
+    expect(screen.getByText("Recuperar y verificar")).toBeVisible();
   });
 });

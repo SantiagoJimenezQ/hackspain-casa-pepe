@@ -101,6 +101,7 @@ export type ToolOutput =
 			readonly summary: string
 			readonly answers: ReadonlyArray<EngineerAnswer>
 			readonly mode: "simulated" | "live"
+			readonly authorizations?: import("../../../../../packages/contracts/outbound-calls").EngineerCallAuthorizations
 	  }
 	| { readonly kind: "task"; readonly taskIdentifier: string }
 	| { readonly kind: "approval"; readonly approvalIdentifier: string }

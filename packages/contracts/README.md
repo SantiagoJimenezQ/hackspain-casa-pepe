@@ -10,3 +10,5 @@ The canonical endpoint reference is [`apps/server/docs/API.md`](../../apps/serve
 The former standalone HTTP server, old `/api/status` API, generated JSON OpenAPI copy, and duplicate in-memory harness have been removed. Seeded randomness now lives in `apps/server/src/scenarios/services/seeded-simulation.service.ts` and is persisted with each incident run.
 
 - `tools.d.ts` describes the MVP tool names, incoming call reports/confirmations, communication receipts and status publications. Runtime validation for incoming calls lives in the NestJS DTOs.
+
+- `outbound-calls.d.ts` describes provider-neutral call context, external references, and authorization evidence.

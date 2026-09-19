@@ -1,4 +1,5 @@
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
+import { InvalidStateTransitionException } from "@common/exceptions/domain.exception"
 import { HappyRobotCallResultDTO } from "@engineers/dtos/happyrobot-call-result.dto"
 import { IncomingCallDTO } from "@engineers/dtos/incoming-call.dto"
 import { EngineersService } from "@engineers/services/engineers.service"
@@ -57,6 +58,13 @@ export class InboundWebhooksController {
 		const call = await this.engineersService.getByIdentifier(
 			body.callIdentifier,
 		)
+		if (call.provider === "elevenlabs") {
+			throw new InvalidStateTransitionException(
+				"Engineer call",
+				"ElevenLabs",
+				"receive a HappyRobot result",
+			)
+		}
 		const questionsByKey = new Map(
 			call.questions.map((question) => [question.key, question.question]),
 		)

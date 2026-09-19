@@ -158,7 +158,7 @@ src/
   plans/           plan versions and diff between versions
   approvals/       approvals bound to a plan version
   tasks/           tasks with owner
-  engineers/       contact_engineer: simulated and HappyRobot adapters
+  engineers/       contact_engineer: simulated, ElevenLabs and HappyRobot adapters
   recovery/        execute_recovery and verify_recovery: simulated and HTTP adapters
   tools/           registry and execution of the eight tools
   agent/           decision cycle, plan builder, bilingual messages, overview for the UI
@@ -170,3 +170,7 @@ src/
 ## MVP tools
 
 The runtime now also exposes the agreed MVP names, operator email (simulated or Resend), incoming phone reports with operator confirmation, and a public status page and JSON feed. Existing tool names remain compatible. See [MVP tools rehearsal](../../demo/MVP-TOOLS.md) for live integration setup, the local HTTP recovery target and the complete demo sequence.
+
+## ElevenLabs outbound calls
+
+See [outbound voice setup](docs/ELEVENLABS.md) for the existing emergency agent, dynamic variables, post-call authorization evidence, and switching to HappyRobot.

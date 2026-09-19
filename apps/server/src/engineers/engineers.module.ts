@@ -1,5 +1,6 @@
 import { ActivityModule } from "@activity/activity.module"
 import { ConfigurationService } from "@common/services/configuration.service"
+import { ElevenLabsEngineerCallAdapter } from "@engineers/adapters/elevenlabs-engineer-call.adapter"
 import { HappyRobotEngineerCallAdapter } from "@engineers/adapters/happyrobot-engineer-call.adapter"
 import { SimulatedEngineerCallAdapter } from "@engineers/adapters/simulated-engineer-call.adapter"
 import { ENGINEER_CALL_ADAPTER } from "@engineers/constants/engineer.constant"
@@ -30,24 +31,31 @@ import { TypeOrmModule } from "@nestjs/typeorm"
 		IncomingCallsService,
 		SimulatedEngineerCallAdapter,
 		HappyRobotEngineerCallAdapter,
+		ElevenLabsEngineerCallAdapter,
 		{
 			inject: [
 				ConfigurationService,
 				SimulatedEngineerCallAdapter,
 				HappyRobotEngineerCallAdapter,
+				ElevenLabsEngineerCallAdapter,
 			],
 			provide: ENGINEER_CALL_ADAPTER,
 			useFactory: (
 				configuration: ConfigurationService,
 				simulated: SimulatedEngineerCallAdapter,
-				live: HappyRobotEngineerCallAdapter,
+				happyRobot: HappyRobotEngineerCallAdapter,
+				elevenLabs: ElevenLabsEngineerCallAdapter,
 			): EngineerCallAdapter => {
-				switch (configuration.happyRobot.mode) {
-					case "simulated":
-						return simulated
-					case "live":
-						return live
+				if (configuration.engineerCall.mode === "simulated") {
+					return simulated
 				}
+				switch (configuration.engineerCall.provider) {
+					case "elevenlabs":
+						return elevenLabs
+					case "happyrobot":
+						return happyRobot
+				}
+				throw new Error("Unsupported engineer call provider")
 			},
 		},
 		EngineersService,

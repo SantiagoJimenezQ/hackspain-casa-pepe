@@ -6,6 +6,8 @@ import {
 	AuthenticationConfiguration,
 	DatabaseConfiguration,
 	DemoConfiguration,
+	ElevenLabsConfiguration,
+	EngineerCallConfiguration,
 	HappyRobotConfiguration,
 	RecoveryConfiguration,
 	RuntimeConfiguration,
@@ -55,6 +57,14 @@ export class ConfigurationService {
 
 	get happyRobot(): HappyRobotConfiguration {
 		return this.configuration.happyRobot
+	}
+
+	get elevenLabs(): ElevenLabsConfiguration {
+		return this.configuration.elevenLabs
+	}
+
+	get engineerCall(): EngineerCallConfiguration {
+		return this.configuration.engineerCall
 	}
 
 	get recovery(): RecoveryConfiguration {

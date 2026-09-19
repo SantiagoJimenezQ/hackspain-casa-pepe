@@ -1,4 +1,5 @@
 import { Column, Entity, Index, PrimaryColumn } from "typeorm"
+import { EngineerCallProvider } from "../../../../../packages/contracts/outbound-calls"
 import type {
 	ToolTestEngineer,
 	ToolTestError,
@@ -35,6 +36,12 @@ export class ToolTestEntity {
 
 	@Column({ type: "text" })
 	status: ToolTestStatus
+
+	@Column({ nullable: true, type: "text" })
+	provider: EngineerCallProvider | null
+
+	@Column({ default: "", type: "text" })
+	providerCallSid: string
 
 	@Column({ type: "text" })
 	providerReference: string

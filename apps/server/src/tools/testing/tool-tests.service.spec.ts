@@ -84,6 +84,12 @@ function config(overrides: Record<string, unknown> = {}) {
 			mode: "simulated",
 			to: "",
 		},
+		engineerCall: {
+			mode:
+				(overrides.happyRobot as { mode?: string })?.mode ??
+				"simulated",
+			provider: "happyrobot",
+		},
 		happyRobot: {
 			apiKey: "",
 			mode: "simulated",
@@ -107,6 +113,7 @@ function service(
 		repository as never,
 		configuration as never,
 		adapter as never,
+		{ getResult: jest.fn() } as never,
 	)
 	return { adapter, instance, repository }
 }
@@ -462,5 +469,38 @@ describe("ToolTestsService", () => {
 		} finally {
 			fetchMock.mockRestore()
 		}
+	})
+	it("uses the unified live mode even when legacy HappyRobot mode is simulated", async () => {
+		const { instance, adapter } = service(
+			config({
+				engineerCall: { mode: "live", provider: "happyrobot" },
+				happyRobot: {
+					apiKey: "test",
+					mode: "simulated",
+					triggerURL: "https://example.com/trigger",
+					webhookSecret: "test",
+				},
+			}),
+			{
+				start: jest.fn().mockResolvedValue({
+					kind: "accepted",
+					providerReference: "happyrobot-test",
+				}),
+			},
+		)
+		expect(
+			instance.catalog().find((entry) => entry.tool === "call_engineer"),
+		).toMatchObject({ liveAvailable: true, provider: "happyrobot" })
+		const result = await instance.execute({
+			engineer: { name: "Test", phone: "+34600000000" },
+			idempotencyKey: "unified-mode",
+			mode: "live",
+			tool: "call_engineer",
+		})
+		expect(result).toMatchObject({
+			provider: "happyrobot",
+			status: "accepted",
+		})
+		expect(adapter.start).toHaveBeenCalledTimes(1)
 	})
 })

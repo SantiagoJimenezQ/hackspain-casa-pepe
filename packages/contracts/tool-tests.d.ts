@@ -1,3 +1,5 @@
+import { EngineerCallProvider } from "./outbound-calls"
+
 /** Standalone integration checks that do not require an incident run. */
 export type ToolTestName = "send_incident_email" | "call_engineer"
 
@@ -34,6 +36,8 @@ export interface ToolTestResult {
 	readonly createdAt: string
 	readonly finishedAt: string
 	readonly providerReference: string
+	readonly provider: EngineerCallProvider | null
+	readonly providerCallSid: string
 	readonly detail: string
 	readonly error: ToolTestError | null
 	readonly result: unknown | null
@@ -43,5 +47,6 @@ export interface ToolTestCatalogEntry {
 	readonly tool: ToolTestName
 	readonly modes: ReadonlyArray<ToolTestMode>
 	readonly liveAvailable: boolean
+	readonly provider: EngineerCallProvider | null
 	readonly description: string
 }

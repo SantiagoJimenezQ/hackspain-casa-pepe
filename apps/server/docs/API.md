@@ -39,7 +39,7 @@ Common errors:
 | 409 | `No Active Run` | No active run; call `POST /demo/start` first |
 | 409 | `Invalid State Transition` | Deciding an approval that is already decided or superseded, duplicated call result |
 | 409 | `Stale Run` | Late result from a run that was reset |
-| 502 | `Integration Failure` | Unexpected response from HappyRobot or the recovery environment |
+| 502 | `Integration Failure` | Unexpected response from a voice provider or the recovery environment |
 
 ## Common parameter `runIdentifier`
 
@@ -377,7 +377,7 @@ These routes exercise the outbound email and engineer-call integrations without 
 
 ### `GET /tools/tests`
 
-Returns one catalog entry per supported test. Each entry has `tool` (`send_incident_email` or `call_engineer`), `modes` (`simulated` and/or `live`), `liveAvailable`, and a description. The catalog never includes credentials or provider URLs.
+Returns one catalog entry per supported test. Each entry has `tool` (`send_incident_email` or `call_engineer`), `modes` (`simulated` and/or `live`), `liveAvailable`, the configured call `provider` (`elevenlabs` or `happyrobot`; `null` for email), and a description. The catalog never includes credentials or provider URLs.
 
 ### `POST /tools/tests`
 
@@ -402,7 +402,7 @@ For an engineer-call test, include an E.164 phone number. The engineer is requir
 }
 ```
 
-`mode` defaults to `simulated`. Simulated tests finish immediately and never contact a provider. Live email uses the configured `RESEND_API_KEY`, `INCIDENT_EMAIL_FROM` and `INCIDENT_EMAIL_TO`; the caller cannot choose recipients. Live calls use the configured HappyRobot trigger and remain `accepted` until the provider callback arrives. A live request is rejected when its integration mode or required configuration is unavailable. Reusing an idempotency key with the same normalized request returns the original result; a different request with that key returns `409`.
+`mode` defaults to `simulated`. Simulated tests finish immediately and never contact a provider. Live email uses the configured `RESEND_API_KEY`, `INCIDENT_EMAIL_FROM` and `INCIDENT_EMAIL_TO`; the caller cannot choose recipients. Live calls use `ENGINEER_CALL_PROVIDER` with `ENGINEER_CALL_MODE=live`. ElevenLabs requires `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID` and `ELEVENLABS_PHONE_NUMBER_ID`; HappyRobot requires its trigger, API key, webhook secret and public callback base URL. Calls remain `accepted` until provider completion. For ElevenLabs, each result GET queries conversation details; HappyRobot completes through its dedicated test callback. A live request is rejected when its integration mode or required configuration is unavailable. Reusing an idempotency key with the same normalized request returns the original result; a different request with that key returns `409`.
 
 ### `GET /tools/tests/:identifier`
 
@@ -417,17 +417,19 @@ Returns the durable standalone result:
   "createdAt": "2026-09-19T12:00:00.000Z",
   "finishedAt": "2026-09-19T12:00:00.001Z",
   "providerReference": "simulated:tool-test:tool-test_…",
+  "provider": null,
+  "providerCallSid": "",
   "detail": "Email simulated; nothing was sent",
   "error": null,
   "result": { "channel": "email", "mode": "simulated", "reference": "simulated:tool-test:tool-test_…" }
 }
 ```
 
-Call results are `accepted` while the provider is processing them. Reading an overdue accepted call marks it `failed` with a timeout error. A completed callback changes it to `succeeded` or `failed`; duplicate and late callbacks leave the terminal result unchanged.
+Call results are `accepted` while the provider is processing them. Reading an overdue accepted call marks it `failed` with a timeout error. A completed ElevenLabs conversation lookup or HappyRobot callback changes it to `succeeded` or `failed`; duplicate and late results leave the terminal result unchanged. ElevenLabs results retain `providerReference` (conversation ID), `providerCallSid`, transcript, summary and `result.authorizations`. These authorization values are test evidence only. Standalone ElevenLabs tests poll on GET rather than the incident scheduler; poll every five seconds until terminal. Transient provider errors leave the call pending until a later lookup or timeout.
 
 ### `POST /tools/tests/callbacks/happyrobot`
 
-Public route protected by `x-happyrobot-signature: <HAPPYROBOT_WEBHOOK_SECRET>`, separately from the operator API key. It accepts the same `HappyRobotCallResultDTO` as `/webhooks/happyrobot`, including `callIdentifier`, `outcome`, `summary`, `transcript` and `answers`. The callback only completes a standalone `call_engineer` result and never updates incident state, engineer-call records or the agent.
+Public route protected by `x-happyrobot-signature: <HAPPYROBOT_WEBHOOK_SECRET>`, separately from the operator API key. It accepts the same `HappyRobotCallResultDTO` as `/webhooks/happyrobot`, including `callIdentifier`, `outcome`, `summary`, `transcript` and `answers`. The callback rejects ElevenLabs test IDs and only completes a standalone HappyRobot `call_engineer` result and never updates incident state, engineer-call records or the agent.
 
 ---
 
@@ -438,6 +440,12 @@ Public route protected by `x-happyrobot-signature: <HAPPYROBOT_WEBHOOK_SECRET>`,
 **EngineerCallRecord**: `identifier`, `engineer { name, phone, role }`, `purpose`, `questions[] { key, question }`, `mode` (`simulated` \| `live`), `status` (`dialing` \| `in-progress` \| `completed` \| `failed` \| `no-answer`), `providerReference`, `result { outcome, summary, transcript, answers[] { key, question, answer } }`, `failureReason`, `startedAt`, `finishedAt`, `toolCallIdentifier`, `planStepIdentifier`.
 
 ---
+
+### Voice provider results
+
+Outbound records also carry `provider` (`elevenlabs` or `happyrobot`), `providerCallSid`, and `incidentContext { location, incidentDescription, servicesDown }`. For ElevenLabs, `providerReference` is the conversation ID and `providerCallSid` is Twilio's call SID. Legacy records may not have the new optional fields.
+
+`result.authorizations` contains `notifyAllClients` and `trafficFailoverAuthorized`, each with `{ value: boolean | null, rationale: string }`. These are voice evidence and never automatically change plan-specific approvals or incident capacity facts. They are also retained in the completed tool output. Missing extraction remains unknown. See [provider configuration and rehearsal](ELEVENLABS.md).
 
 ## Recovery (`/recovery/actions`)
 
@@ -633,7 +641,7 @@ Header `x-recovery-signature: <RECOVERY_WEBHOOK_SECRET>`.
 | `tool-call.started`, `tool-call.completed`, `tool-call.failed` | tool | Tool execution |
 | `approval.requested`, `approval.decided`, `approval.superseded`, `approval.expired` | agent / operator | Approval lifecycle |
 | `task.assigned`, `task.updated` | agent / operator | Tasks |
-| `engineer-call.started`, `engineer-call.completed`, `engineer-call.failed` | tool / integration | HappyRobot call |
+| `engineer-call.started`, `engineer-call.completed`, `engineer-call.failed` | tool / integration | Outbound voice call through the configured provider |
 | `recovery.executed`, `recovery.verified` | integration / tool | Action and verification in the test environment |
 | `agent.cycle-finished` | agent | Summary: recovered, pending and next step |
 | `agent.limit-reached` | agent | Cycle limit reached |

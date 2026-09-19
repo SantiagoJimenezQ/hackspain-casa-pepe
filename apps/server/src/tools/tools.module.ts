@@ -1,9 +1,7 @@
 import { ActivityModule } from "@activity/activity.module"
 import { ApprovalsModule } from "@approvals/approvals.module"
-import { HappyRobotEngineerCallAdapter } from "@engineers/adapters/happyrobot-engineer-call.adapter"
 import { EngineersModule } from "@engineers/engineers.module"
 import { IncidentsModule } from "@incidents/incidents.module"
-import { HttpModule } from "@nestjs/axios"
 import { Module } from "@nestjs/common"
 import { TypeOrmModule } from "@nestjs/typeorm"
 import { PlansModule } from "@plans/plans.module"
@@ -51,7 +49,6 @@ import { HappyRobotSecretGuard } from "@webhooks/guards/inbound-secret.guard"
 			StatusPublicationEntity,
 			ToolTestEntity,
 		]),
-		HttpModule,
 		PlansModule,
 		ActivityModule,
 		IncidentsModule,
@@ -75,7 +72,6 @@ import { HappyRobotSecretGuard } from "@webhooks/guards/inbound-secret.guard"
 		RequestApprovalTool,
 		ExecuteRecoveryTool,
 		VerifyRecoveryTool,
-		HappyRobotEngineerCallAdapter,
 		HappyRobotSecretGuard,
 		ToolTestsService,
 		ToolRegistryService,

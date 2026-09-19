@@ -103,7 +103,7 @@ With 12 reported units the initial plan recovers the four failing services. Afte
 
 The full reference of every endpoint, body, response and the event catalog is in [docs/API.md](docs/API.md). Interactive OpenAPI documentation is served at `/documentation`.
 
-For provider-independent checks of outbound email and engineer calls, use the standalone tool-test routes. `POST /tools/tests` defaults to simulated mode and accepts fixed synthetic content; live calls remain `accepted` until the HappyRobot callback arrives. The copyable requests and polling examples are in [docs/API-CURL-TEST-GUIDE.md](docs/API-CURL-TEST-GUIDE.md#optional-standalone-tool-checks).
+For provider-independent checks of outbound email and engineer calls, use the standalone tool-test routes. `POST /tools/tests` defaults to simulated mode and accepts fixed synthetic content; live calls use `ENGINEER_CALL_PROVIDER` and remain `accepted` until an ElevenLabs conversation lookup or HappyRobot callback completes them. Poll the result endpoint to fetch ElevenLabs completion; no public callback is needed for ElevenLabs. The copyable requests and polling examples are in [docs/API-CURL-TEST-GUIDE.md](docs/API-CURL-TEST-GUIDE.md#optional-standalone-tool-checks).
 
 For repeatable API testing with an environment-provided API key, use the [curl test guide](docs/API-CURL-TEST-GUIDE.md). It includes an ordered incident walkthrough, asynchronous polling, approval checks, and optional endpoint exercises.
 
@@ -161,7 +161,7 @@ src/
   plans/           plan versions and diff between versions
   approvals/       approvals bound to a plan version
   tasks/           tasks with owner
-  engineers/       contact_engineer: simulated and HappyRobot adapters
+  engineers/       contact_engineer: simulated, ElevenLabs and HappyRobot adapters
   recovery/        execute_recovery and verify_recovery: simulated and HTTP adapters
   tools/           registry and execution of the eight tools
   agent/           decision cycle, plan builder, bilingual messages, overview for the UI
@@ -173,3 +173,7 @@ src/
 ## MVP tools
 
 The runtime now also exposes the agreed MVP names, operator email (simulated or Resend), incoming phone reports with operator confirmation, and a public status page and JSON feed. Existing tool names remain compatible. See [MVP tools rehearsal](../../demo/MVP-TOOLS.md) for live integration setup, the local HTTP recovery target and the complete demo sequence.
+
+## ElevenLabs outbound calls
+
+See [outbound voice setup](docs/ELEVENLABS.md) for the existing emergency agent, dynamic variables, post-call authorization evidence, and switching to HappyRobot.

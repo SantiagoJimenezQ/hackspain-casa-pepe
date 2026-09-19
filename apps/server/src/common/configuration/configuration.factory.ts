@@ -2,6 +2,7 @@ import { EnvironmentVariables } from "@common/configuration/environment-variable
 import {
 	ApplicationConfiguration,
 	EngineerCallMode,
+	EngineerCallProvider,
 	Environment,
 	RecoveryMode,
 } from "@common/types/configuration.type"
@@ -53,11 +54,23 @@ export function createApplicationConfiguration(
 			engineerPhone: variables.DEMO_ENGINEER_PHONE,
 			engineerRole: variables.DEMO_ENGINEER_ROLE,
 		},
+		elevenLabs: {
+			agentId: variables.ELEVENLABS_AGENT_ID,
+			apiKey: variables.ELEVENLABS_API_KEY,
+			phoneNumberId: variables.ELEVENLABS_PHONE_NUMBER_ID,
+			pollIntervalMilliseconds:
+				variables.ELEVENLABS_POLL_INTERVAL_MILLISECONDS,
+		},
 		email: {
 			apiKey: variables.RESEND_API_KEY,
 			from: variables.INCIDENT_EMAIL_FROM,
 			mode: variables.INCIDENT_EMAIL_MODE as "simulated" | "live",
 			to: variables.INCIDENT_EMAIL_TO,
+		},
+		engineerCall: {
+			mode: (variables.ENGINEER_CALL_MODE ??
+				variables.HAPPYROBOT_MODE) as EngineerCallMode,
+			provider: variables.ENGINEER_CALL_PROVIDER as EngineerCallProvider,
 		},
 		happyRobot: {
 			apiKey: variables.HAPPYROBOT_API_KEY,

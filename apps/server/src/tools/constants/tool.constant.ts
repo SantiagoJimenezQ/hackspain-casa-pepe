@@ -89,7 +89,7 @@ export const TOOL_DEFINITIONS: ReadonlyArray<{
 	{
 		asynchronous: true,
 		description:
-			"Call an engineer through HappyRobot and collect the answers",
+			"Call an engineer through the configured voice provider and collect the answers",
 		interaction: "real-call",
 		name: "contact_engineer",
 	},

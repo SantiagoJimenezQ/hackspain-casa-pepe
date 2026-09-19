@@ -34,6 +34,13 @@ export class ContactEngineerTool implements Tool<ContactEngineerInvocation> {
 		const scenario = this.incidentsService.getScenario(
 			incident.scenarioIdentifier,
 		)
+		const incidentContext = {
+			incidentDescription: incident.narrative || scenario.narrative,
+			location: incident.region || scenario.region,
+			servicesDown: incident.services
+				.filter((service) => service.status !== "healthy")
+				.map((service) => service.name),
+		} as const
 		const answersByKey: Record<string, string> = Object.fromEntries(
 			scenario.engineerBriefing.questions.map((question) => [
 				question.key,
@@ -46,6 +53,7 @@ export class ContactEngineerTool implements Tool<ContactEngineerInvocation> {
 				phone: input.engineerPhone,
 				role: input.engineerRole,
 			},
+			incidentContext,
 			incidentIdentifier: context.incidentIdentifier,
 			planStepIdentifier: context.planStepIdentifier,
 			purpose: input.purpose,
@@ -68,6 +76,9 @@ export class ContactEngineerTool implements Tool<ContactEngineerInvocation> {
 				return {
 					output: {
 						answers: call.result ? call.result.answers : [],
+						authorizations: call.result
+							? call.result.authorizations
+							: undefined,
 						engineerCallIdentifier: call.identifier,
 						kind: "engineer-call",
 						mode: call.mode,
@@ -81,7 +92,9 @@ export class ContactEngineerTool implements Tool<ContactEngineerInvocation> {
 					error: {
 						code: "CALL_FAILED",
 						message: call.failureReason,
-						retryable: true,
+						// A live provider may have accepted the call even when its
+						// response was ambiguous. Never redial automatically.
+						retryable: call.mode === "simulated",
 					},
 					status: "failed",
 				}

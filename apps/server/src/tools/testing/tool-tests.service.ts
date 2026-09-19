@@ -7,14 +7,16 @@ import {
 import { addMilliseconds, nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
-import { HappyRobotEngineerCallAdapter } from "@engineers/adapters/happyrobot-engineer-call.adapter"
+import { ElevenLabsEngineerCallAdapter } from "@engineers/adapters/elevenlabs-engineer-call.adapter"
+import { ENGINEER_CALL_ADAPTER } from "@engineers/constants/engineer.constant"
 import {
+	EngineerCallAdapter,
 	EngineerCallRecord,
 	EngineerCallResult,
 	EngineerContact,
 	EngineerQuestion,
 } from "@engineers/types/engineer.type"
-import { HttpStatus, Injectable } from "@nestjs/common"
+import { HttpStatus, Inject, Injectable } from "@nestjs/common"
 import { InjectRepository } from "@nestjs/typeorm"
 import { ToolTestEntity } from "@tools/testing/tool-test.entity"
 import { In, Repository } from "typeorm"
@@ -72,7 +74,9 @@ export class ToolTestsService {
 		@InjectRepository(ToolTestEntity)
 		private readonly repository: Repository<ToolTestEntity>,
 		private readonly configuration: ConfigurationService,
-		private readonly happyRobot: HappyRobotEngineerCallAdapter,
+		@Inject(ENGINEER_CALL_ADAPTER)
+		private readonly callAdapter: EngineerCallAdapter,
+		private readonly elevenLabs: ElevenLabsEngineerCallAdapter,
 	) {}
 
 	catalog(): ReadonlyArray<ToolTestCatalogEntry> {
@@ -81,12 +85,14 @@ export class ToolTestsService {
 				description: "Send a synthetic incident email",
 				liveAvailable: this.emailLiveAvailable(),
 				modes: ["simulated", "live"],
+				provider: null,
 				tool: "send_incident_email",
 			},
 			{
 				description: "Call a synthetic on-call engineer",
 				liveAvailable: this.callLiveAvailable(),
 				modes: ["simulated", "live"],
+				provider: this.configuration.engineerCall.provider,
 				tool: "call_engineer",
 			},
 		]
@@ -114,6 +120,12 @@ export class ToolTestsService {
 			idempotencyKey: normalized.idempotencyKey,
 			identifier: createPrefixedIdentifier("tool-test"),
 			mode: normalized.mode,
+			provider:
+				normalized.tool === "call_engineer" &&
+				normalized.mode === "live"
+					? this.configuration.engineerCall.provider
+					: null,
+			providerCallSid: "",
 			providerReference: "",
 			requestFingerprint,
 			result: null,
@@ -130,12 +142,28 @@ export class ToolTestsService {
 		if (normalized.tool === "send_incident_email") {
 			return this.executeEmail(entity)
 		}
-		return this.executeCall(entity, normalized)
+		return this.executeCall(entity)
 	}
 
 	async get(identifier: string): Promise<ToolTestResult> {
 		const entity = await this.getEntity(identifier)
-		const current = await this.expireIfNeeded(entity)
+		let current = await this.expireIfNeeded(entity)
+		if (
+			current.status === "accepted" &&
+			current.provider === "elevenlabs" &&
+			current.providerReference
+		) {
+			const result = await this.elevenLabs.getResult(
+				this.adapterCallRecord(current),
+			)
+			// A slow provider lookup must not turn an expired test into success.
+			current = await this.expireIfNeeded(
+				await this.getEntity(identifier),
+			)
+			if (result && !isTerminal(current.status)) {
+				return this.completeResult(current, result)
+			}
+		}
 		return toToolTestResult(current)
 	}
 
@@ -145,11 +173,15 @@ export class ToolTestsService {
 	 */
 	async completeCall(body: ToolTestCallCallback): Promise<ToolTestResult> {
 		let entity = await this.getEntity(body.callIdentifier)
-		if (entity.tool !== "call_engineer" || entity.mode !== "live") {
+		if (
+			entity.tool !== "call_engineer" ||
+			entity.mode !== "live" ||
+			(entity.provider && entity.provider !== "happyrobot")
+		) {
 			throw new DomainException(
 				HttpStatus.CONFLICT,
 				"Invalid Tool Test Callback",
-				"The callback does not belong to a live engineer-call test",
+				"The callback does not belong to a live HappyRobot engineer-call test",
 			)
 		}
 
@@ -174,10 +206,18 @@ export class ToolTestsService {
 			summary: body.summary ?? "",
 			transcript: body.transcript ?? "",
 		}
+		return this.completeResult(entity, result)
+	}
+
+	private async completeResult(
+		entity: ToolTestEntity,
+		result: EngineerCallResult,
+	): Promise<ToolTestResult> {
+		const outcome = result.outcome
 		const patch: EntityPatch = {
 			detail:
 				outcome === "completed"
-					? "Engineer call completed by HappyRobot"
+					? `Engineer call completed by ${entity.provider ?? "happyrobot"}`
 					: `Engineer call ended with ${outcome}`,
 			error:
 				outcome === "completed"
@@ -261,10 +301,7 @@ export class ToolTestsService {
 		}
 	}
 
-	private async executeCall(
-		entity: ToolTestEntity,
-		input: NormalizedInput,
-	): Promise<ToolTestResult> {
+	private async executeCall(entity: ToolTestEntity): Promise<ToolTestResult> {
 		if (entity.mode === "simulated") {
 			const result = this.syntheticCallResult()
 			return toToolTestResult(
@@ -280,11 +317,12 @@ export class ToolTestsService {
 		}
 
 		try {
-			const call = this.adapterCallRecord(entity, input)
-			const outcome = await this.happyRobot.start(
+			const call = this.adapterCallRecord(entity)
+			const outcome = await this.callAdapter.start(
 				{
 					call,
 					callbackURL: this.callbackURL(),
+					incidentContext: call.incidentContext,
 					simulatedScript: {
 						answersByKey: {
 							[SYNTHETIC_CALL_QUESTION.key]:
@@ -324,7 +362,11 @@ export class ToolTestsService {
 			}
 			return toToolTestResult(
 				await this.updateIfStatus(entity.identifier, ["running"], {
-					detail: "Engineer call accepted by HappyRobot; waiting for callback",
+					detail:
+						entity.provider === "elevenlabs"
+							? "Engineer call accepted by ElevenLabs; poll this test for the conversation result"
+							: "Engineer call accepted by HappyRobot; waiting for callback",
+					providerCallSid: outcome.providerCallSid ?? "",
 					providerReference: outcome.providerReference,
 					status: "accepted",
 				}),
@@ -434,7 +476,7 @@ export class ToolTestsService {
 				throw new DomainException(
 					HttpStatus.CONFLICT,
 					"Integration Unavailable",
-					"Live engineer-call tests require live mode, HappyRobot trigger and API key, webhook secret, and public callback base URL",
+					"Live engineer-call tests require ENGINEER_CALL_MODE=live and complete configuration for the selected provider",
 				)
 			}
 		}
@@ -446,16 +488,21 @@ export class ToolTestsService {
 	}
 
 	private callLiveAvailable(): boolean {
-		const { mode, triggerURL, apiKey, webhookSecret } =
-			this.configuration.happyRobot
-		return (
-			mode === "live" &&
-			Boolean(
-				triggerURL &&
-					apiKey &&
-					webhookSecret &&
-					this.configuration.runtime.publicBaseURL,
+		if (this.configuration.engineerCall.mode !== "live") return false
+		if (this.configuration.engineerCall.provider === "elevenlabs") {
+			const { apiKey, agentId, phoneNumberId } =
+				this.configuration.elevenLabs
+			return [apiKey, agentId, phoneNumberId].every((value) =>
+				Boolean(value?.trim()),
 			)
+		}
+		const { triggerURL, apiKey, webhookSecret } =
+			this.configuration.happyRobot
+		return Boolean(
+			triggerURL &&
+				apiKey &&
+				webhookSecret &&
+				this.configuration.runtime.publicBaseURL,
 		)
 	}
 
@@ -580,11 +627,8 @@ export class ToolTestsService {
 		return `${this.configuration.runtime.publicBaseURL.replace(/\/+$/u, "")}/api/tools/tests/callbacks/happyrobot`
 	}
 
-	private adapterCallRecord(
-		entity: ToolTestEntity,
-		input: NormalizedInput,
-	): EngineerCallRecord {
-		const engineer = entity.engineer ?? this.persistedEngineer(input)
+	private adapterCallRecord(entity: ToolTestEntity): EngineerCallRecord {
+		const engineer = entity.engineer
 		if (!engineer) {
 			throw new Error("Tool-test engineer is missing")
 		}
@@ -598,10 +642,18 @@ export class ToolTestsService {
 			failureReason: "",
 			finishedAt: "",
 			identifier: entity.identifier,
+			incidentContext: {
+				incidentDescription:
+					"This is a standalone integration test. No real incident or recovery action is in progress.",
+				location: "Casa Pepe synthetic test environment",
+				servicesDown: ["synthetic test service"],
+			},
 			incidentIdentifier: "tool-test-incident",
 			mode: "live",
 			planStepIdentifier: "tool-test-call",
-			providerReference: "",
+			provider: entity.provider ?? undefined,
+			providerCallSid: entity.providerCallSid,
+			providerReference: entity.providerReference,
 			purpose: SYNTHETIC_CALL_PURPOSE,
 			questions: [SYNTHETIC_CALL_QUESTION],
 			result: null,
@@ -659,6 +711,8 @@ function toToolTestResult(entity: ToolTestEntity): ToolTestResult {
 		finishedAt: entity.finishedAt,
 		identifier: entity.identifier,
 		mode: entity.mode,
+		provider: entity.provider,
+		providerCallSid: entity.providerCallSid,
 		providerReference: entity.providerReference,
 		result: entity.result,
 		status: entity.status,

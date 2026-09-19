@@ -4,6 +4,8 @@ export type Environment = (typeof ENVIRONMENTS)[number]
 
 export type EngineerCallMode = "simulated" | "live"
 
+export type EngineerCallProvider = "elevenlabs" | "happyrobot"
+
 export type RecoveryMode = "simulated" | "http"
 
 export interface RuntimeConfiguration {
@@ -32,6 +34,18 @@ export interface HappyRobotConfiguration {
 	readonly apiKey: string
 	readonly webhookSecret: string
 	readonly simulatedCallDelayMilliseconds: number
+}
+
+export interface ElevenLabsConfiguration {
+	readonly apiKey: string
+	readonly agentId: string
+	readonly phoneNumberId: string
+	readonly pollIntervalMilliseconds: number
+}
+
+export interface EngineerCallConfiguration {
+	readonly mode: EngineerCallMode
+	readonly provider: EngineerCallProvider
 }
 
 export interface RecoveryConfiguration {
@@ -70,7 +84,9 @@ export interface ApplicationConfiguration {
 	readonly database: DatabaseConfiguration
 	readonly authentication: AuthenticationConfiguration
 	readonly webhooks: WebhooksConfiguration
+	readonly engineerCall: EngineerCallConfiguration
 	readonly happyRobot: HappyRobotConfiguration
+	readonly elevenLabs: ElevenLabsConfiguration
 	readonly recovery: RecoveryConfiguration
 	readonly demo: DemoConfiguration
 	readonly agent: AgentConfiguration

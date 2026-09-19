@@ -5,7 +5,7 @@ The agent's eight MVP tools are registered in `apps/server/src/tools`. Shared in
 | Tool | Behavior |
 |---|---|
 | `get_incident_context` | Read the incident and latest plan, including services, dependencies, capacity and business impact. |
-| `call_engineer` | Start the existing asynchronous HappyRobot call adapter. |
+| `call_engineer` | Start an asynchronous call through the configured ElevenLabs or HappyRobot adapter, or simulate it. |
 | `save_recovery_plan` | Check the previous version, supersede pending approvals and persist the new plan. |
 | `send_incident_email` | Render the persisted plan and send it to the configured operator via Resend, or simulate it. |
 | `request_approval` | Ask the operator to authorize a specific plan step. |
@@ -27,8 +27,12 @@ The authenticated `/api/engineers/incoming-calls/simulate` endpoint provides the
 
 `INCIDENT_EMAIL_MODE=simulated` never contacts a provider. Live sending requires server-side `RESEND_API_KEY`, `INCIDENT_EMAIL_FROM` and `INCIDENT_EMAIL_TO`. The agent cannot choose arbitrary recipients. The generated email is explicitly labelled as a demo.
 
-The authenticated `/api/tools/tests` routes expose the same email and engineer-call boundaries for provider checks that do not depend on an incident. They default to synthetic simulated requests, persist idempotent results, and keep HappyRobot callbacks isolated from incident records and agent events.
+The authenticated `/api/tools/tests` routes expose the same email and engineer-call boundaries for provider checks that do not depend on an incident. They default to synthetic simulated requests, persist idempotent results, and keep ElevenLabs result polling and HappyRobot callbacks isolated from incident records and agent events. Standalone calls use the same configured adapter as incident calls; GET of an accepted ElevenLabs test fetches its conversation result.
 
 ## Operational boundary
 
 This is a single coordinator hackathon runtime. It uses the existing database-backed tool log and per-run cycle serialization. It does not provide distributed scheduling or exactly-once side effects across crashes; email also relies on the provider's idempotency retention window. Unknown outcomes must be reconciled before retrying after that window. Deployments must configure the HappyRobot workflow and a reachable callback URL; adding these tools does not provision phone numbers or provider accounts.
+
+## Outbound voice providers
+
+NestJS owns the `EngineerCallAdapter` boundary, persisted call records and completion handling. ElevenLabs uses server-side polling; HappyRobot uses its callback. See [voice setup](../../apps/server/docs/ELEVENLABS.md) and the [shared outbound contract](../contracts/outbound-calls.d.ts).

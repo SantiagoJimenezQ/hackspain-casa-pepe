@@ -138,6 +138,8 @@ export function createApplicationConfiguration(
 			maximumCyclesPerRun: variables.AGENT_MAXIMUM_CYCLES_PER_RUN,
 			maximumStepAttempts: variables.AGENT_MAXIMUM_STEP_ATTEMPTS,
 			maximumStepsPerCycle: variables.AGENT_MAXIMUM_STEPS_PER_CYCLE,
+			requireOperatorApproval:
+				variables.AGENT_REQUIRE_OPERATOR_APPROVAL === "true",
 			toolTimeoutMilliseconds: variables.AGENT_TOOL_TIMEOUT_MILLISECONDS,
 		},
 		authentication: {

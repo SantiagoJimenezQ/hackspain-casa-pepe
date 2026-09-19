@@ -157,6 +157,9 @@ export class EnvironmentVariables {
 	@Min(1)
 	AGENT_MAXIMUM_STEP_ATTEMPTS: number = 2
 
+	@IsIn(["true", "false"])
+	AGENT_REQUIRE_OPERATOR_APPROVAL: string = "true"
+
 	@Type(() => Number)
 	@IsInt()
 	@Min(1000)

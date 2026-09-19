@@ -553,7 +553,23 @@ describe("LlmLoopService", () => {
 		const outcome = await service.run(actions as unknown as LlmLoopActions)
 
 		expect(outcome.kind).toBe("completed")
-		expect(validateLlmPlanMock).toHaveBeenCalledWith(draft, state.input)
+		// The server guarantees the engineer call while facts stay pending, so the validated
+		// draft is the model's proposal plus that step.
+		const [repaired, validatedAgainst] = validateLlmPlanMock.mock
+			.calls[0] as [
+			{ steps: Array<{ invocation: { name: string } }> },
+			unknown,
+		]
+		expect(validatedAgainst).toBe(state.input)
+		expect(repaired).toMatchObject({
+			capacity: draft.capacity,
+			priorities: draft.priorities,
+			reason: draft.reason,
+			summary: draft.summary,
+		})
+		expect(repaired.steps.map((step) => step.invocation.name)).toEqual([
+			"call_engineer",
+		])
 		expect(actions.save).toHaveBeenCalledWith(draft, state)
 		expect(client.complete).toHaveBeenCalledTimes(2)
 		expect(

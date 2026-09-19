@@ -1,4 +1,7 @@
-import { AGENT_ACTOR_NAME } from "@agent/constants/agent.constant"
+import {
+	AGENT_ACTOR_NAME,
+	CONTACT_ENGINEER_STEP_IDENTIFIER,
+} from "@agent/constants/agent.constant"
 import { PlanBuildInput } from "@agent/types/agent.type"
 import { Actor } from "@common/types/identity.type"
 
@@ -110,7 +113,8 @@ export function repairLlmPlanDraft(
 			.filter((step) => CARRIED_STATUSES.has(step.status))
 			.map((step) => [step.identifier, step]),
 	)
-	const repairedSteps = value.steps.map((step) => {
+	const withCall = withEngineerCall(value.steps, input, trustedByIdentifier)
+	const repairedSteps = withCall.map((step) => {
 		// Dispatched work is server state: the model only has to keep listing it.
 		const trusted = isRecord(step)
 			? trustedByIdentifier.get(textOf(step, "identifier"))
@@ -210,6 +214,8 @@ function repairPriorities(
 			decision === "recover-now" || decision === "already-healthy"
 				? []
 				: unhealthy
+		// The recovery cost stays the model's to get right: the validator must still catch a
+		// plan that miscounts what it is committing.
 		return { ...priority, blockedBy, serviceName: service.name }
 	})
 }
@@ -410,4 +416,84 @@ function repairStep(
 		default:
 			return base
 	}
+}
+
+/**
+ * A plan that leaves facts unconfirmed without calling the on-call engineer strands the
+ * incident: the call is the only way to settle them. The scenario briefing already holds the
+ * questions, so the step is added rather than rejected, and it runs first because it is
+ * asynchronous and nothing else depends on it.
+ */
+function withEngineerCall(
+	steps: ReadonlyArray<unknown>,
+	input: PlanBuildInput,
+	trustedByIdentifier: ReadonlyMap<string, unknown>,
+): ReadonlyArray<unknown> {
+	const pendingFacts = input.incident.facts.some(
+		(fact) => fact.status === "pending",
+	)
+	if (!pendingFacts || !input.briefing.questions.length) {
+		return steps
+	}
+	const alreadyCalled = (
+		input.previousPlan ? input.previousPlan.steps : []
+	).some(
+		(step) =>
+			step.invocation.name === "call_engineer" &&
+			step.status !== "failed",
+	)
+	const plannedCall = steps
+		.filter(isRecord)
+		.some(
+			(step) =>
+				isRecord(step.invocation) &&
+				textOf(step.invocation, "name") === "call_engineer",
+		)
+	if (alreadyCalled || plannedCall) {
+		return steps
+	}
+	const call = {
+		approvalIdentifier: "",
+		attempts: 0,
+		capacityUnits: 0,
+		dependsOn: [],
+		identifier: CONTACT_ENGINEER_STEP_IDENTIFIER,
+		invocation: {
+			input: {
+				engineerName: input.engineer.name,
+				engineerPhone: input.engineer.phone,
+				engineerRole: input.engineer.role,
+				purpose: input.briefing.purpose,
+				questions: input.briefing.questions.map((question) => ({
+					key: question.key,
+					question: question.question,
+				})),
+			},
+			name: "call_engineer",
+		},
+		order: 1,
+		owner: { kind: "engineer", name: input.engineer.name },
+		reason: "Settle the pending facts with the on-call engineer before committing capacity",
+		requiresApproval: false,
+		resultSummary: "",
+		serviceIdentifier: "",
+		status: "proposed",
+		statusReason: "",
+		title: `Call ${input.engineer.name} to confirm the pending facts`,
+		toolCallIdentifier: "",
+		updatedAt: input.incident.updatedAt,
+	}
+	const rest = steps.filter(
+		(step) =>
+			!isRecord(step) ||
+			!trustedByIdentifier.has(textOf(step, "identifier")),
+	)
+	const trusted = steps.filter(
+		(step) =>
+			isRecord(step) &&
+			trustedByIdentifier.has(textOf(step, "identifier")),
+	)
+	return [...trusted, call, ...rest].map((step, index) =>
+		isRecord(step) ? { ...step, order: index + 1 } : step,
+	)
 }

@@ -287,13 +287,13 @@ function transcriptKey(item: TranscriptItem) {
 
 export function AgentPanel() {
   const { overview, activity, busyAction, decideApproval } = useDashboard();
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [treeOpen, setTreeOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const work = useMemo(() => (overview ? currentWork(overview, activity) : null), [overview, activity]);
+  const work = useMemo(() => (overview ? currentWork(overview, activity, locale) : null), [overview, activity, locale]);
   const tools = useMemo(() => (overview ? mergedToolCalls(overview, activity) : []), [overview, activity]);
   const items = useMemo(() => (overview ? buildTranscript(overview, activity) : []), [overview, activity]);
 

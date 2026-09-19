@@ -329,12 +329,16 @@ function planOf(overview: Overview): Plan | null {
   return overview.plan.kind === "plan" ? overview.plan.plan : null;
 }
 
-export function currentWork(overview: Overview, activity: ReadonlyArray<ActivityRecord> = []): CurrentWork {
+export function currentWork(
+  overview: Overview,
+  activity: ReadonlyArray<ActivityRecord> = [],
+  locale: Locale = DEFAULT_LOCALE,
+): CurrentWork {
   const events = [...overview.recentActivity, ...activity];
   const tools = mergedToolCalls(overview, events);
   const running = [...tools].reverse().find((tool) => tool.status === "running" || tool.status === "pending");
   if (running) {
-    return { kind: "tool", tool: running, title: toolTitle(running, overview.incident.services), state: mapToolState(running.status) };
+    return { kind: "tool", tool: running, title: toolTitle(running, overview.incident.services, locale), state: mapToolState(running.status) };
   }
   const awaiting = planOf(overview)?.steps.find((step) => step.status === "awaiting-approval");
   if (awaiting) {

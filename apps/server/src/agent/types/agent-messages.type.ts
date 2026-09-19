@@ -36,6 +36,9 @@ export interface AgentMessages {
 		unit: string,
 	): string
 	readonly contactEngineerTitle: string
+	readonly awaitingEngineerCall: string
+	readonly immediateCallReason: string
+	readonly immediateCallSummary: string
 	prepareTaskTitle(serviceName: string, backupRegion: string): string
 	prepareTaskReason(serviceName: string, reason: string): string
 	prepareTaskDescription(actionDescription: string): string

@@ -173,7 +173,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			"stp_contact-engineer",
 			"completed",
 		)
-		expect(planOne.version).toBe(1)
+		expect(planOne.version).toBe(2)
 		expect(planOne.summary.startsWith("Recuperar")).toBe(true)
 		expect(
 			planOne.priorities
@@ -204,11 +204,11 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			"pending",
 		)
 		expect(firstApprovals).toHaveLength(1)
-		expect(firstApprovals[0].planVersion).toBe(1)
+		expect(firstApprovals[0].planVersion).toBe(2)
 		expect((await tasksService.list(runIdentifier)).length).toBe(2)
 
 		await incidentsService.applyScenarioTwist()
-		const planTwo = await waitForPlanVersion(runIdentifier, 2)
+		const planTwo = await waitForPlanVersion(runIdentifier, 3)
 		expect(planTwo.capacity.resourceIdentifier).toBe("backup-bahrain")
 		expect(planTwo.capacity.totalCapacity).toBe(12)
 		expect(
@@ -240,7 +240,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			runIdentifier,
 			"pending",
 		)
-		expect(pendingApproval.planVersion).toBe(2)
+		expect(pendingApproval.planVersion).toBe(3)
 
 		await approvalsService.decide({
 			approvalIdentifier: pendingApproval.identifier,
@@ -300,7 +300,10 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		).toBe(12)
 
 		const report = await runReportService.build(runIdentifier)
-		expect(report.planVersions).toHaveLength(2)
+		expect(report.planVersions).toHaveLength(3)
+		expect(
+			report.planVersions[0].summary.startsWith("Se está llamando"),
+		).toBe(true)
 		expect(
 			report.approvals.map((approval) => approval.status).sort(),
 		).toEqual(["approved", "superseded"])
@@ -349,7 +352,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			{ type: "meteorite-impact" },
 			"test",
 		)
-		const plan = await waitForPlanVersion(restarted.runIdentifier, 1)
+		const plan = await waitForPlanVersion(restarted.runIdentifier, 2)
 
 		expect(plan.capacity.resourceIdentifier).toBe("backup-bahrain")
 		expect(plan.capacity.totalCapacity).toBe(12)
@@ -391,7 +394,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			decision: "reject",
 			operatorName: "Luis",
 		})
-		const revised = await waitForPlanVersion(started.runIdentifier, 2)
+		const revised = await waitForPlanVersion(started.runIdentifier, 3)
 
 		const database = revised.priorities.find(
 			(priority) => priority.serviceIdentifier === "orders-database",

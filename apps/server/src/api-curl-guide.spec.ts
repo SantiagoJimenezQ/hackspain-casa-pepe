@@ -549,7 +549,7 @@ describe("API curl walkthrough contract", () => {
 			`/api/learning/reports/${runIdentifier}`,
 		)
 		expect(report.status).toBe(200)
-		expect(report.body.planVersions).toHaveLength(2)
+		expect(report.body.planVersions).toHaveLength(3)
 		expect(report.body.approvals.map((item) => item.status).sort()).toEqual(
 			["approved", "superseded"],
 		)
@@ -563,7 +563,7 @@ describe("API curl walkthrough contract", () => {
 			`/api/plans?runIdentifier=${runIdentifier}`,
 		)
 		expect(plans.status).toBe(200)
-		expect(plans.body).toHaveLength(2)
+		expect(plans.body).toHaveLength(3)
 
 		const activity = await request<Page<ActivityRecord>>(
 			baseURL,
@@ -745,11 +745,16 @@ describe("API curl walkthrough contract", () => {
 			),
 		).toBe(true)
 
-		const plan = await request<CurrentPlanResponse>(
+		// The engineer call does not depend on the model: it is dispatched before the first
+		// turn, so even a dead provider leaves an opening plan holding that call and nothing else.
+		const plans = await request<ReadonlyArray<PlanRecord>>(
 			baseURL,
-			`/api/plans/current?runIdentifier=${started.runIdentifier}`,
+			`/api/plans?runIdentifier=${started.runIdentifier}`,
 		)
-		expect(plan.status).toBe(200)
-		expect(plan.body.kind).toBe("none")
+		expect(plans.status).toBe(200)
+		const opening = plans.body.find((candidate) => candidate.version === 1)
+		expect(opening?.steps.map((step) => step.invocation.name)).toEqual([
+			"call_engineer",
+		])
 	})
 })

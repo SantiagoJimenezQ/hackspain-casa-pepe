@@ -5,7 +5,10 @@ import {
 } from "@agent/constants/agent.constant"
 import { AGENT_MESSAGES } from "@agent/constants/agent-messages.constant"
 import { interpretAnswer } from "@agent/helpers/answer-interpretation.helper"
-import { stepIdentifierFor } from "@agent/helpers/plan-builder.helper"
+import {
+	buildEngineerCallDraft,
+	stepIdentifierFor,
+} from "@agent/helpers/plan-builder.helper"
 import { isPlanSettled } from "@agent/helpers/plan-completion.helper"
 import {
 	LlmLoopService,
@@ -457,6 +460,7 @@ export class AgentService {
 			runIdentifier,
 			trigger: trigger.kind,
 		})
+		await this.callEngineerImmediately(incident, messages)
 
 		const outcome = await this.llmLoop.run({
 			execute: async (identifier, expected) => {
@@ -554,6 +558,53 @@ export class AgentService {
 		)
 			this.cycleState.tryBegin(runIdentifier)
 		return outcome
+	}
+
+	/**
+	 * The on-call engineer is the only source for the pending facts and the phone takes about a
+	 * minute to answer, so the run opens with the call instead of reaching it through the model:
+	 * a plan holding just that step is persisted and dispatched before the first model turn, and
+	 * the investigation then runs while it rings. Later cycles already have a plan and skip this.
+	 */
+	private async callEngineerImmediately(
+		incident: IncidentSnapshot,
+		messages: AgentMessages,
+	): Promise<void> {
+		const existing = await this.plansService.findLatestPlan(
+			incident.runIdentifier,
+		)
+		const pendingFacts = incident.facts.filter(
+			(fact) => fact.status === "pending",
+		)
+		if (existing || !pendingFacts.length) {
+			return
+		}
+		const input = await this.buildLlmInput(
+			incident,
+			null,
+			messages.triggerImpact,
+			messages,
+		)
+		if (!input.briefing.questions.length) {
+			return
+		}
+		await this.incidentsService.markResponding(incident.runIdentifier)
+		const plan = await this.createPlanVersion(
+			incident,
+			null,
+			messages.triggerImpact,
+			messages,
+			buildEngineerCallDraft(input),
+		)
+		this.logger.log(LOG_MESSAGES.AGENT.ENGINEER_CALL_DISPATCHED, {
+			planVersion: plan.version,
+			runIdentifier: incident.runIdentifier,
+		})
+		for (const step of plan.steps.filter(
+			(candidate) => candidate.invocation.name === "call_engineer",
+		)) {
+			await this.executeStep(incident, plan, step, messages)
+		}
 	}
 
 	private async completePlanIfSettled(

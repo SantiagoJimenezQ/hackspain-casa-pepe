@@ -1,4 +1,5 @@
 import {
+	buildEngineerCallDraft,
 	buildPlanDraft,
 	stepIdentifierFor,
 } from "@agent/helpers/plan-builder.helper"
@@ -441,5 +442,52 @@ describe("buildPlanDraft", () => {
 			"recover-now",
 		)
 		expect(draft.capacity.plannedUnits).toBe(7)
+	})
+})
+
+describe("buildEngineerCallDraft", () => {
+	it("opens the run with the engineer call alone and commits no capacity", () => {
+		const draft = buildEngineerCallDraft(createInput(12))
+
+		expect(draft.steps).toHaveLength(1)
+		const call = stepOf(draft.steps, "stp_contact-engineer")
+		expect(call.invocation.name).toBe("call_engineer")
+		expect(call.order).toBe(1)
+		expect(call.dependsOn).toEqual([])
+		expect(call.requiresApproval).toBe(false)
+		expect(draft.capacity.plannedUnits).toBe(0)
+		expect(
+			draft.priorities.every(
+				(priority) => priority.decision !== "recover-now",
+			),
+		).toBe(true)
+	})
+
+	it("carries the configured engineer and every briefing question", () => {
+		const draft = buildEngineerCallDraft(createInput(12))
+
+		const call = stepOf(draft.steps, "stp_contact-engineer")
+		if (call.invocation.name !== "call_engineer") {
+			throw new Error("Expected a call_engineer invocation")
+		}
+		expect(call.invocation.input.engineerName).toBe("Marta Ruiz")
+		expect(call.invocation.input.engineerPhone).toBe("+34600000000")
+		expect(call.invocation.input.questions.map((item) => item.key)).toEqual(
+			METEORITE_SCENARIO.engineerBriefing.questions.map(
+				(question) => question.key,
+			),
+		)
+	})
+
+	it("ranks every known service exactly once", () => {
+		const draft = buildEngineerCallDraft(createInput(12))
+		const incident = createImpactedIncident(12)
+
+		expect(draft.priorities).toHaveLength(incident.services.length)
+		expect(
+			new Set(
+				draft.priorities.map((priority) => priority.serviceIdentifier),
+			).size,
+		).toBe(incident.services.length)
 	})
 })

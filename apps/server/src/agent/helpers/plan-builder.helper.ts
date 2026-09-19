@@ -75,6 +75,85 @@ export function effectiveCapacity(
 	)
 }
 
+/**
+ * The pending facts can only be settled by the on-call engineer and the phone takes about a
+ * minute to answer, so a run opens with a plan that holds nothing but that call: the server
+ * dispatches it before the first model turn and every investigation runs while it rings.
+ * Recovery decisions stay with the model, so every unhealthy service is left postponed here.
+ */
+export function buildEngineerCallDraft(input: PlanBuildInput): PlanDraft {
+	const { incident } = input
+	const messages = AGENT_MESSAGES[input.language]
+	const unhealthy = incident.services.filter(
+		(service) => service.status !== "healthy",
+	)
+	const decisions = new Map<string, DecisionOutcome>(
+		unhealthy.map((service): [string, DecisionOutcome] => [
+			service.identifier,
+			{
+				blockedBy: [],
+				decision: "postpone",
+				reason: messages.awaitingEngineerCall,
+			},
+		]),
+	)
+	const resource = selectBackupResource(
+		incident,
+		(candidate) =>
+			effectiveCapacity(candidate, input) - candidate.allocatedCapacity,
+	)
+	const assumedCapacity = effectiveCapacity(resource, input)
+	const call = createStep(
+		CONTACT_ENGINEER_STEP_IDENTIFIER,
+		messages.contactEngineerTitle,
+		input.briefing.purpose,
+		{
+			input: {
+				engineerName: input.engineer.name,
+				engineerPhone: input.engineer.phone,
+				engineerRole: input.engineer.role,
+				purpose: input.briefing.purpose,
+				questions: input.briefing.questions.map((question) => ({
+					key: question.key,
+					question: question.question,
+				})),
+			},
+			name: "call_engineer",
+		},
+		{ kind: "engineer", name: input.engineer.name },
+		"",
+		0,
+		false,
+		[],
+		incident.updatedAt,
+		messages,
+	)
+	return {
+		assumptions: [messages.awaitingEngineerCall],
+		capacity: {
+			assumedCapacity,
+			confirmed: resource.confirmed,
+			plannedUnits: resource.allocatedCapacity,
+			postponedUnits: sumBy(
+				unhealthy,
+				(service) => service.recoveryCapacityUnits,
+			),
+			remainingUnits: assumedCapacity - resource.allocatedCapacity,
+			resourceIdentifier: resource.identifier,
+			totalCapacity: resource.totalCapacity,
+		},
+		priorities: buildPriorities(
+			scoreServices(unhealthy, incident),
+			incident,
+			decisions,
+			messages,
+		),
+		reason: messages.immediateCallReason,
+		steps: [{ ...call, order: 1 }],
+		summary: messages.immediateCallSummary,
+	}
+}
+
 export function buildPlanDraft(input: PlanBuildInput): PlanDraft {
 	const { incident, previousPlan } = input
 	const messages = AGENT_MESSAGES[input.language]

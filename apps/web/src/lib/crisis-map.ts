@@ -62,6 +62,81 @@ export function spherePath(projection: GeoProjection) {
   return geoPath(projection)({ type: "Sphere" } as GeoPermissibleObjects) ?? "";
 }
 
+export type MapLabelAnchor = "start" | "end";
+/** Offsets are in screen units, ready to use inside the counter-scaled marker layer. */
+export type MapLabelPlacement = { anchor: MapLabelAnchor; x: number; y: number };
+export type MapLabelPoint = { identifier: string; x: number; y: number; lines: number };
+
+const LABEL_GAP = 12;
+const LABEL_WIDTH = 92;
+const LABEL_LINE = 13;
+const LABEL_RISE = 9;
+const MARKER_RADIUS = 15;
+const LABEL_STEPS = [0, -20, 20, -38, 38];
+const LABEL_ANCHORS: MapLabelAnchor[] = ["start", "end"];
+
+type Box = { left: number; right: number; top: number; bottom: number };
+
+function labelBox(point: MapLabelPoint, anchor: MapLabelAnchor, offsetY: number): Box {
+  const left = anchor === "start" ? point.x + LABEL_GAP : point.x - LABEL_GAP - LABEL_WIDTH;
+  const top = point.y + offsetY - LABEL_RISE;
+  return { left, right: left + LABEL_WIDTH, top, bottom: top + point.lines * LABEL_LINE };
+}
+
+function overlaps(left: Box, right: Box): boolean {
+  return left.left < right.right && right.left < left.right && left.top < right.bottom && right.top < left.bottom;
+}
+
+function coversMarker(box: Box, point: MapLabelPoint, points: ReadonlyArray<MapLabelPoint>): boolean {
+  return points.some((other) => {
+    if (other.identifier === point.identifier) return false;
+    const marker = {
+      left: other.x - MARKER_RADIUS,
+      right: other.x + MARKER_RADIUS,
+      top: other.y - MARKER_RADIUS,
+      bottom: other.y + MARKER_RADIUS,
+    };
+    return overlaps(box, marker);
+  });
+}
+
+/**
+ * Keeps map labels legible when markers cluster: each label takes the first free slot, trying the
+ * right of its marker, then the left, then progressively further above and below.
+ */
+export function placeMapLabels(points: ReadonlyArray<MapLabelPoint>): Map<string, MapLabelPlacement> {
+  const ordered = [...points].toSorted((left, right) => {
+    if (left.y !== right.y) return left.y - right.y;
+    if (left.x !== right.x) return left.x - right.x;
+    return left.identifier.localeCompare(right.identifier);
+  });
+  const taken: Box[] = [];
+  const placements = new Map<string, MapLabelPlacement>();
+
+  for (const point of ordered) {
+    let chosen: { anchor: MapLabelAnchor; offsetY: number; box: Box } | null = null;
+    for (const offsetY of LABEL_STEPS) {
+      for (const anchor of LABEL_ANCHORS) {
+        const box = labelBox(point, anchor, offsetY);
+        if (taken.some((other) => overlaps(box, other))) continue;
+        if (coversMarker(box, point, points)) continue;
+        chosen = { anchor, offsetY, box };
+        break;
+      }
+      if (chosen) break;
+    }
+    const placement = chosen ?? { anchor: "start" as const, offsetY: 0, box: labelBox(point, "start", 0) };
+    taken.push(placement.box);
+    placements.set(point.identifier, {
+      anchor: placement.anchor,
+      x: placement.anchor === "start" ? LABEL_GAP : -LABEL_GAP,
+      y: placement.offsetY,
+    });
+  }
+
+  return placements;
+}
+
 export function mapViewForTools(impacted: boolean, toolNames: readonly string[], settled = false): MapView {
   if (!impacted || settled) return "world";
   if (toolNames.includes("get_recovery_capacity")) return "nearby";

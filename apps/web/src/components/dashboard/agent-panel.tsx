@@ -315,6 +315,18 @@ function TranscriptItemView({
       </Task>
     );
   }
+  if (item.kind === "discarded") {
+    return (
+      <DiscardedRow
+        item={item}
+        open={open[item.id] ?? false}
+        onOpenChange={(next) => onOpenChange(item.id, next)}
+        onChildOpenChange={onOpenChange}
+        childOpen={open}
+        items={items}
+      />
+    );
+  }
   return (
     <AgentTool
       tool={item.tool}
@@ -325,8 +337,46 @@ function TranscriptItemView({
   );
 }
 
+function DiscardedRow({
+  item,
+  open,
+  onOpenChange,
+  childOpen,
+  onChildOpenChange,
+  items,
+}: {
+  item: Extract<TranscriptItem, { kind: "discarded" }>;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  childOpen: Record<string, boolean>;
+  onChildOpenChange: (id: string, next: boolean) => void;
+  items: TranscriptItem[];
+}) {
+  const { t } = useI18n();
+  return (
+    <Collapsible open={open} onOpenChange={onOpenChange} className="group not-prose w-full">
+      <CollapsibleTrigger className="flex w-full items-center gap-2 py-1 text-left text-[12px] text-muted-foreground/70 transition-colors hover:text-foreground">
+        <CircleIcon className="size-3 shrink-0 text-muted-foreground/40" />
+        <span className="min-w-0 flex-1 truncate">{t("agent.discarded", { count: item.items.length })}</span>
+        <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground/60 transition-transform group-data-open:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="ml-[6px] overflow-hidden border-muted border-l py-1 pl-3 outline-none">
+        {item.items.map((child) => (
+          <ReasoningRow
+            key={child.id}
+            item={child}
+            open={childOpen[child.id] ?? reasoningDefaultOpen(child, items)}
+            onOpenChange={(next) => onChildOpenChange(child.id, next)}
+          />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 function transcriptKey(item: TranscriptItem) {
   if (item.kind === "tool") return item.tool.identifier;
+  if (item.kind === "discarded") return item.id;
   if (item.kind === "task") return item.id;
   if (item.kind === "approval") return item.approval.identifier;
   return item.id;

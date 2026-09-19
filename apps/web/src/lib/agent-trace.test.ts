@@ -9,11 +9,13 @@ import {
   incidentClock,
   LIVE_REASONING_ID,
   mapToolState,
+  collapseDiscarded,
   mergedToolCalls,
   reasoningDefaultOpen,
   recoveryTimeline,
   toolTitle,
 } from "@/lib/agent-trace";
+import type { TranscriptItem } from "@/lib/agent-trace";
 import type { ActivityRecord, Overview, ToolCall } from "@/lib/casa-pepe-types";
 
 function tool(partial: Partial<ToolCall> & Pick<ToolCall, "identifier" | "name" | "status">): ToolCall {
@@ -704,6 +706,39 @@ describe("agent trace", () => {
     const overview = overviewWith([running]);
     expect(currentWork(overview)).toMatchObject({ kind: "tool", state: "input-available" });
     expect(mergedToolCalls(overview).map((item) => item.status)).toEqual(["running"]);
+  });
+
+  it("folds a run of discarded turns into one row and leaves the rest alone", () => {
+    const thinking = (id: string, disposition?: "stale" | "rejected" | "accepted"): TranscriptItem => ({
+      kind: "thinking",
+      id,
+      text: "",
+      status: "complete",
+      occurredAt: "2026-09-19T10:00:00.000Z",
+      disposition,
+    });
+    const collapsed = collapseDiscarded([
+      thinking("kept", "accepted"),
+      thinking("stale-1", "stale"),
+      thinking("stale-2", "stale"),
+      thinking("rejected-1", "rejected"),
+      thinking("after", "accepted"),
+      thinking("lonely", "stale"),
+    ]);
+    expect(collapsed.map((item) => item.kind)).toEqual([
+      "thinking",
+      "discarded",
+      "thinking",
+      "thinking",
+    ]);
+    const group = collapsed[1];
+    expect(group.kind === "discarded" && group.items.map((item) => item.id)).toEqual([
+      "stale-1",
+      "stale-2",
+      "rejected-1",
+    ]);
+    // A single discard is cheaper to read inline than behind a disclosure.
+    expect(collapsed[3]).toMatchObject({ kind: "thinking", id: "lonely" });
   });
 
   it("keeps thinking visible when the overview cycle flag flaps off mid-turn", () => {

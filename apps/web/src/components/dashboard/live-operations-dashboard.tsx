@@ -104,10 +104,10 @@ function MapPanel() {
       <CrisisMap overview={overview} />
       <DraggableOverlay className="left-2 top-2 z-10">
         <div className="rounded-md border border-border/80 bg-card/90 px-3 py-2 shadow-sm backdrop-blur">
-          <p className="text-[10px] font-semibold tracking-[.16em] text-muted-foreground uppercase">Topología operativa</p>
+          <p className="text-[10px] font-semibold tracking-[.16em] text-muted-foreground uppercase">{t("map.topologyTitle")}</p>
           <p className="mt-1 text-[13px]">{headline}</p>
           <div className="mt-2 flex gap-3 text-[10px] text-muted-foreground">
-            <span>{unhealthy} servicios</span>
+            <span>{t("map.servicesCount", { count: unhealthy })}</span>
             <span>{overview.incident.region}</span>
             <span>→ {overview.incident.backupRegion}</span>
           </div>
@@ -123,6 +123,7 @@ function MapPanel() {
           {t("map.impactConfirmed")}
         </span>
       ) : null}
+      <ActiveCallBanner />
     </Panel>
   );
 }
@@ -310,7 +311,6 @@ export function LiveOperationsDashboard() {
   }
   return (
     <div className="relative min-h-0 flex-1 overflow-y-auto p-3 xl:overflow-hidden">
-      <ActiveCallBanner />
       <div className="grid min-h-0 gap-3 xl:h-full xl:grid-cols-[minmax(0,1.45fr)_minmax(380px,.9fr)]">
         <div className="grid min-h-0 gap-3 xl:grid-rows-[minmax(220px,1.2fr)_minmax(0,1fr)]">
           <MapPanel />

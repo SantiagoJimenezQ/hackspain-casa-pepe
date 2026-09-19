@@ -21,6 +21,23 @@ export function incidentImpacted(incident: Pick<Incident, "impactedAt" | "status
   return Boolean(status) && status !== "normal" && status !== "reset";
 }
 
+/**
+ * The fixed recovery order by sector, mirroring CUSTOMER_SECTOR_PRIORITY on the server: health
+ * first, then finance, then logistics, then every other sector. Names are listed in both
+ * languages and compared without accents.
+ */
+const SECTOR_PRIORITY: ReadonlyArray<ReadonlyArray<string>> = [
+  ["salud", "sanidad", "healthcare", "health"],
+  ["fintech", "finanzas", "finance", "banca", "banking"],
+  ["logistica", "logistics"],
+];
+
+function sectorRank(sector: string) {
+  const normalized = sector.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
+  const tier = SECTOR_PRIORITY.findIndex((names) => names.includes(normalized));
+  return tier === -1 ? SECTOR_PRIORITY.length : tier;
+}
+
 /** Recovered companies climb to the top of the board, still-offline ones sink to the bottom. */
 const CUSTOMER_ACTION_RANK: Record<CustomerAction, number> = {
   recovered: 0,
@@ -76,6 +93,9 @@ export function customerViewOrdered(overview: Overview, activity: ReadonlyArray<
       }
       if (left.recoveryStartedAt !== null) return -1;
       if (right.recoveryStartedAt !== null) return 1;
+      // Nothing has started for either: they queue in the order recovery will take them.
+      const bySector = sectorRank(left.customer.sector) - sectorRank(right.customer.sector);
+      if (bySector !== 0) return bySector;
       return left.scenarioIndex - right.scenarioIndex;
     })
     .map((row) => ({ ...row.customer, recoveryStartedAt: row.recoveryStartedAt }));

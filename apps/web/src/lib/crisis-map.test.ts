@@ -3,6 +3,7 @@ import {
   MAX_CAMERA_K,
   MIN_ARC_RISE,
   agentSettled,
+  placeMapLabels,
   arcPath,
   cameraForView,
   cameraNeedsSnap,
@@ -141,5 +142,33 @@ describe("crisis map camera and projection", () => {
     expect(linkFill("offline", 50)).toBe(0.5);
     expect(linkFill("migrating", 0)).toBeGreaterThan(0.8);
     expect(linkFill("recovered", 40)).toBe(1);
+  });
+});
+
+describe("map label placement", () => {
+  it("keeps a lone label on the right of its marker", () => {
+    const placed = placeMapLabels([{ identifier: "solo", x: 100, y: 100, lines: 2 }]);
+    expect(placed.get("solo")).toEqual({ anchor: "start", x: 12, y: 0 });
+  });
+
+  it("moves a clustered label off its neighbour instead of writing over it", () => {
+    const placed = placeMapLabels([
+      { identifier: "manama", x: 100, y: 100, lines: 2 },
+      { identifier: "dubai", x: 130, y: 104, lines: 1 },
+    ]);
+    const manama = placed.get("manama")!;
+    const dubai = placed.get("dubai")!;
+    expect(manama).not.toEqual(dubai);
+    // Whatever slot each one took, the two must not share the same side at the same height.
+    expect(manama.anchor === dubai.anchor && manama.y === dubai.y).toBe(false);
+  });
+
+  it("is stable: the same points always resolve to the same slots", () => {
+    const points = [
+      { identifier: "a", x: 10, y: 10, lines: 2 },
+      { identifier: "b", x: 30, y: 12, lines: 1 },
+      { identifier: "c", x: 50, y: 14, lines: 1 },
+    ];
+    expect([...placeMapLabels(points)]).toEqual([...placeMapLabels([...points].reverse())]);
   });
 });

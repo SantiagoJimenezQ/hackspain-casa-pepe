@@ -70,7 +70,10 @@ export type TranscriptItem =
       finishReason?: string | null;
       usage?: unknown;
       redacted?: boolean;
-    };
+    }
+  | { kind: "discarded"; id: string; occurredAt: string; items: ThinkingItem[] };
+
+export type ThinkingItem = Extract<TranscriptItem, { kind: "thinking" }>;
 
 export const LLM_ACTIVITY_TYPES = [
   "agent.llm-output",
@@ -795,7 +798,49 @@ export function buildTranscript(overview: Overview, activity: ReadonlyArray<Acti
       title: liveThinkingLabel(events),
     });
   }
-  return items;
+  return collapseDiscarded(items);
+}
+
+/** A turn the server threw away: it never produced an action, so it is churn rather than history. */
+function isDiscardedTurn(item: TranscriptItem): item is ThinkingItem {
+  if (item.kind !== "thinking") return false;
+  if (item.status === "streaming") return false;
+  return item.disposition === "stale" || item.disposition === "rejected";
+}
+
+/**
+ * Folds each run of consecutive discarded turns into one row. A lone discard stays inline: hiding a
+ * single attempt costs a click and saves no space.
+ */
+export function collapseDiscarded(items: TranscriptItem[]): TranscriptItem[] {
+  const collapsed: TranscriptItem[] = [];
+  let run: ThinkingItem[] = [];
+
+  const flush = () => {
+    if (!run.length) return;
+    if (run.length === 1) {
+      collapsed.push(run[0]);
+    } else {
+      collapsed.push({
+        kind: "discarded",
+        id: `discarded-${run[0].id}`,
+        occurredAt: run[0].occurredAt,
+        items: run,
+      });
+    }
+    run = [];
+  };
+
+  for (const item of items) {
+    if (isDiscardedTurn(item)) {
+      run.push(item);
+      continue;
+    }
+    flush();
+    collapsed.push(item);
+  }
+  flush();
+  return collapsed;
 }
 
 function transcriptId(item: TranscriptItem) {

@@ -1,4 +1,7 @@
-import { prioritizeCustomers } from "@customers/helpers/customer-priority.helper"
+import {
+	prioritizeCustomers,
+	sectorRank,
+} from "@customers/helpers/customer-priority.helper"
 import { RecoveryActionRecord } from "@recovery/types/recovery.type"
 import {
 	createImpactedIncident,
@@ -33,7 +36,20 @@ function action(
 }
 
 describe("prioritizeCustomers", () => {
-	it("ranks the customer whose critical service blocks the rest first", () => {
+	it("recovers health, then finance, then logistics, before any other sector", () => {
+		const report = prioritizeCustomers(createImpactedIncident(7), [], NOW)
+
+		const tiers = report.customers.map((customer) =>
+			sectorRank(customer.sector),
+		)
+		expect(tiers).toEqual(
+			[...tiers].sort((first, second) => first - second),
+		)
+		expect(sectorRank(report.customers[0].sector)).toBe(0)
+		expect(report.customers[0].sector).toBe("Healthcare")
+	})
+
+	it("ranks by score inside each sector and adds up the breakdown", () => {
 		const incident = createImpactedIncident(7)
 		const report = prioritizeCustomers(incident, [], NOW)
 
@@ -42,9 +58,7 @@ describe("prioritizeCustomers", () => {
 			report.customers.map((_, index) => index + 1),
 		)
 		const first = report.customers[0]
-		expect(first.highestImpact).toBe("critical")
 		expect(first.status).toBe("down")
-		expect(first.blockedDependentServices.length).toBeGreaterThan(0)
 		expect(first.score).toBe(
 			first.breakdown.businessImpact +
 				first.breakdown.blockedDependents +
@@ -55,9 +69,12 @@ describe("prioritizeCustomers", () => {
 		)
 		expect(first.minutesDown).toBe(30)
 		for (let index = 1; index < report.customers.length; index += 1) {
-			expect(report.customers[index - 1].score).toBeGreaterThanOrEqual(
-				report.customers[index].score,
-			)
+			const previous = report.customers[index - 1]
+			const current = report.customers[index]
+			if (sectorRank(previous.sector) !== sectorRank(current.sector)) {
+				continue
+			}
+			expect(previous.score).toBeGreaterThanOrEqual(current.score)
 		}
 	})
 

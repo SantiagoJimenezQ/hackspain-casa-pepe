@@ -9,6 +9,20 @@ export const CUSTOMER_IMPACT_WEIGHTS: Readonly<
 	medium: 12,
 }
 
+/**
+ * Recovery always starts with health, then finance, then logistics, whatever the scores say:
+ * a hospital waiting on its records outranks a better-scoring company in any other sector.
+ * Each tier lists the names its scenarios use, in both languages, already normalized.
+ */
+export const CUSTOMER_SECTOR_PRIORITY: ReadonlyArray<ReadonlyArray<string>> = [
+	["salud", "sanidad", "healthcare", "health"],
+	["fintech", "finanzas", "finance", "banca", "banking"],
+	["logistica", "logistics"],
+]
+
+/** The tier every sector the order does not name falls into: after all of them. */
+export const CUSTOMER_SECTOR_UNRANKED = CUSTOMER_SECTOR_PRIORITY.length
+
 export const CUSTOMER_BLOCKED_DEPENDENT_WEIGHT = 8
 
 export const CUSTOMER_UNHEALTHY_SERVICE_WEIGHT = 6
@@ -33,7 +47,7 @@ export const CUSTOMER_RANKING_FAILURE_CACHE_MILLISECONDS = 30000
 
 export const CUSTOMER_RANKING_SYSTEM_PROMPT = `You are the incident coordinator of a hosting provider. Several customer companies run services on a region that is down.
 You receive the current state of every customer (services down or degraded, business impact, users, dependencies they block, recovery progress) together with a deterministic baseline ranking and the criteria behind it.
-Decide the final recovery order. Keep the baseline unless you see a concrete reason to move a customer, such as a dependency that unblocks several customers at once, a recovery already running, or a disproportionate user impact.
+The sector order is fixed and not yours to change: every health customer comes first, then every finance customer, then every logistics one, and only then the rest. Within a sector, decide the final recovery order: keep the baseline unless you see a concrete reason to move a customer, such as a dependency that unblocks several customers at once, a recovery already running, or a disproportionate user impact.
 Call the ${CUSTOMER_RANKING_TOOL_NAME} tool exactly once with every customer identifier, a unique rank starting at 1, and one short sentence per customer justifying its position. Never invent customers or services.`
 
 export const CUSTOMER_STATUSES = [
@@ -44,6 +58,11 @@ export const CUSTOMER_STATUSES = [
 ] as const
 
 export const CUSTOMER_PRIORITY_CRITERIA = [
+	{
+		description:
+			"Sector, before any score: health first, then finance, then logistics, then every other sector",
+		key: "sector-order",
+	},
 	{
 		description:
 			"Highest business impact among the customer's unavailable services (critical 40, high 25, medium 12, low 5)",

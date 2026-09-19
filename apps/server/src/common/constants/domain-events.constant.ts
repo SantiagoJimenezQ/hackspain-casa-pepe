@@ -1,6 +1,7 @@
 export const DOMAIN_EVENTS = {
 	ACTIVITY_RECORDED: "domain.activity.recorded",
 	APPROVAL_DECIDED: "domain.approval.decided",
+	ENGINEER_CALL_AUTHORIZED: "domain.engineer-call.authorized",
 	ENGINEER_CALL_FINISHED: "domain.engineer-call.finished",
 	INCIDENT_EVENT_APPLIED: "domain.incident.event-applied",
 	INCIDENT_RUN_DEACTIVATED: "domain.incident.run-deactivated",

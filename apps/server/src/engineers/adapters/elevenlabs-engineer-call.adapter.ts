@@ -15,6 +15,7 @@ import {
 } from "@engineers/types/engineer.type"
 import { Injectable, Logger } from "@nestjs/common"
 import {
+	EngineerCallAuthorization,
 	EngineerCallAuthorizations,
 	EngineerCallIncidentContext,
 } from "../../../../../packages/contracts/outbound-calls"
@@ -105,6 +106,7 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 					request.incidentContext,
 					request.call.purpose,
 					request.call.questions,
+					request.call.identifier,
 				),
 			},
 			to_number: destination,
@@ -231,14 +233,26 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 					stage: "conversation",
 					status,
 				})
-				return buildResult(body, null, failureOutcome, call.questions)
+				return buildResult(
+					body,
+					null,
+					failureOutcome,
+					call.questions,
+					call.liveAuthorizations,
+				)
 			}
 
 			if (status !== "done" || !isRecord(body.analysis)) {
 				return null
 			}
 
-			return buildResult(body, body.analysis, "completed", call.questions)
+			return buildResult(
+				body,
+				body.analysis,
+				"completed",
+				call.questions,
+				call.liveAuthorizations,
+			)
 		} catch (error) {
 			this.diagnostic(call, "result", startedAt, {
 				error,
@@ -339,8 +353,11 @@ function dynamicVariables(
 	context: EngineerCallIncidentContext,
 	purpose: string,
 	questions: ReadonlyArray<EngineerQuestion>,
+	callIdentifier: string,
 ): Record<string, string> {
 	return {
+		// The agent echoes this back when it reports permissions mid-call.
+		call_identifier: callIdentifier,
 		contact_name: contactName,
 		incident_description: limitToTwoSentences(
 			context.incidentDescription || purpose,
@@ -367,23 +384,46 @@ function buildResult(
 	analysis: JSONRecord | null,
 	outcome: EngineerCallResult["outcome"],
 	questions: ReadonlyArray<EngineerQuestion>,
+	live: EngineerCallAuthorizations | null | undefined,
 ): ProviderCallResult {
 	return {
 		answers: answersFrom(analysis?.data_collection_results, questions),
 		authorizations: {
-			notifyAllClients: authorizationFrom(
-				analysis?.data_collection_results,
-				"notify_all_clients",
+			notifyAllClients: preferConclusive(
+				authorizationFrom(
+					analysis?.data_collection_results,
+					"notify_all_clients",
+				),
+				live?.notifyAllClients,
 			),
-			trafficFailoverAuthorized: authorizationFrom(
-				analysis?.data_collection_results,
-				"traffic_failover_authorized",
+			trafficFailoverAuthorized: preferConclusive(
+				authorizationFrom(
+					analysis?.data_collection_results,
+					"traffic_failover_authorized",
+				),
+				live?.trafficFailoverAuthorized,
 			),
 		},
 		outcome,
 		summary: conversationSummary(analysis, outcome),
 		transcript: conversationTranscript(body.transcript),
 	}
+}
+
+/**
+ * Post-call extraction returns `null` whenever it cannot read a verdict from the transcript,
+ * which happens often when the contact answers over the agent. A permission the agent already
+ * reported out loud is better evidence than that silence, so it fills the gap. An extracted
+ * verdict still wins: it saw the whole conversation.
+ */
+function preferConclusive(
+	extracted: EngineerCallAuthorization,
+	live: EngineerCallAuthorization | undefined,
+): EngineerCallAuthorization {
+	if (extracted.value !== null || !live || live.value === null) {
+		return extracted
+	}
+	return live
 }
 
 async function readJSON<T>(response: Response): Promise<T | null> {

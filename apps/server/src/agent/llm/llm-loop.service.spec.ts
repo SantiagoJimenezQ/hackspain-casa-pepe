@@ -374,25 +374,29 @@ describe("LlmLoopService", () => {
 	it("does not echo malformed JSON or integration secrets into the audit trail", async () => {
 		const { activity, client, service } = createHarness(3)
 		const actions = createActions(() => createState())
-		actions.investigate.mockRejectedValue(
+		actions.execute.mockRejectedValue(
 			new Error("Bearer hidden-integration-token"),
 		)
 		client.complete
 			.mockResolvedValueOnce(
 				completion([
 					rawToolCall(
-						"get_recovery_capacity",
+						"delegate_investigation",
 						'{"secret":"hidden-json-token"',
 					),
 				]),
 			)
 			.mockResolvedValueOnce(
-				completion([toolCall("get_recovery_capacity", {})]),
+				completion([
+					toolCall("execute_step", {
+						stepIdentifier: "stp_orders-database_execute",
+					}),
+				]),
 			)
 			.mockResolvedValueOnce(
 				completion([
 					toolCall("wait_for_input", {
-						reason: "Investigate failure",
+						reason: "Dispatch failure",
 					}),
 				]),
 			)
@@ -774,8 +778,16 @@ describe("LlmLoopService", () => {
 		client.complete
 			.mockResolvedValueOnce(
 				completion([
-					toolCall("get_service_health", {}, "health-call"),
-					toolCall("get_recovery_capacity", {}, "capacity-call"),
+					toolCall(
+						"delegate_investigation",
+						{ objective: "Check service health" },
+						"health-call",
+					),
+					toolCall(
+						"delegate_communication",
+						{ objective: "Send the plan" },
+						"communication-call",
+					),
 				]),
 			)
 			.mockResolvedValueOnce(
@@ -800,7 +812,7 @@ describe("LlmLoopService", () => {
 		const { activity, client, configuration, service } = createHarness(3)
 		const actions = createActions(() => createState())
 		client.complete.mockResolvedValue(
-			completion([toolCall("get_recovery_capacity", {})]),
+			completion([toolCall("delegate_investigation", {})]),
 		)
 
 		const outcome = await service.run(actions as unknown as LlmLoopActions)
@@ -812,9 +824,8 @@ describe("LlmLoopService", () => {
 		expect(client.complete).toHaveBeenCalledTimes(
 			configuration.llm.maximumTurns,
 		)
-		expect(actions.investigate).toHaveBeenCalledTimes(
-			configuration.llm.maximumTurns,
-		)
+		expect(actions.investigate).not.toHaveBeenCalled()
+		expect(actions.execute).not.toHaveBeenCalled()
 		const inputs = activityInputs(activity)
 		expect(inputs[inputs.length - 1]).toMatchObject({
 			type: "agent.limit-reached",
@@ -902,7 +913,11 @@ describe("reset during a model request", () => {
 					status: "reset",
 				}),
 			)
-			return completion([toolCall("get_incident_context", {})])
+			return completion([
+				toolCall("delegate_investigation", {
+					objective: "Read the incident context",
+				}),
+			])
 		})
 		await expect(service.run(actions)).resolves.toMatchObject({
 			kind: "skipped",

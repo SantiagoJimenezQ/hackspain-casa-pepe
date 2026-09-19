@@ -41,11 +41,11 @@ HAPPYROBOT_WEBHOOK_SECRET=<long random string>
 RECOVERY_MODE=simulated
 RECOVERY_WEBHOOK_SECRET=<long random string>
 
-# LLM (Helmcode). Only deepseek-v4-flash, qwen3.6 and glm5.3-flash answered with this key
+# LLM (Helmcode)
 LLM_BASE_URL=https://api.helmcode.com/v1
 LLM_API_KEY=<key>
-LLM_MODEL=deepseek-v4-flash
-LLM_FAST_MODEL=deepseek-v4-flash
+LLM_MODEL=gpt-5.6-luna
+LLM_FAST_MODEL=gpt-5.6-luna
 LLM_REASONING_EFFORT=low
 LLM_MAXIMUM_OUTPUT_TOKENS=32768
 LLM_TIMEOUT_MILLISECONDS=120000
@@ -69,6 +69,18 @@ curl https://<your-railway-domain>/api/health
 must return `"database": {"status": "up"}` and `"engineerCallProvider": "elevenlabs"`.
 Then open the web app, press Start and Impact: the plan appears within about a minute and the
 call to `DEMO_ENGINEER_PHONE` follows.
+
+## Model requirements
+
+`gpt-5.6-luna` is a third-party model on Helmcode billed per token from prepaid credit. The
+organisation needs a credit balance or an active subscription, otherwise every agent cycle stops
+with `HTTP 402` and the incident never gets a plan. Models included in the base plan that answer
+with function calling are `deepseek-v4-flash` (about 2.4s on a real planning request), `qwen3.6`
+(about 32s) and `glm5.3-flash` (about 28s); switching is a single variable and needs no redeploy
+of the code.
+
+`LLM_REASONING_EFFORT` is forwarded as `reasoning_effort`. Leave it empty if the chosen model
+rejects that parameter.
 
 ## Local build check
 

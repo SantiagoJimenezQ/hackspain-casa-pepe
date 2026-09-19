@@ -300,9 +300,7 @@ describe("LlmLoopService", () => {
 		const actions = createActions(() => state)
 		client.complete
 			.mockResolvedValueOnce(
-				completion([
-					toolCall("delegate_investigation", { input: {} }),
-				]),
+				completion([toolCall("delegate_investigation", { input: {} })]),
 			)
 			.mockImplementationOnce(async () => {
 				state = {
@@ -569,7 +567,7 @@ describe("LlmLoopService", () => {
 		).toBe(true)
 	})
 
-	it("lets the model investigate before waiting and never exposes simulation-only fields", async () => {
+	it("delegates investigation to the specialist and never exposes simulation-only fields", async () => {
 		const baseIncident = createImpactedIncident(12)
 		const incident: IncidentSnapshot = {
 			...baseIncident,
@@ -608,8 +606,32 @@ describe("LlmLoopService", () => {
 		client.complete
 			.mockResolvedValueOnce(
 				completion(
+					[
+						toolCall("delegate_investigation", {
+							objective:
+								"Confirm which services are down before planning",
+						}),
+					],
+					"Asking the investigation specialist for service health.",
+				),
+			)
+			.mockResolvedValueOnce(
+				completion(
 					[toolCall("get_service_health", {})],
-					"I need current service health before planning.",
+					"Reading current service health.",
+				),
+			)
+			.mockResolvedValueOnce(
+				completion(
+					[
+						toolCall("report_result", {
+							details: ["Orders database is down"],
+							pending: ["Backup capacity is still unconfirmed"],
+							summary:
+								"One service is down; capacity unconfirmed.",
+						}),
+					],
+					"Reporting the findings.",
 				),
 			)
 			.mockResolvedValueOnce(
@@ -635,18 +657,35 @@ describe("LlmLoopService", () => {
 			input: {},
 			name: "get_service_health",
 		})
-		expect(client.complete).toHaveBeenCalledTimes(2)
-		expect(JSON.stringify(client.complete.mock.calls[0][0])).not.toContain(
-			HIDDEN_SIMULATION_ANSWER,
+		expect(client.complete).toHaveBeenCalledTimes(4)
+		for (const call of client.complete.mock.calls) {
+			expect(JSON.stringify(call[0])).not.toContain(
+				HIDDEN_SIMULATION_ANSWER,
+			)
+			expect(JSON.stringify(call[0])).not.toContain(
+				HIDDEN_SIMULATION_SCRIPT,
+			)
+		}
+		const commanderTools = client.complete.mock.calls[0][1].map(
+			(definition) => definition.function.name,
 		)
-		expect(JSON.stringify(client.complete.mock.calls[0][0])).not.toContain(
-			HIDDEN_SIMULATION_SCRIPT,
+		expect(commanderTools).toContain("delegate_investigation")
+		expect(commanderTools).not.toContain("get_service_health")
+		const specialistTools = client.complete.mock.calls[1][1].map(
+			(definition) => definition.function.name,
 		)
-		expect(JSON.stringify(client.complete.mock.calls[1][0])).not.toContain(
-			HIDDEN_SIMULATION_ANSWER,
+		expect(specialistTools).toContain("get_service_health")
+		expect(specialistTools).toEqual(
+			expect.not.arrayContaining(["propose_plan", "execute_step"]),
 		)
-		expect(JSON.stringify(client.complete.mock.calls[1][0])).not.toContain(
-			HIDDEN_SIMULATION_SCRIPT,
+		const records = activityInputs(activity)
+		expect(
+			records.some(
+				(record) => record.payload.subagent === "investigator",
+			),
+		).toBe(true)
+		const delegation = records.find(
+			(record) => record.payload.specialist === "investigator",
 		)
 		expect(activityInputs(activity).map((input) => input.type)).toEqual([
 			"agent.llm-decision",

@@ -23,8 +23,8 @@ import {
 	llmPlanSchema,
 	validateLlmPlan,
 } from "@agent/llm/plan-validation"
-import { isText } from "@agent/llm/subagent-tools"
 import { SubagentRunnerService } from "@agent/llm/subagent-runner.service"
+import { isText } from "@agent/llm/subagent-tools"
 import { CycleOutcome } from "@agent/types/agent.type"
 import { LlmLoopActions, LlmLoopState } from "@agent/types/llm-loop.type"
 import { SubagentOutcome } from "@agent/types/subagent.type"
@@ -95,10 +95,7 @@ function tool(
 	return { function: { description, name, parameters }, type: "function" }
 }
 
-function delegation(
-	name: string,
-	description: string,
-): LlmToolDefinition {
+function delegation(name: string, description: string): LlmToolDefinition {
 	return tool(name, description, {
 		additionalProperties: false,
 		properties: {

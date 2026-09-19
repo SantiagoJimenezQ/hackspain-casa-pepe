@@ -547,6 +547,7 @@ export class AgentService {
 				},
 				incomingCalls,
 				learning,
+				recovery: { mode: this.recoveryService.mode },
 				tasks,
 				toolCalls: toolCalls.slice(-30),
 			},

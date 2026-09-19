@@ -84,3 +84,57 @@ backend suite exercises approvals, stale results, provider adapters and recovery
 No live provider calls, messages, database writes or deployment were made for
 this review. Passing scripted tests does not establish improved live model
 latency or successful recovery of the supplied run.
+
+
+## Follow-up: simulated run stalled before recovery dispatch
+
+Run `run_3069b36f-275b-4326-b694-e6c9a923c563` was still in cycle 1, with
+plan v1 active, one completed call and one postponed status publication. The
+export contains no dispatched `execute_recovery` tool. Its health checks and
+engineer result explicitly report `mode: simulated`. A read-only check of
+`https://casa-pepe-api.vercel.app/api/health` on 19 September also returned
+`engineerCalls: simulated` and `recoveryEnvironment: simulated`; the operator
+confirmed that simulation is intended. No HTTP recovery target is needed for
+that mode: simulated recovery updates the persisted incident through NestJS.
+
+Three blockers are visible:
+
+- An initial plan tried to verify a service that was not selected for recovery.
+  The validator correctly rejected that inconsistent plan.
+- Later revisions rewrote the completed call's reason and result metadata while
+  claiming to preserve them. Validation rejected both revisions. The repair layer
+  also ran mechanical rewrites on committed steps. It now restores steps by ID
+  from trusted running/completed history before both repair passes. The strict
+  validator, approval checks, new-work validation and stale-state guards remain.
+- The simulated call had `questions: []`, so it returned zero answers, yet its
+  canned summary claimed snapshot/readiness confirmation. Simulation now
+  summarizes only the answers it actually generated, and explicitly reports an
+  empty call as no evidence. Commander guidance now distinguishes simulated
+  keyed technical questions from the live ElevenLabs permissions-only flow.
+
+The repeated capacity reads returned unconfirmed resources each time. Oman was
+reported as four units, reduced to a one-unit planning assumption from historical
+lessons; Bahrain and Riyadh had twelve reported units but were also unconfirmed.
+Reading capacity does not change its confirmation status. In a manual run the
+operator must introduce the scenario's capacity update through the Demo controls
+(`POST /api/demo/twist`) or submit and confirm a capacity report. Technical facts
+must be obtained through keyed simulated questions or explicit reported evidence;
+plan-specific operator approval still applies. The agent must state that wait
+condition, not imply that a successful read or a call summary performed recovery.
+
+Authenticated follow-up confirmed 12 successful tool records, zero recovery actions,
+zero approvals, and eight rejected proposals. Four rejections concerned rewritten
+committed steps; two later rejections used an old timestamp on uncommitted steps.
+The latter is now derived from the current incident timestamp during repair. The
+remaining rejections were verification of a non-recovery priority and selection
+of a non-runnable/stale action. Both remain correctly guarded. The run is now
+inactive/reset. Its wait text asked for approval despite no pending approval
+record; guidance now requires creating the valid recovery step and requesting
+its approval before asking the operator to approve it.
+
+Follow-up validation: 43 suites / 268 backend tests passed, including simulated
+recovery state changes through the incident flow and HTTP walkthrough. New
+regressions cover rewritten completed calls, running recoveries, and empty,
+partial and unknown simulated question answers. These code fixes are local on
+`codex/fix-recovery-plan-dispatch`; the deployed run was not reset, advanced,
+reconfigured or redeployed during diagnosis.

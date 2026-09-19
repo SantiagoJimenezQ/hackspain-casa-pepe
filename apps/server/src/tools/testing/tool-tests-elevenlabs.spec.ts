@@ -250,6 +250,7 @@ describe("ToolTestsService with ElevenLabs", () => {
 					incident_description:
 						"This is a standalone integration test. No real incident or recovery action is in progress.",
 					location: "Casa Pepe synthetic test environment",
+					outage_time: "",
 					services_down: "synthetic test service",
 				},
 			},

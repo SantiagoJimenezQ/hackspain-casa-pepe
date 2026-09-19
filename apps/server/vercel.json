@@ -1,18 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
+  "framework": "nestjs",
   "installCommand": "pnpm install --filter @casa-pepe/server...",
-  "buildCommand": "pnpm --filter @casa-pepe/server build",
-  "builds": [
-    {
-      "src": "server.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/server.js"
-    }
-  ]
+  "buildCommand": "pnpm --filter @casa-pepe/server build"
 }

@@ -7,6 +7,7 @@ import {
 import {
 	AdapterCallOutcome,
 	AdapterCallRequest,
+	EngineerAnswer,
 	EngineerCallAdapter,
 	EngineerCallRecord,
 	EngineerCallResult,
@@ -230,14 +231,14 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 					stage: "conversation",
 					status,
 				})
-				return buildResult(body, null, failureOutcome)
+				return buildResult(body, null, failureOutcome, call.questions)
 			}
 
 			if (status !== "done" || !isRecord(body.analysis)) {
 				return null
 			}
 
-			return buildResult(body, body.analysis, "completed")
+			return buildResult(body, body.analysis, "completed", call.questions)
 		} catch (error) {
 			this.diagnostic(call, "result", startedAt, {
 				error,
@@ -365,9 +366,10 @@ function buildResult(
 	body: ElevenLabsConversationResponse,
 	analysis: JSONRecord | null,
 	outcome: EngineerCallResult["outcome"],
+	questions: ReadonlyArray<EngineerQuestion>,
 ): ProviderCallResult {
 	return {
-		answers: [],
+		answers: answersFrom(analysis?.data_collection_results, questions),
 		authorizations: {
 			notifyAllClients: authorizationFrom(
 				analysis?.data_collection_results,
@@ -397,6 +399,83 @@ async function readJSON<T>(response: Response): Promise<T | null> {
 
 function isRecord(value: unknown): value is JSONRecord {
 	return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Maps the agent's data collection results back to one answer per asked question, so the
+ * conversation turns pending facts into confirmed ones. A boolean field decides `confirmed`
+ * directly; any other shape leaves the verdict to the server's answer interpretation.
+ */
+function answersFrom(
+	results: unknown,
+	questions: ReadonlyArray<EngineerQuestion>,
+): ReadonlyArray<EngineerAnswer> {
+	if (!isRecord(results)) {
+		return []
+	}
+	return questions.flatMap((question) => {
+		const entry = collectedEntry(results, question.key)
+		if (!entry) {
+			return []
+		}
+		const rationale = isText(entry.rationale) ? entry.rationale.trim() : ""
+		const answer: EngineerAnswer = {
+			answer: collectedAnswerText(entry.value, rationale),
+			key: question.key,
+			question: question.question,
+			...(isBoolean(entry.value) ? { confirmed: entry.value } : {}),
+		}
+		return [answer]
+	})
+}
+
+/**
+ * ElevenLabs identifiers cannot always carry the separators our question keys use, so an
+ * underscore or hyphen variant and a punctuation-insensitive match are accepted too.
+ */
+function collectedEntry(results: JSONRecord, key: string): JSONRecord | null {
+	for (const candidate of [
+		key,
+		key.replace(/-/g, "_"),
+		key.replace(/_/g, "-"),
+	]) {
+		const entry = results[candidate]
+		if (isRecord(entry)) {
+			return entry
+		}
+	}
+	const normalized = normalizeCollectedKey(key)
+	for (const [name, entry] of Object.entries(results)) {
+		if (normalizeCollectedKey(name) === normalized && isRecord(entry)) {
+			return entry
+		}
+	}
+	return null
+}
+
+function normalizeCollectedKey(key: string): string {
+	return key.toLowerCase().replace(/[^a-z0-9]/g, "")
+}
+
+function collectedAnswerText(value: unknown, rationale: string): string {
+	if (isText(value) && value.trim().length) {
+		return value.trim()
+	}
+	if (rationale.length) {
+		return rationale
+	}
+	if (isBoolean(value)) {
+		return value ? "yes" : "no"
+	}
+	return ""
+}
+
+function isText(value: unknown): value is string {
+	return Object.prototype.toString.call(value) === "[object String]"
+}
+
+function isBoolean(value: unknown): value is boolean {
+	return Object.prototype.toString.call(value) === "[object Boolean]"
 }
 
 function authorizationFrom(

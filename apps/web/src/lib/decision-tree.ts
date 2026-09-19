@@ -1,5 +1,6 @@
 import type { DecisionTreeNode, DecisionTreeBranch } from '../../../../packages/contracts/decision-tree';
 import type { ActivityRecord } from './casa-pepe-types';
+import { DEFAULT_LOCALE, messageKey, translate, type Locale } from './i18n';
 export type { DecisionTreeNode, DecisionTreeBranch } from '../../../../packages/contracts/decision-tree';
 
 // The same allowlist is used by the history proxy and the live projection.
@@ -35,7 +36,13 @@ export function mergeTreeEvents(current: readonly ActivityRecord[], incoming: re
   return [...events.values()].sort(inTimeOrder);
 }
 
-export function buildDecisionTree(events: readonly ActivityRecord[], run: string): DecisionTreeNode[] {
+/** A label the run may not carry a key for falls back to the recorded value. */
+function label(locale: Locale, key: string, fallback: string) {
+  const known = messageKey(key);
+  return known ? translate(locale, known) : fallback;
+}
+
+export function buildDecisionTree(events: readonly ActivityRecord[], run: string, locale: Locale = DEFAULT_LOCALE): DecisionTreeNode[] {
   // Final updates for a model turn replace its pending event; they are not extra decisions.
   const turns = new Map<string, ActivityRecord>();
   for (const event of mergeTreeEvents([], events, run)) {
@@ -46,7 +53,8 @@ export function buildDecisionTree(events: readonly ActivityRecord[], run: string
     const payload = event.payload ?? {};
     const node: DecisionTreeNode = {
       id: event.identifier, sequence: event.sequence, occurredAt: event.occurredAt,
-      kind: 'signal', title: event.title, reason: event.summary, status: 'Señal registrada', tone: 'neutral',
+      kind: 'signal', title: label(locale, `tree.title.${event.type}`, event.title), reason: event.summary,
+      status: translate(locale, 'tree.status.signal'), tone: 'neutral',
       sourceIdentifier: event.identifier, sourceType: event.type, simulated: event.simulated,
       replayed: event.replayed, details: [], branches: [],
     };
@@ -56,20 +64,21 @@ export function buildDecisionTree(events: readonly ActivityRecord[], run: string
       const branches: DecisionTreeBranch[] = list(plan.priorities).map((raw, index) => {
         const p = record(raw);
         const chosen = p.decision === 'recover-now';
-        return { id: `${node.id}:priority:${index}`, title: string(p.serviceName, string(p.serviceIdentifier, 'Servicio')),
-          reason: string(p.reason), status: chosen ? 'Recuperar ahora' : p.decision === 'postpone' ? 'Aplazado' : string(p.decision, 'Registrado'), tone: chosen ? 'success' : 'neutral' };
+        const decision = string(p.decision, 'recorded');
+        return { id: `${node.id}:priority:${index}`, title: string(p.serviceName, string(p.serviceIdentifier, translate(locale, 'tree.service'))),
+          reason: string(p.reason), status: label(locale, `tree.decision.${decision}`, decision), tone: chosen ? 'success' : 'neutral' };
       });
       return { ...node, kind: revision ? 'revision' : 'plan', tone: revision ? 'warning' : 'success',
-        title: `${revision ? 'Cambio de plan' : 'Plan inicial'}${typeof plan.version === 'number' ? ` · v${plan.version}` : ''}`,
-        reason: string(plan.reason, event.summary), status: revision ? 'Plan revisado' : 'Plan guardado', branches,
+        title: `${translate(locale, revision ? 'tree.kind.revision' : 'tree.kind.plan')}${typeof plan.version === 'number' ? ` · v${plan.version}` : ''}`,
+        reason: string(plan.reason, event.summary), status: translate(locale, revision ? 'tree.status.planRevised' : 'tree.status.planSaved'), branches,
         details: [string(plan.summary), ...list(plan.changesFromPrevious).map(c => string(record(c).description)),
           ...list(plan.assumptions).map(a => `Supuesto: ${string(a)}`)].filter(Boolean) };
     }
     if (event.type.startsWith('agent.llm-')) {
       const disposition = string(payload.disposition, event.type === 'agent.llm-stale' ? 'stale' : event.type === 'agent.llm-failed' ? 'incomplete' : event.type === 'agent.llm-rejected' ? 'rejected' : 'pending');
-      const labels: Record<string, string> = { accepted: 'Propuesta validada', rejected: 'Propuesta rechazada', stale: 'Propuesta desactualizada', incomplete: 'Respuesta incompleta', pending: 'Pendiente de validación' };
+      const proposal = label(locale, `tree.proposal.${disposition}`, translate(locale, 'tree.proposal.other'));
       const result = record(payload.actionResult);
-      return { ...node, kind: 'decision', title: labels[disposition] ?? 'Decisión registrada', status: labels[disposition] ?? disposition,
+      return { ...node, kind: 'decision', title: proposal, status: proposal,
         tone: disposition === 'accepted' ? 'neutral' : disposition === 'rejected' || disposition === 'incomplete' ? 'danger' : 'warning',
         reason: string(payload.text, event.summary) || event.summary,
         details: [string(payload.dispositionReason), string(result.reason), ...list(payload.toolCalls).map(t => `Herramienta propuesta: ${string(record(t).name)}`)].filter(Boolean) };
@@ -77,13 +86,13 @@ export function buildDecisionTree(events: readonly ActivityRecord[], run: string
     if (event.type.startsWith('tool-call.')) {
       const tool = record(payload.toolCall);
       const failed = event.type.endsWith('failed');
-      return { ...node, kind: 'action', status: failed ? 'Acción fallida' : 'Acción completada', tone: failed ? 'danger' : 'success',
+      return { ...node, kind: 'action', status: translate(locale, failed ? 'tree.status.actionFailed' : 'tree.status.actionDone'), tone: failed ? 'danger' : 'success',
         details: [string(record(tool.error).message), string(record(tool.output).detail)].filter(Boolean) };
     }
-    if (event.type.startsWith('recovery.')) return { ...node, kind: 'result', status: 'Resultado registrado', details: [string(payload.detail)].filter(Boolean) };
+    if (event.type.startsWith('recovery.')) return { ...node, kind: 'result', status: translate(locale, 'tree.status.result'), details: [string(payload.detail)].filter(Boolean) };
     if (event.type.startsWith('approval.')) {
       const approval = record(payload.approval);
-      return { ...node, kind: 'decision', status: event.type.endsWith('superseded') ? 'Aprobación anulada' : 'Intervención humana',
+      return { ...node, kind: 'decision', status: translate(locale, event.type.endsWith('superseded') ? 'tree.status.approvalOverridden' : 'tree.status.humanDecision'),
         tone: 'warning', details: [string(approval.comment), string(approval.reason)].filter(Boolean) };
     }
     return { ...node, tone: event.type === 'incident.impact-detected' ? 'danger' : event.type === 'resource.capacity-changed' ? 'warning' : 'neutral' };

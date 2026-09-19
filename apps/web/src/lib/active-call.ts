@@ -1,7 +1,17 @@
 import { formatElapsed } from "@/lib/agent-trace";
-import type { ActivityRecord, EngineerCall, Overview, ToolCall } from "@/lib/casa-pepe-types";
+import type {
+  ActivityRecord,
+  CallAuthorizations,
+  EngineerCall,
+  Overview,
+  ToolCall,
+} from "@/lib/casa-pepe-types";
 
 export const ACTIVE_CALL_DISMISS_MS = 2800;
+/** How long "call ended" stays up before the permission verdict replaces it. */
+export const ACTIVE_CALL_AUTHORIZED_AFTER_MS = 1400;
+/** A call that granted permissions earns a longer goodbye: two messages must be read. */
+export const ACTIVE_CALL_AUTHORIZED_DISMISS_MS = 4200;
 export const ACTIVE_CALL_TERMINAL_WINDOW_MS = 12_000;
 /** The browser clock can sit a little behind the server's, so a fresh end is never in the future. */
 export const ACTIVE_CALL_CLOCK_SKEW_MS = 5_000;
@@ -13,6 +23,7 @@ const OUTBOUND_CALL_EVENTS = new Set([
   "engineer-call.started",
   "engineer-call.completed",
   "engineer-call.failed",
+  "engineer-call.authorized",
 ]);
 
 export type ActiveCallPhase = "calling" | "ended" | "failed" | "no-answer";
@@ -25,6 +36,8 @@ export type ActiveCallView = {
   startedAt: string;
   finishedAt: string;
   live: boolean;
+  /** Someone on the call granted at least one permission. */
+  authorized: boolean;
 };
 
 export function callPhase(status: string): ActiveCallPhase | null {
@@ -110,6 +123,7 @@ function toView(call: EngineerCall): ActiveCallView | null {
     startedAt: call.startedAt,
     finishedAt: call.finishedAt,
     live: phase === "calling",
+    authorized: hasAuthorization(call),
   };
 }
 
@@ -132,6 +146,7 @@ function toolFallback(tools: ReadonlyArray<ToolCall>): ActiveCallView | null {
     startedAt: tool.startedAt,
     finishedAt: "",
     live: true,
+    authorized: false,
   };
 }
 
@@ -186,7 +201,11 @@ function parseCallPayload(payload: ActivityRecord["payload"]): EngineerCall | nu
     mode,
     status,
     result: result
-      ? { summary: stringField(result.summary), transcript: stringField(result.transcript) }
+      ? {
+          summary: stringField(result.summary),
+          transcript: stringField(result.transcript),
+          authorizations: parseAuthorizations(result.authorizations),
+        }
       : null,
     failureReason: stringField(call.failureReason),
     startedAt: stringField(call.startedAt),
@@ -201,4 +220,33 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function stringField(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+
+/**
+ * True once anybody granted a permission on this call. The voice agent reports them while the
+ * line is still open, so this flips before the call is over.
+ */
+export function hasAuthorization(call: Pick<EngineerCall, "result">): boolean {
+  const granted = call.result?.authorizations;
+  if (!granted) return false;
+  return (
+    granted.notifyAllClients?.value === true ||
+    granted.trafficFailoverAuthorized?.value === true
+  );
+}
+
+function parseAuthorizations(value: unknown): CallAuthorizations | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  return {
+    notifyAllClients: parseVerdict(record.notifyAllClients),
+    trafficFailoverAuthorized: parseVerdict(record.trafficFailoverAuthorized),
+  };
+}
+
+function parseVerdict(value: unknown): { value: boolean | null } | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  return { value: typeof record.value === "boolean" ? record.value : null };
 }

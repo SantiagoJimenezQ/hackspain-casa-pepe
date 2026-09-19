@@ -4,6 +4,7 @@
 	"private": true,
 	"scripts": {
 		"build": "nest build",
+		"vercel-build": "nest build",
 		"develop": "nest start --watch",
 		"format": "pnpm exec biome format --write .",
 		"lint": "pnpm exec biome check .",

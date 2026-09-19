@@ -18,10 +18,25 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_DESCRIPTION =
+  "Operations dashboard for the Casa Pepe incident coordinator: live impact, engineer calls and recovery, decision by decision.";
+
 export const metadata: Metadata = {
   title: "Casa Pepe — Operations center",
-  description:
-    "Operations dashboard for the Casa Pepe incident coordinator.",
+  description: SITE_DESCRIPTION,
+  applicationName: "Casa Pepe",
+  openGraph: {
+    title: "Casa Pepe — Operations center",
+    description: SITE_DESCRIPTION,
+    siteName: "Casa Pepe",
+    type: "website",
+    locale: "es_ES",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Casa Pepe — Operations center",
+    description: SITE_DESCRIPTION,
+  },
 };
 
 const themeBootScript = `(() => { try { const theme = localStorage.getItem("casa-pepe-theme"); const dark = theme ? theme === "dark" : true; document.documentElement.classList.toggle("dark", dark); } catch {} })();`;

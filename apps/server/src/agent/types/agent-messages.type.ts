@@ -111,6 +111,8 @@ export interface AgentMessages {
 	specialistActionNoLongerValid: string
 	/** Shown when a specialist used up its turns without reporting. */
 	specialistTurnBudgetReached: string
+	/** Shown when the provider left the cycle without a decision. */
+	providerUnavailable(detail: string): string
 	readonly toolWithoutResult: string
 	factsConfirmed(count: number, mode: string): string
 	taskCreated(taskIdentifier: string): string

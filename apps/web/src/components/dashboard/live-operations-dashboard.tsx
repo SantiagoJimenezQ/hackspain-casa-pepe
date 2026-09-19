@@ -6,6 +6,7 @@ import { ActiveCallBanner } from "@/components/dashboard/active-call-banner";
 import { AgentPanel } from "@/components/dashboard/agent-panel";
 import { CompanyLogo } from "@/components/dashboard/company-logo";
 import { CrisisMap } from "@/components/dashboard/crisis-map";
+import { DraggableOverlay } from "@/components/dashboard/draggable-overlay";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { Panel } from "@/components/dashboard/panel";
 import { Button } from "@/components/ui/button";
@@ -101,22 +102,24 @@ function MapPanel() {
   return (
     <Panel className="relative min-h-[220px] overflow-hidden p-0">
       <CrisisMap overview={overview} />
-      <div className="pointer-events-none absolute left-4 top-4 z-10 rounded-md border border-border/80 bg-card/90 px-3 py-2 shadow-sm backdrop-blur">
-        <p className="text-[10px] font-semibold tracking-[.16em] text-muted-foreground uppercase">Topología operativa</p>
-        <p className="mt-1 text-[13px]">{headline}</p>
-        <div className="mt-2 flex gap-3 text-[10px] text-muted-foreground">
-          <span>{unhealthy} servicios</span>
-          <span>{overview.incident.region}</span>
-          <span>→ {overview.incident.backupRegion}</span>
+      <DraggableOverlay className="left-2 top-2 z-10">
+        <div className="rounded-md border border-border/80 bg-card/90 px-3 py-2 shadow-sm backdrop-blur">
+          <p className="text-[10px] font-semibold tracking-[.16em] text-muted-foreground uppercase">Topología operativa</p>
+          <p className="mt-1 text-[13px]">{headline}</p>
+          <div className="mt-2 flex gap-3 text-[10px] text-muted-foreground">
+            <span>{unhealthy} servicios</span>
+            <span>{overview.incident.region}</span>
+            <span>→ {overview.incident.backupRegion}</span>
+          </div>
         </div>
-      </div>
-      <div className="pointer-events-none absolute bottom-4 left-4 z-10 flex gap-4 text-[10px] text-muted-foreground">
+      </DraggableOverlay>
+      <div className="pointer-events-none absolute bottom-2.5 left-3 z-10 flex gap-4 text-[10px] text-muted-foreground">
         <span className="flex items-center gap-1"><Dot status="up" />{t("map.legendOnline")}</span>
         <span className="flex items-center gap-1"><Dot status="degraded" />{t("map.legendMigrating")}</span>
         <span className="flex items-center gap-1"><Dot status="down" />{t("map.legendOffline")}</span>
       </div>
       {impacted && !settled ? (
-        <span className="pointer-events-none absolute right-4 bottom-4 z-10 text-[10px] font-semibold tracking-[.12em] text-red-400 uppercase">
+        <span className="pointer-events-none absolute right-3 bottom-2.5 z-10 text-[10px] font-semibold tracking-[.12em] text-red-400 uppercase">
           {t("map.impactConfirmed")}
         </span>
       ) : null}

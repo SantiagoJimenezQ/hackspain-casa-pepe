@@ -24,6 +24,8 @@ const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([429, 500, 502, 503])
 const MAXIMUM_ATTEMPTS = 3
 const DEFAULT_RETRY_MILLISECONDS = 1000
 const MAXIMUM_RETRY_MILLISECONDS = 15000
+/** How long the relief provider keeps the traffic after the primary one turned it away. */
+const RELIEF_WINDOW_MILLISECONDS = 60000
 
 export class LlmClientError extends Error {
 	/** How long the provider asked the caller to wait; zero when the failure is the caller's. */
@@ -38,6 +40,8 @@ export class LlmClientError extends Error {
 @Injectable()
 export class LlmClientService {
 	private readonly logger = new Logger(LlmClientService.name)
+	/** When the primary provider becomes worth trying again. */
+	private reliefUntil = 0
 	constructor(
 		private readonly configuration: ConfigurationService,
 		private readonly httpService: HttpService,
@@ -58,7 +62,7 @@ export class LlmClientService {
 			this.providerConfiguration(),
 			overrides,
 		)
-		const responseData = await this.attempt(
+		const responseData = await this.attemptWithRelief(
 			configuration,
 			messages,
 			tools,
@@ -128,6 +132,7 @@ export class LlmClientService {
 		return {
 			apiKey,
 			baseURL,
+			fallback: configured.fallback,
 			fastModel: configured.fastModel.trim(),
 			fastTimeoutMilliseconds: configured.fastTimeoutMilliseconds,
 			maximumOutputTokens: configured.maximumOutputTokens,
@@ -136,6 +141,47 @@ export class LlmClientService {
 			reasoningEffort: configured.reasoningEffort,
 			streamOutput: configured.streamOutput === true,
 			timeoutMilliseconds: configured.timeoutMilliseconds,
+		}
+	}
+
+	/**
+	 * A provider that keeps asking for a pause has nothing left to give this cycle, and the
+	 * incident cannot wait for its quota to reset. The same request goes to the relief provider,
+	 * so a rate limit on one account costs a few seconds instead of the run. A quota rarely
+	 * clears between two turns, so the relief keeps the traffic for a short window instead of
+	 * paying the same retries again on every turn; after it, the primary gets another chance.
+	 * Any other failure is the caller's and surfaces unchanged.
+	 */
+	private async attemptWithRelief(
+		configuration: LlmConfiguration,
+		messages: LlmMessage[],
+		tools: LlmToolDefinition[],
+		onText?: (text: string) => Promise<void>,
+	): Promise<unknown> {
+		const relief = reliefConfiguration(configuration)
+		if (relief && Date.now() < this.reliefUntil) {
+			return await this.attempt(relief, messages, tools, onText)
+		}
+		try {
+			return await this.attempt(configuration, messages, tools, onText)
+		} catch (error) {
+			const pause =
+				error instanceof LlmClientError
+					? error.retryAfterMilliseconds
+					: 0
+			if (pause === 0 || !relief) {
+				throw error
+			}
+			this.reliefUntil = Date.now() + RELIEF_WINDOW_MILLISECONDS
+			this.logger.warn(LOG_MESSAGES.AGENT.LLM_PROVIDER_RELIEVED, {
+				model: relief.model,
+				providerHost: new URL(relief.baseURL).hostname,
+				reason:
+					error instanceof LlmClientError
+						? error.message
+						: "LLM provider unavailable",
+			})
+			return await this.attempt(relief, messages, tools, onText)
 		}
 	}
 
@@ -310,6 +356,33 @@ function providerPauseMilliseconds(status: number, headers: unknown): number {
 	)
 }
 
+/**
+ * The same request aimed at the relief provider. A caller that asked for the fast model gets the
+ * relief provider's fast model; anything else goes to its main model, because model names do not
+ * carry across providers. The relief has no relief of its own, so the switch happens once.
+ */
+function reliefConfiguration(
+	configuration: LlmConfiguration,
+): LlmConfiguration | null {
+	const { fallback } = configuration
+	if (!fallback) {
+		return null
+	}
+	const model =
+		configuration.model === configuration.fastModel
+			? fallback.fastModel
+			: fallback.model
+	return {
+		...configuration,
+		apiKey: fallback.apiKey,
+		baseURL: fallback.baseURL,
+		fallback: null,
+		fastModel: fallback.fastModel,
+		model: model.length ? model : fallback.model,
+		reasoningEffort: fallback.reasoningEffort,
+	}
+}
+
 function sleep(milliseconds: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
@@ -398,15 +471,19 @@ function parseCompletionResponse(
 
 function parseAssistantMessage(value: Record<string, unknown>): LlmMessage {
 	if (value.role !== "assistant") throw malformedResponse()
+	// Providers that answer with tool calls alone may leave `content` out entirely instead of
+	// sending null. That is an empty answer, not a malformed one, so only a present field of
+	// the wrong shape is rejected.
 	if (
-		!hasOwn(value, "content") ||
-		(value.content !== null && typeof value.content !== "string")
+		hasOwn(value, "content") &&
+		value.content !== null &&
+		typeof value.content !== "string"
 	) {
 		throw malformedResponse()
 	}
 
 	const message: LlmMessage = {
-		content: value.content as string | null,
+		content: typeof value.content === "string" ? value.content : null,
 		role: "assistant",
 	}
 	if (hasOwn(value, "tool_calls")) {

@@ -184,6 +184,10 @@ export class EnvironmentVariables {
 	@IsIn(LLM_PROVIDERS)
 	LLM_PROVIDER: LlmProvider = ""
 
+	/** Provider used when the primary one rate-limits. Empty picks the other preset; none disables it. */
+	@IsIn(["", "openai", "deepseek", "none"])
+	LLM_FALLBACK_PROVIDER: string = ""
+
 	@IsString()
 	LLM_OPENAI_BASE_URL: string = ""
 

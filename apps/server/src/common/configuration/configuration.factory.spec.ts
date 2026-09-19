@@ -88,4 +88,55 @@ describe("validateEnvironmentVariables", () => {
 			provider: "elevenlabs",
 		})
 	})
+
+	it("relieves the active provider with the other configured preset", () => {
+		const variables = validateEnvironmentVariables({
+			...VALID,
+			LLM_DEEPSEEK_API_KEY: "deepseek-key",
+			LLM_DEEPSEEK_BASE_URL: "https://api.helmcode.com/v1",
+			LLM_DEEPSEEK_MODEL: "deepseek-v4-flash",
+			LLM_OPENAI_API_KEY: "openai-key",
+			LLM_OPENAI_BASE_URL: "https://api.openai.com/v1",
+			LLM_OPENAI_MODEL: "gpt-test",
+			LLM_PROVIDER: "openai",
+		})
+		const { llm } = createApplicationConfiguration(variables)
+
+		expect(llm.model).toBe("gpt-test")
+		expect(llm.fallback?.baseURL).toBe("https://api.helmcode.com/v1")
+		expect(llm.fallback?.model).toBe("deepseek-v4-flash")
+		expect(llm.fallback?.apiKey).toBe("deepseek-key")
+	})
+
+	it("leaves the run on a single provider when the relief is turned off", () => {
+		const variables = validateEnvironmentVariables({
+			...VALID,
+			LLM_DEEPSEEK_API_KEY: "deepseek-key",
+			LLM_DEEPSEEK_BASE_URL: "https://api.helmcode.com/v1",
+			LLM_DEEPSEEK_MODEL: "deepseek-v4-flash",
+			LLM_FALLBACK_PROVIDER: "none",
+			LLM_OPENAI_API_KEY: "openai-key",
+			LLM_OPENAI_BASE_URL: "https://api.openai.com/v1",
+			LLM_OPENAI_MODEL: "gpt-test",
+			LLM_PROVIDER: "openai",
+		})
+
+		expect(createApplicationConfiguration(variables).llm.fallback).toBe(
+			null,
+		)
+	})
+
+	it("offers no relief when the other preset has no credentials", () => {
+		const variables = validateEnvironmentVariables({
+			...VALID,
+			LLM_OPENAI_API_KEY: "openai-key",
+			LLM_OPENAI_BASE_URL: "https://api.openai.com/v1",
+			LLM_OPENAI_MODEL: "gpt-test",
+			LLM_PROVIDER: "openai",
+		})
+
+		expect(createApplicationConfiguration(variables).llm.fallback).toBe(
+			null,
+		)
+	})
 })

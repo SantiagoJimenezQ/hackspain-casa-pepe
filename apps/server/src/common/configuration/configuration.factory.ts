@@ -5,7 +5,7 @@ import {
 	EngineerCallMode,
 	EngineerCallProvider,
 	Environment,
-	LlmReasoningEffort,
+	LlmProviderCredentials,
 	RecoveryMode,
 } from "@common/types/configuration.type"
 import { plainToInstance } from "class-transformer"
@@ -42,13 +42,58 @@ export function validateEnvironmentVariables(
  * preset falls back to the plain LLM_* variables for anything it leaves empty, so switching
  * provider is a single variable and both sets of credentials can live side by side.
  */
-export function resolveLlmProvider(variables: EnvironmentVariables): {
-	readonly apiKey: string
-	readonly baseURL: string
-	readonly model: string
-	readonly fastModel: string
-	readonly reasoningEffort: LlmReasoningEffort
-} {
+export function resolveLlmProvider(
+	variables: EnvironmentVariables,
+): LlmProviderCredentials {
+	return resolveLlmCredentials(variables, variables.LLM_PROVIDER)
+}
+
+/**
+ * The provider that takes over when the primary one asks the caller to slow down. By default it
+ * is the other preset, so a rate limit on one account keeps the incident moving on the other;
+ * `LLM_FALLBACK_PROVIDER` names one explicitly, and `none` turns the relief off. A preset that
+ * resolves to the primary, or to credentials that cannot be used, is no relief at all.
+ */
+export function resolveLlmFallbackProvider(
+	variables: EnvironmentVariables,
+): LlmProviderCredentials | null {
+	const requested = variables.LLM_FALLBACK_PROVIDER
+	if (requested === "none") {
+		return null
+	}
+	const { [variables.LLM_PROVIDER]: other = "" } = OTHER_LLM_PROVIDER
+	const name = requested.length ? requested : other
+	if (!name.length) {
+		return null
+	}
+	const credentials = resolveLlmCredentials(variables, name)
+	if (
+		!credentials.apiKey.length ||
+		!credentials.baseURL.length ||
+		!credentials.model.length ||
+		!isAllowedLlmBaseURL(credentials.baseURL)
+	) {
+		return null
+	}
+	const primary = resolveLlmProvider(variables)
+	if (
+		credentials.baseURL === primary.baseURL &&
+		credentials.model === primary.model
+	) {
+		return null
+	}
+	return credentials
+}
+
+const OTHER_LLM_PROVIDER: Record<string, string> = {
+	deepseek: "openai",
+	openai: "deepseek",
+}
+
+function resolveLlmCredentials(
+	variables: EnvironmentVariables,
+	provider: string,
+): LlmProviderCredentials {
 	const preset = {
 		deepseek: {
 			apiKey: variables.LLM_DEEPSEEK_API_KEY,
@@ -64,7 +109,7 @@ export function resolveLlmProvider(variables: EnvironmentVariables): {
 			model: variables.LLM_OPENAI_MODEL,
 			reasoningEffort: variables.LLM_OPENAI_REASONING_EFFORT,
 		},
-	}[variables.LLM_PROVIDER]
+	}[provider]
 	if (!preset) {
 		return {
 			apiKey: variables.LLM_API_KEY,
@@ -74,8 +119,7 @@ export function resolveLlmProvider(variables: EnvironmentVariables): {
 			reasoningEffort: variables.LLM_REASONING_EFFORT,
 		}
 	}
-	const defaultBaseURL =
-		LLM_PROVIDER_DEFAULT_BASE_URLS[variables.LLM_PROVIDER] ?? ""
+	const defaultBaseURL = LLM_PROVIDER_DEFAULT_BASE_URLS[provider] ?? ""
 	return {
 		apiKey: preset.apiKey.length ? preset.apiKey : variables.LLM_API_KEY,
 		baseURL: preset.baseURL.length
@@ -187,6 +231,7 @@ export function createApplicationConfiguration(
 		},
 		llm: {
 			...resolveLlmProvider(variables),
+			fallback: resolveLlmFallbackProvider(variables),
 			fastTimeoutMilliseconds: variables.LLM_FAST_TIMEOUT_MILLISECONDS,
 			maximumOutputTokens: variables.LLM_MAXIMUM_OUTPUT_TOKENS,
 			maximumTurns: variables.LLM_MAXIMUM_TURNS,

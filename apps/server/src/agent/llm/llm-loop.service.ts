@@ -242,7 +242,9 @@ export class LlmLoopService {
 					state,
 					"agent.llm-failed",
 					"LLM unavailable",
-					`${detail}. Autonomous decisions paused. Check provider configuration and retry using the agent cycle control.`,
+					AGENT_MESSAGES[state.input.language].providerUnavailable(
+						detail,
+					),
 					{
 						disposition: "incomplete",
 						dispositionReason: detail,

@@ -10,6 +10,7 @@ import { of, throwError } from "rxjs"
 const CONFIGURATION: LlmConfiguration = {
 	apiKey: "test-provider-key",
 	baseURL: "https://provider.example.test/v1",
+	fallback: null,
 	fastModel: "",
 	fastTimeoutMilliseconds: 5000,
 	maximumOutputTokens: 128,
@@ -398,9 +399,9 @@ describe("LlmClientService", () => {
 	it.each([
 		["missing choices", { choices: [], model: "provider-model" }],
 		[
-			"missing message content",
+			"message content of the wrong type",
 			{
-				choices: [{ message: { role: "assistant" } }],
+				choices: [{ message: { content: 12, role: "assistant" } }],
 				model: "provider-model",
 			},
 		],
@@ -597,5 +598,124 @@ describe("feature-flagged public output streaming", () => {
 			4000,
 		)
 		expect(stream.destroyed).toBe(true)
+	})
+
+	it("moves a rate limited request to the relief provider", async () => {
+		jest.spyOn(Logger.prototype, "warn").mockImplementation(() => {})
+		const { client, post } = setup({
+			fallback: {
+				apiKey: "relief-key",
+				baseURL: "https://relief.example.test/v1",
+				fastModel: "relief-fast",
+				model: "relief-model",
+				reasoningEffort: "low",
+			},
+		})
+		const rateLimited = {
+			isAxiosError: true,
+			response: { headers: { "retry-after": "1" }, status: 429 },
+		}
+		post.mockImplementation((endpoint: string) => {
+			if (endpoint.startsWith("https://relief.example.test")) {
+				return of({ data: completion(), status: 200 })
+			}
+			return throwError(() => rateLimited)
+		})
+
+		const result = await client.complete([], [])
+
+		expect(result.message.content).toBe("Ready")
+		const [reliefEndpoint, reliefBody, reliefOptions] =
+			post.mock.calls[post.mock.calls.length - 1]
+		expect(reliefEndpoint).toBe(
+			"https://relief.example.test/v1/chat/completions",
+		)
+		expect(reliefBody.model).toBe("relief-model")
+		expect(reliefBody.reasoning_effort).toBe("low")
+		expect(reliefOptions.headers.Authorization).toBe("Bearer relief-key")
+	})
+
+	it("surfaces a rate limit when no relief provider is configured", async () => {
+		jest.spyOn(Logger.prototype, "warn").mockImplementation(() => {})
+		const { client, post } = setup()
+		post.mockReturnValue(
+			throwError(() => ({
+				isAxiosError: true,
+				response: { headers: {}, status: 429 },
+			})),
+		)
+
+		await expect(client.complete([], [])).rejects.toThrow(
+			"LLM provider returned HTTP 429",
+		)
+	})
+
+	it("accepts a tool call answered without a content field", async () => {
+		const { client, post } = setup()
+		post.mockReturnValue(
+			of({
+				data: {
+					choices: [
+						{
+							finish_reason: "tool_calls",
+							message: {
+								role: "assistant",
+								tool_calls: [
+									{
+										function: {
+											arguments:
+												'{"stepIdentifier":"stp_1"}',
+											name: "execute_step",
+										},
+										id: "call_1",
+										type: "function",
+									},
+								],
+							},
+						},
+					],
+					model: "relief-model",
+				},
+				status: 200,
+			}),
+		)
+
+		const result = await client.complete([], [TOOL])
+
+		expect(result.message.content).toBe(null)
+		expect(result.message.tool_calls?.[0].function.name).toBe(
+			"execute_step",
+		)
+	})
+
+	it("keeps the next request on the relief provider instead of paying the retries again", async () => {
+		jest.spyOn(Logger.prototype, "warn").mockImplementation(() => {})
+		const { client, post } = setup({
+			fallback: {
+				apiKey: "relief-key",
+				baseURL: "https://relief.example.test/v1",
+				fastModel: "relief-fast",
+				model: "relief-model",
+				reasoningEffort: "low",
+			},
+		})
+		post.mockImplementation((endpoint: string) => {
+			if (endpoint.startsWith("https://relief.example.test")) {
+				return of({ data: completion(), status: 200 })
+			}
+			return throwError(() => ({
+				isAxiosError: true,
+				response: { headers: { "retry-after": "1" }, status: 429 },
+			}))
+		})
+
+		await client.complete([], [])
+		const callsAfterFirst = post.mock.calls.length
+		await client.complete([], [])
+
+		expect(post.mock.calls.length).toBe(callsAfterFirst + 1)
+		expect(post.mock.calls[callsAfterFirst][0]).toBe(
+			"https://relief.example.test/v1/chat/completions",
+		)
 	})
 })

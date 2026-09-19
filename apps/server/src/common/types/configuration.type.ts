@@ -83,17 +83,22 @@ export type LlmProvider = (typeof LLM_PROVIDERS)[number]
 
 export type LlmReasoningEffort = (typeof LLM_REASONING_EFFORTS)[number]
 
-export interface LlmConfiguration {
-	readonly streamOutput?: boolean
+export interface LlmProviderCredentials {
 	readonly baseURL: string
 	readonly apiKey: string
 	readonly model: string
 	readonly fastModel: string
+	readonly reasoningEffort: LlmReasoningEffort
+}
+
+export interface LlmConfiguration extends LlmProviderCredentials {
+	readonly streamOutput?: boolean
 	readonly fastTimeoutMilliseconds: number
 	readonly timeoutMilliseconds: number
 	readonly maximumTurns: number
 	readonly maximumOutputTokens: number
-	readonly reasoningEffort: LlmReasoningEffort
+	/** Provider that takes over when the primary one rate-limits; null when none is usable. */
+	readonly fallback: LlmProviderCredentials | null
 }
 
 export interface EmailConfiguration {

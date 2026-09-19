@@ -156,6 +156,8 @@ const ENGLISH: AgentMessages = {
 		`Prepare ${serviceName} for recovery in ${backupRegion}`,
 	previousCallRunning: "A previous call for this step is still running",
 	proposedByAgent: "Proposed by the agent",
+	providerUnavailable: (detail) =>
+		`${detail}. Autonomous decisions paused. Check the provider configuration and request another cycle from the agent controls.`,
 	recoveredAndVerified: "Recovered and verified with an independent check",
 	recoverNow: (impact, impactDescription, units, unit) =>
 		`${IMPACT_LABELS_EN[impact]} impact: ${impactDescription}. Uses ${units} ${unit}`,
@@ -342,6 +344,8 @@ const SPANISH: AgentMessages = {
 		`Preparar ${serviceName} para recuperarlo en ${backupRegion}`,
 	previousCallRunning: "Una llamada anterior de este paso sigue en curso",
 	proposedByAgent: "Propuesto por el agente",
+	providerUnavailable: (detail) =>
+		`${detail}. Las decisiones autónomas quedan en pausa. Revisa la configuración del proveedor y pide otro ciclo desde los controles del agente.`,
 	recoveredAndVerified:
 		"Recuperado y verificado con una comprobación independiente",
 	recoverNow: (impact, impactDescription, units, unit) =>

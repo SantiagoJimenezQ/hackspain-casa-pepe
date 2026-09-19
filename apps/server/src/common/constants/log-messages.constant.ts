@@ -11,6 +11,8 @@ export const LOG_MESSAGES = {
 		CYCLE_STARTED: "Agent cycle started",
 		ENGINEER_CALL_DISPATCHED:
 			"On-call engineer called immediately, before the first model turn",
+		LLM_PROVIDER_RELIEVED:
+			"LLM provider rate limited, retrying the request on the relief provider",
 		LLM_RETRYING:
 			"Retrying the LLM request after the provider asked for a pause",
 		PLAN_CREATED: "Initial response plan created",

@@ -691,6 +691,8 @@ describe("LlmLoopService", () => {
 		expect(activityInputs(activity).map((input) => input.type)).toEqual([
 			"agent.llm-decision",
 			"agent.llm-decision",
+			"agent.llm-decision",
+			"agent.llm-decision",
 			"agent.cycle-finished",
 		])
 	})
@@ -955,6 +957,82 @@ describe("reset during a model request", () => {
 		expect(actions.investigate).not.toHaveBeenCalled()
 		expect(actions.execute).not.toHaveBeenCalled()
 		expect(actions.save).not.toHaveBeenCalled()
-		expect(activity.record).not.toHaveBeenCalled()
+		expect(activity.record).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({ disposition: "stale" }),
+				type: "agent.llm-stale",
+			}),
+		)
+	})
+})
+
+describe("complete public turn records", () => {
+	it("persists full text, original calls and accepted disposition under one ID", async () => {
+		const { client, service, activity } = createHarness(1)
+		const text = "Complete explanation. ".repeat(250)
+		client.complete.mockResolvedValue({
+			finishReason: "tool_calls",
+			message: {
+				content: text,
+				role: "assistant",
+				tool_calls: [
+					toolCall(
+						"wait_for_input",
+						{ reason: "Awaiting operator" },
+						"original-call",
+					),
+				],
+			},
+			model: "fixture-model",
+			usage: { total_tokens: 42 },
+		})
+		await service.run(createActions(() => createState()))
+		const turns = activityInputs(activity).filter(
+			(event) => event.type === "agent.llm-decision",
+		)
+		expect(turns.map((event) => event.payload.disposition)).toEqual([
+			"pending",
+			"accepted",
+		])
+		expect(turns[1].payload).toMatchObject({
+			finishReason: "tool_calls",
+			text,
+			toolCalls: [
+				{
+					arguments: { reason: "Awaiting operator" },
+					id: "original-call",
+					name: "wait_for_input",
+				},
+			],
+		})
+		expect(turns[0].payload.outputIdentifier).toBe(
+			turns[1].payload.outputIdentifier,
+		)
+	})
+	it("retains a rejected proposal with its correlated public arguments", async () => {
+		const { client, service, activity } = createHarness(1)
+		client.complete.mockResolvedValue({
+			message: {
+				content: "Try a step",
+				role: "assistant",
+				tool_calls: [
+					toolCall("execute_step", {
+						password: "private-value",
+						stepIdentifier: 99,
+					}),
+				],
+			},
+			model: "fixture-model",
+		})
+		await service.run(createActions(() => createState()))
+		const rejected = activityInputs(activity).find(
+			(event) => event.type === "agent.llm-rejected",
+		)
+		expect(rejected?.payload).toMatchObject({
+			disposition: "rejected",
+			outputIdentifier: expect.any(String),
+			text: "Try a step",
+		})
+		expect(JSON.stringify(rejected)).not.toContain("private-value")
 	})
 })

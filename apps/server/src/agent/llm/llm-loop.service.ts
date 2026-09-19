@@ -27,6 +27,8 @@ import { ConfigurationService } from "@common/services/configuration.service"
 import { Injectable } from "@nestjs/common"
 import { PlanRecord } from "@plans/types/plan.type"
 import { ToolInvocation } from "@tools/types/tool.type"
+import type { LlmPublicTurn } from "../../../../../packages/contracts/agent"
+import { PublicOutput } from "./public-output"
 
 export interface LlmLoopState {
 	input: PlanBuildInput
@@ -242,21 +244,33 @@ export class LlmLoopService {
 				},
 			]
 			const outputIdentifier = randomUUID()
+			const publicOutput = new PublicOutput(
+				this.configuration.all ?? { llm: this.configuration.llm },
+			)
+			const publish = async (text: string) => {
+				if (!text) return
+				await this.record(
+					state,
+					"agent.llm-output",
+					"Draft decision summary",
+					text.slice(0, 2000),
+					{
+						outputIdentifier,
+						provisional: true,
+						redacted: publicOutput.redacted,
+						text,
+						turn,
+					},
+				)
+			}
 			let response: Awaited<ReturnType<LlmClientService["complete"]>>
 			try {
 				response = await this.client.complete(
 					messages,
 					definitions(),
-					async (text) => {
-						await this.record(
-							state,
-							"agent.llm-output",
-							"Draft decision summary",
-							text,
-							{ outputIdentifier, provisional: true, text, turn },
-						)
-					},
+					async (text) => publish(publicOutput.fragment(text)),
 				)
+				await publish(publicOutput.fragment("", true))
 			} catch (error) {
 				const detail =
 					error instanceof LlmClientError
@@ -267,58 +281,95 @@ export class LlmLoopService {
 					"agent.llm-failed",
 					"LLM unavailable",
 					`${detail}. Autonomous decisions paused. Check provider configuration and retry using the agent cycle control.`,
-					{ outputIdentifier, turn },
+					{
+						disposition: "incomplete",
+						dispositionReason: detail,
+						outputIdentifier,
+						redacted: publicOutput.redacted,
+						turn,
+					},
 				)
 				return {
 					kind: "failed",
 					reason: `${detail}; autonomous decisions paused`,
 				}
 			}
+			const calls = response.message.tool_calls ?? []
+			const text =
+				response.message.content === null
+					? null
+					: publicOutput.text(response.message.content ?? "")
+			const toolCalls = publicOutput.calls(calls, definitions())
+			const publicTurn: Omit<LlmPublicTurn, "disposition"> & {
+				fingerprint: string
+				tools: string[]
+			} = {
+				fingerprint,
+				finishReason: response.finishReason
+					? publicOutput.text(response.finishReason)
+					: null,
+				model: publicOutput.text(response.model),
+				outputIdentifier,
+				redacted: publicOutput.redacted,
+				text,
+				toolCalls,
+				tools: calls.map((call) => safeToolName(call.function.name)),
+				turn,
+				usage: response.usage,
+			}
+			const decision = async (
+				disposition: "pending" | "accepted" | "rejected" | "stale",
+				reason?: string,
+			) =>
+				record(
+					state,
+					disposition === "rejected"
+						? "agent.llm-rejected"
+						: disposition === "stale"
+							? "agent.llm-stale"
+							: "agent.llm-decision",
+					"LLM decision",
+					text?.slice(0, 2000) ||
+						reason ||
+						"Selecting the next investigation or action",
+					{
+						...publicTurn,
+						disposition,
+						...(reason
+							? { dispositionReason: publicOutput.text(reason) }
+							: {}),
+					},
+				)
 			const fresh = await actions.observe()
 			if (
 				!fresh.input.incident.active ||
-				fresh.input.incident.runKind === "replay"
-			)
+				fresh.input.incident.runKind === "replay" ||
+				fresh.input.incident.runIdentifier !==
+					state.input.incident.runIdentifier
+			) {
+				await decision(
+					"stale",
+					"Run is inactive, replaced or replaying",
+				)
 				return {
 					kind: "skipped",
 					reason: "Run is inactive or replaying",
 				}
+			}
 			if (stateFingerprint(fresh) !== fingerprint) {
-				await record(
-					state,
-					"agent.llm-stale",
-					"New evidence arrived",
-					"Discarded a model decision based on outdated state; reassessing before taking action.",
-					{
-						fingerprint,
-						model: response.model,
-						outputIdentifier,
-						turn,
-						usage: response.usage,
-					},
+				await decision(
+					"stale",
+					"New evidence arrived; reassessing before taking action",
 				)
 				history.length = 0
 				continue
 			}
-			const calls = response.message.tool_calls ?? []
-			await record(
-				state,
-				"agent.llm-decision",
-				"LLM decision",
-				response.message.content?.slice(0, 2000) ||
-					"Selecting the next investigation or action",
-				{
-					fingerprint,
-					model: response.model,
-					outputIdentifier,
-					tools: calls.map((call) =>
-						safeToolName(call.function.name),
-					),
-					turn,
-					usage: response.usage,
-				},
-			)
+			await decision("pending")
 			if (calls.length !== 1) {
+				await decision(
+					"rejected",
+					"Expected exactly one declared tool call",
+				)
 				history.push({
 					content:
 						"Invalid response: return exactly one declared tool call.",
@@ -382,11 +433,12 @@ export class LlmLoopService {
 							throw new ToolArgumentsError(
 								"Expected a short, nonempty reason",
 							)
+						await decision("accepted")
 						await record(
 							state,
 							"agent.cycle-finished",
 							"LLM waiting",
-							object.reason,
+							publicOutput.text(object.reason),
 							{ executedSteps: executed },
 						)
 						return {
@@ -414,6 +466,7 @@ export class LlmLoopService {
 							"Unknown tool; use one of the declared tools",
 						)
 				}
+				await decision("accepted")
 			} catch (error) {
 				// Do not persist raw provider arguments or uncontrolled integration errors.
 				result = {
@@ -436,7 +489,15 @@ export class LlmLoopService {
 					"agent.llm-rejected",
 					"Decision rejected",
 					"The proposed action did not pass runtime validation; the model must revise it.",
-					{ result, tool: safeToolName(call.function.name) },
+					{
+						...publicTurn,
+						disposition: "rejected",
+						dispositionReason: publicOutput.text(
+							(result as { error: string }).error,
+						),
+						result,
+						tool: safeToolName(call.function.name),
+					},
 				)
 			}
 			history.push(

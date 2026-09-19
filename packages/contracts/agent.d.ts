@@ -6,7 +6,7 @@ export type LlmActivityType =
   | 'agent.llm-stale'
   | 'agent.llm-rejected'
 
-/** Public summaries only; no provider credentials or private chain-of-thought. */
+/** Legacy metadata remains additive alongside LlmPublicTurn; no private reasoning. */
 export interface LlmDecisionMetadata {
   readonly outputIdentifier?: string
   readonly turn: number
@@ -22,12 +22,13 @@ export interface LlmOutputPayload {
   turn: number;
   text: string;
   provisional: true;
+  redacted?: boolean;
 }
 // Append text in activity sequence order, deduplicating by sequence.
 // Terminal agent.llm-decision/failed/stale events carry the same outputIdentifier.
-// Discard drafts on stale or failed; decision is the final public summary.
+// Complete turn text replaces drafts. Retain stale/failed drafts with their disposition.
 
-/** Additive payload fields on agent.llm-rejected; argument values are never included. */
+/** Legacy rejection diagnostics omit values; LlmPublicTurn.toolCalls contains redacted arguments. */
 export interface LlmRejectionMetadata {
   readonly tool: string
   readonly result: {
@@ -40,4 +41,18 @@ export interface LlmRejectionMetadata {
       readonly shape?: unknown
     }
   }
+}
+
+/** Complete public model output. Accepted means validated, not executed successfully. */
+export interface LlmPublicTurn {
+  readonly outputIdentifier: string
+  readonly turn: number
+  readonly text: string | null
+  readonly toolCalls: readonly { id: string; name: string; arguments: unknown }[]
+  readonly model: string
+  readonly finishReason: string | null
+  readonly usage?: unknown
+  readonly disposition: 'pending' | 'accepted' | 'rejected' | 'stale' | 'incomplete'
+  readonly dispositionReason?: string
+  readonly redacted: boolean
 }

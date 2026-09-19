@@ -68,6 +68,33 @@ function setup(configuration: Partial<LlmConfiguration> = {}) {
 }
 
 describe("LlmClientService", () => {
+	it("preserves finish reason and allowlisted numeric usage details only", async () => {
+		const { client, post } = setup()
+		post.mockReturnValue(
+			of({
+				data: completion({
+					usage: {
+						completion_tokens_details: {
+							reasoning_tokens: 5,
+							secret: "hidden",
+						},
+						prompt_tokens_details: { cached_tokens: 3 },
+						provider_secret: "hidden",
+						total_tokens: 12,
+					},
+				}),
+				status: 200,
+			}),
+		)
+		const result = await client.complete([], [])
+		expect(result.finishReason).toBe("stop")
+		expect(result.usage).toEqual({
+			completion_tokens_details: { reasoning_tokens: 5 },
+			prompt_tokens_details: { cached_tokens: 3 },
+			total_tokens: 12,
+		})
+	})
+
 	it("logs request context and safe provider metadata without exposing content or keys", async () => {
 		const warn = jest
 			.spyOn(Logger.prototype, "warn")
@@ -495,7 +522,7 @@ describe("feature-flagged public output streaming", () => {
 		},
 	)
 
-	it("bounds public output and closes a stalled provider stream", async () => {
+	it("retains long public output and closes a stalled provider stream", async () => {
 		const { client, post } = setup({
 			streamOutput: true,
 			timeoutMilliseconds: 100,
@@ -507,7 +534,7 @@ describe("feature-flagged public output streaming", () => {
 		stream.write(event({ content: "a".repeat(4000) }))
 		await expect(response).rejects.toThrow("timed out")
 		expect(onText.mock.calls.map((call) => call[0]).join("")).toHaveLength(
-			2000,
+			4000,
 		)
 		expect(stream.destroyed).toBe(true)
 	})

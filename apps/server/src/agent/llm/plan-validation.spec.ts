@@ -410,6 +410,20 @@ describe("LLM plan boundary", () => {
 				input,
 			),
 		).toThrow(/recipient/)
+
+		const withoutQuestions = {
+			...call,
+			invocation: {
+				input: { ...call.invocation.input, questions: [] },
+				name: "call_engineer",
+			},
+		}
+		expect(() =>
+			validateLlmPlan(
+				{ ...draft, steps: [...draft.steps, withoutQuestions] },
+				input,
+			),
+		).toThrow(/at least one question/)
 	})
 })
 

@@ -185,5 +185,5 @@ export class EnvironmentVariables {
 	@IsInt()
 	@Min(1)
 	@Max(32768)
-	LLM_MAXIMUM_OUTPUT_TOKENS: number = 16384
+	LLM_MAXIMUM_OUTPUT_TOKENS: number = 8192
 }

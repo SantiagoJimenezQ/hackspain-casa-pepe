@@ -13,7 +13,7 @@ import { Page } from "@common/types/pagination.type"
 import { Injectable } from "@nestjs/common"
 import { EventEmitter2 } from "@nestjs/event-emitter"
 import { InjectRepository } from "@nestjs/typeorm"
-import { FindOptionsWhere, In, MoreThan, Repository } from "typeorm"
+import { FindOptionsWhere, In, LessThan, MoreThan, Repository } from "typeorm"
 
 interface ReplayRecordInput extends RecordActivityInput {
 	readonly replayOfEventIdentifier: string
@@ -22,6 +22,8 @@ interface ReplayRecordInput extends RecordActivityInput {
 @Injectable()
 export class ActivityService {
 	private readonly sequences = new Map<string, number>()
+	/** Seeding queries in flight, so concurrent records share one instead of racing. */
+	private readonly seeds = new Map<string, Promise<void>>()
 
 	constructor(
 		@InjectRepository(ActivityEventEntity)
@@ -56,6 +58,38 @@ export class ActivityService {
 			limit: query.limit,
 			offset: query.offset,
 			total,
+		}
+	}
+
+	async llmHistory(
+		runIdentifier: string,
+		limit: number,
+		beforeSequence?: number,
+	) {
+		const entities = await this.repository.find({
+			order: { sequence: "DESC" },
+			take: limit + 1,
+			where: {
+				runIdentifier,
+				type: In([
+					"agent.llm-output",
+					"agent.llm-decision",
+					"agent.llm-rejected",
+					"agent.llm-stale",
+					"agent.llm-failed",
+				]),
+				...(beforeSequence === undefined
+					? {}
+					: { sequence: LessThan(beforeSequence) }),
+			},
+		})
+		const items = entities.slice(0, limit).map(toActivityRecord)
+		return {
+			items,
+			nextBeforeSequence:
+				entities.length > limit
+					? items[items.length - 1].sequence
+					: null,
 		}
 	}
 
@@ -106,19 +140,47 @@ export class ActivityService {
 		return record
 	}
 
+	/**
+	 * The counter is read and bumped without an await, so concurrent records never share a
+	 * number. Seeding it does query the database, and every record that arrives during that
+	 * query waits on the same one: otherwise each of them would seed from the same row and
+	 * hand out the same number. A number is unique within one process; two servers writing to
+	 * the same database each keep their own counter, which is why readers order by time.
+	 */
 	private async nextSequence(runIdentifier: string): Promise<number> {
 		const cached = this.sequences.get(runIdentifier)
 		if (cached === undefined) {
-			const latest = await this.repository.findOne({
-				order: { sequence: "DESC" },
-				where: { runIdentifier },
-			})
-			const seed = latest ? latest.sequence : 0
-			this.sequences.set(runIdentifier, seed + 1)
-			return seed + 1
+			await this.seedSequence(runIdentifier)
+			return this.nextSequence(runIdentifier)
 		}
 		this.sequences.set(runIdentifier, cached + 1)
 		return cached + 1
+	}
+
+	private async seedSequence(runIdentifier: string): Promise<void> {
+		const pending = this.seeds.get(runIdentifier)
+		if (pending) {
+			await pending
+			return
+		}
+		const seeding = this.repository
+			.findOne({
+				order: { sequence: "DESC" },
+				where: { runIdentifier },
+			})
+			.then((latest) => {
+				if (this.sequences.get(runIdentifier) === undefined) {
+					this.sequences.set(
+						runIdentifier,
+						latest ? latest.sequence : 0,
+					)
+				}
+			})
+			.finally(() => {
+				this.seeds.delete(runIdentifier)
+			})
+		this.seeds.set(runIdentifier, seeding)
+		await seeding
 	}
 }
 

@@ -9,8 +9,16 @@ export const LOG_MESSAGES = {
 			"Agent cycle skipped because the run is no longer active",
 		CYCLE_SKIPPED_REPLAY: "Agent cycle skipped because the run is a replay",
 		CYCLE_STARTED: "Agent cycle started",
+		ENGINEER_CALL_DISPATCHED:
+			"On-call engineer called immediately, before the first model turn",
+		LLM_PROVIDER_RELIEVED:
+			"LLM provider rate limited, retrying the request on the relief provider",
+		LLM_RETRYING:
+			"Retrying the LLM request after the provider asked for a pause",
 		PLAN_CREATED: "Initial response plan created",
 		PLAN_REVISED: "Response plan revised after a change in conditions",
+		STALLED_RUN_RESUMED:
+			"Idle run with runnable work resumed after a lost cycle",
 		STEP_EXECUTION_FAILED: "Failed to execute a plan step",
 		STEP_WAITING_FOR_APPROVAL: "Plan step is waiting for operator approval",
 		TRIGGER_RECEIVED: "Agent trigger received",
@@ -28,14 +36,21 @@ export const LOG_MESSAGES = {
 	},
 	CUSTOMERS: {
 		RANKING_FAILED:
-			"Customer recovery ranking fell back to the deterministic order",
-		RANKING_FINISHED: "Customer recovery ranking updated from the LLM",
+			"Failed to rank customers with the model, using the deterministic order",
+		RANKING_FINISHED: "Customer ranking by the model finished",
 	},
 	DATABASE: {
 		CONNECTION_FAILED: "Failed to connect to the database",
 	},
 	ENGINEERS: {
+		CALL_AUTHORIZATION_IGNORED:
+			"Live authorization ignored because the call already finished",
+		CALL_AUTHORIZED: "Engineer call reported live authorizations",
+		CALL_FALLBACK_TO_SIMULATED:
+			"Live engineer call rejected by the provider, dispatching a simulated call instead",
 		CALL_FINISHED: "Engineer call finished",
+		CALL_RESULT_ALREADY_SETTLED:
+			"Engineer call result ignored because the call already has one",
 		CALL_RESULT_IGNORED:
 			"Engineer call result ignored because it does not belong to the active run",
 		CALL_STARTED: "Engineer call started",
@@ -59,6 +74,15 @@ export const LOG_MESSAGES = {
 	REPLAYS: {
 		FINISHED: "Replay finished",
 		STARTED: "Replay started",
+	},
+	SUBAGENTS: {
+		DELEGATION_FAILED: "Failed to complete the specialist delegation",
+		DELEGATION_FINISHED: "Specialist delegation finished",
+		DELEGATION_STARTED: "Specialist delegation started",
+		DISPATCH_OUT_OF_SCOPE:
+			"Specialist tried to dispatch a step outside its own scope",
+		TURN_LIMIT_REACHED:
+			"Specialist reached its turn budget without reporting a result",
 	},
 	TASKS: {
 		ASSIGNED: "Task assigned",

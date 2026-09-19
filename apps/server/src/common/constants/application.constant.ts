@@ -1,3 +1,12 @@
+/** Named provider presets. An empty value keeps the plain LLM_* variables. */
+export const LLM_PROVIDERS = ["", "openai", "deepseek"] as const
+
+export const LLM_PROVIDER_DEFAULT_BASE_URLS: Readonly<Record<string, string>> =
+	{
+		deepseek: "https://api.helmcode.com/v1",
+		openai: "https://api.openai.com/v1",
+	}
+
 export const LLM_REASONING_EFFORTS = [
 	"",
 	"none",

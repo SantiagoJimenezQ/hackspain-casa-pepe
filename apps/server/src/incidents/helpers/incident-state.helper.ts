@@ -14,9 +14,15 @@ import {
 } from "@scenarios/types/scenario.type"
 import { SimulationState } from "@scenarios/types/simulation.type"
 
+/**
+ * `requireOperatorApproval` false waives every scenario-mandated approval, so a deployment can
+ * run the recovery end to end without a human gate. The scenario still records which actions
+ * would need one, so turning it back on restores the gate.
+ */
 export function buildBaselineServices(
 	scenario: ScenarioDefinition,
 	timestamp: string,
+	requireOperatorApproval = true,
 ): ServiceState[] {
 	return scenario.services.map((service) => ({
 		businessImpact: service.businessImpact,
@@ -30,7 +36,8 @@ export function buildBaselineServices(
 		recoveryActionKind: service.recoveryAction.kind,
 		recoveryCapacityUnits: service.recoveryCapacityUnits,
 		recoveryConsequences: service.recoveryAction.consequences,
-		recoveryRequiresApproval: service.recoveryAction.requiresApproval,
+		recoveryRequiresApproval:
+			service.recoveryAction.requiresApproval && requireOperatorApproval,
 		simulatedOutcome: service.simulatedRecovery.outcome,
 		simulatedOutcomeDetail: service.simulatedRecovery.detail,
 		status: "healthy",
@@ -160,11 +167,10 @@ export function nextRecoveryUnits(incident: {
 	readonly services: ReadonlyArray<ServiceState>
 }): number {
 	const remaining = incident.services.filter(
-		(service) =>
-			service.status !== "healthy" && service.status !== "recovering",
+		(service) => service.status === "down" || service.status === "degraded",
 	)
 	if (!remaining.length) {
-		return 1
+		return 0
 	}
 	return [...remaining].sort(
 		(left, right) =>
@@ -182,13 +188,24 @@ export function selectBackupResource(
 ): ResourceState {
 	const needed = nextRecoveryUnits(incident)
 	const ordered = incident.resources
-	const committed = ordered.find((resource) => resource.allocatedCapacity > 0)
-	if (committed) {
+	const committedIndex = ordered.findIndex(
+		(resource) => resource.allocatedCapacity > 0,
+	)
+	const committed = committedIndex >= 0 ? ordered[committedIndex] : undefined
+	const fits = (resource: ResourceState) => {
+		const remaining = remainingOf(resource)
+		return remaining >= needed && remaining > 0
+	}
+	if (committed && fits(committed)) {
 		return committed
 	}
-	const fitting = ordered.find((resource) => remainingOf(resource) >= needed)
+	const searchFrom = committedIndex >= 0 ? committedIndex + 1 : 0
+	const fitting = ordered.slice(searchFrom).find(fits)
 	if (fitting) {
 		return fitting
+	}
+	if (committed) {
+		return committed
 	}
 	return ordered.find((resource) => remainingOf(resource) > 0) ?? ordered[0]
 }

@@ -1,3 +1,5 @@
+import type { Locale } from "@/lib/i18n";
+
 export type ServiceHealth = "healthy" | "degraded" | "down" | "recovering";
 export type PlanStepStatus =
   | "proposed"
@@ -11,6 +13,7 @@ export type PlanStepStatus =
   | "postponed";
 
 export type ActivityRecord = {
+  runIdentifier?: string;
   identifier: string;
   sequence: number;
   occurredAt: string;
@@ -21,6 +24,19 @@ export type ActivityRecord = {
   simulated: boolean;
   replayed: boolean;
   payload?: Record<string, unknown>;
+};
+
+export type LlmDisposition = "pending" | "accepted" | "rejected" | "stale" | "incomplete";
+
+export type LlmPublicToolCall = {
+  id: string;
+  name: string;
+  arguments: unknown;
+};
+
+export type LlmHistoryPage = {
+  items: ActivityRecord[];
+  nextBeforeSequence: number | null;
 };
 
 export type Service = {
@@ -162,6 +178,8 @@ export type EngineerCall = {
   status: string;
   result: { summary: string; transcript: string } | null;
   failureReason: string;
+  startedAt: string;
+  finishedAt: string;
 };
 
 export type ToolCallSubagent = {
@@ -215,6 +233,8 @@ export type Overview = {
   agent: {
     engine?: "llm";
     model?: string;
+    /** Language the run is written in; the interface follows it so nothing appears half translated. */
+    language?: Locale;
     cycleInProgress: boolean;
     cycles: number;
     maximumCycles: number;

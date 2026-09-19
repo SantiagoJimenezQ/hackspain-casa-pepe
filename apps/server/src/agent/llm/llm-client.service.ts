@@ -1,30 +1,47 @@
+import { randomUUID } from "node:crypto"
 import {
 	LlmCompletionOverrides,
 	LlmMessage,
 	LlmToolCall,
 	LlmToolDefinition,
 } from "@agent/llm/llm.types"
+import { failureDetails } from "@agent/llm/llm-failure-details"
 import { readCompletionStream } from "@agent/llm/llm-stream"
 import { isAllowedLlmBaseURL } from "@common/configuration/configuration.factory"
+import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { LlmConfiguration } from "@common/types/configuration.type"
 import { HttpService } from "@nestjs/axios"
-import { Injectable } from "@nestjs/common"
+import { Injectable, Logger } from "@nestjs/common"
 import { isAxiosError } from "axios"
 import { firstValueFrom } from "rxjs"
 
 const MAXIMUM_REQUEST_BYTES = 1024 * 1024
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024
 
+/** A rate limit or an overloaded provider clears on its own; anything else is the caller's. */
+const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([429, 500, 502, 503])
+const MAXIMUM_ATTEMPTS = 3
+const DEFAULT_RETRY_MILLISECONDS = 1000
+const MAXIMUM_RETRY_MILLISECONDS = 15000
+/** How long the relief provider keeps the traffic after the primary one turned it away. */
+const RELIEF_WINDOW_MILLISECONDS = 60000
+
 export class LlmClientError extends Error {
-	constructor(message: string) {
+	/** How long the provider asked the caller to wait; zero when the failure is the caller's. */
+	readonly retryAfterMilliseconds: number
+	constructor(message: string, retryAfterMilliseconds = 0) {
 		super(message)
 		this.name = "LlmClientError"
+		this.retryAfterMilliseconds = retryAfterMilliseconds
 	}
 }
 
 @Injectable()
 export class LlmClientService {
+	private readonly logger = new Logger(LlmClientService.name)
+	/** When the primary provider becomes worth trying again. */
+	private reliefUntil = 0
 	constructor(
 		private readonly configuration: ConfigurationService,
 		private readonly httpService: HttpService,
@@ -33,32 +50,44 @@ export class LlmClientService {
 	async complete(
 		messages: LlmMessage[],
 		tools: LlmToolDefinition[],
-		onTextOrOverrides?:
-			| ((text: string) => Promise<void>)
-			| LlmCompletionOverrides,
-	): Promise<{ message: LlmMessage; usage: unknown; model: string }> {
-		const configuration = this.providerConfiguration(onTextOrOverrides)
-		const onText =
-			typeof onTextOrOverrides === "function"
-				? onTextOrOverrides
-				: undefined
-		const responseData = await this.request(
+		onText?: (text: string) => Promise<void>,
+		overrides: LlmCompletionOverrides = {},
+	): Promise<{
+		message: LlmMessage
+		usage: unknown
+		model: string
+		finishReason?: string | null
+	}> {
+		const configuration = mergeCompletionOverrides(
+			this.providerConfiguration(),
+			overrides,
+		)
+		const responseData = await this.attemptWithRelief(
 			configuration,
 			messages,
 			tools,
 			onText,
 		)
-		return parseCompletionResponse(
-			responseData,
-			configuration.maximumOutputTokens,
-		)
+		try {
+			return parseCompletionResponse(
+				responseData,
+				configuration.maximumOutputTokens,
+			)
+		} catch (error) {
+			this.logger.warn("LLM response validation failed", {
+				model: configuration.model,
+				providerHost: new URL(configuration.baseURL).hostname,
+				reason:
+					error instanceof LlmClientError
+						? error.message
+						: "Malformed completion",
+				streamOutput: configuration.streamOutput,
+			})
+			throw error
+		}
 	}
 
-	private providerConfiguration(
-		onTextOrOverrides?:
-			| ((text: string) => Promise<void>)
-			| LlmCompletionOverrides,
-	): LlmConfiguration {
+	private providerConfiguration(): LlmConfiguration {
 		const configured = this.configuration.llm
 		if (!configured || typeof configured !== "object") {
 			throw new LlmClientError(
@@ -100,31 +129,97 @@ export class LlmClientService {
 			throw new LlmClientError("LLM provider configuration is invalid")
 		}
 
-		return mergeCompletionOverrides(
-			{
-				apiKey,
-				baseURL,
-				fastModel:
-					typeof configured.fastModel === "string"
-						? configured.fastModel.trim()
-						: "",
-				fastTimeoutMilliseconds:
-					Number.isInteger(configured.fastTimeoutMilliseconds) &&
-					configured.fastTimeoutMilliseconds >= 100 &&
-					configured.fastTimeoutMilliseconds <= 120000
-						? configured.fastTimeoutMilliseconds
-						: configured.timeoutMilliseconds,
-				maximumOutputTokens: configured.maximumOutputTokens,
-				maximumTurns: configured.maximumTurns,
-				model,
-				reasoningEffort: configured.reasoningEffort,
-				streamOutput: configured.streamOutput === true,
-				timeoutMilliseconds: configured.timeoutMilliseconds,
-			},
-			typeof onTextOrOverrides === "object"
-				? onTextOrOverrides
-				: undefined,
-		)
+		return {
+			apiKey,
+			baseURL,
+			fallback: configured.fallback,
+			fastModel: configured.fastModel.trim(),
+			fastTimeoutMilliseconds: configured.fastTimeoutMilliseconds,
+			maximumOutputTokens: configured.maximumOutputTokens,
+			maximumTurns: configured.maximumTurns,
+			model,
+			reasoningEffort: configured.reasoningEffort,
+			streamOutput: configured.streamOutput === true,
+			timeoutMilliseconds: configured.timeoutMilliseconds,
+		}
+	}
+
+	/**
+	 * A provider that keeps asking for a pause has nothing left to give this cycle, and the
+	 * incident cannot wait for its quota to reset. The same request goes to the relief provider,
+	 * so a rate limit on one account costs a few seconds instead of the run. A quota rarely
+	 * clears between two turns, so the relief keeps the traffic for a short window instead of
+	 * paying the same retries again on every turn; after it, the primary gets another chance.
+	 * Any other failure is the caller's and surfaces unchanged.
+	 */
+	private async attemptWithRelief(
+		configuration: LlmConfiguration,
+		messages: LlmMessage[],
+		tools: LlmToolDefinition[],
+		onText?: (text: string) => Promise<void>,
+	): Promise<unknown> {
+		const relief = reliefConfiguration(configuration)
+		if (relief && Date.now() < this.reliefUntil) {
+			return await this.attempt(relief, messages, tools, onText)
+		}
+		try {
+			return await this.attempt(configuration, messages, tools, onText)
+		} catch (error) {
+			const pause =
+				error instanceof LlmClientError
+					? error.retryAfterMilliseconds
+					: 0
+			if (pause === 0 || !relief) {
+				throw error
+			}
+			this.reliefUntil = Date.now() + RELIEF_WINDOW_MILLISECONDS
+			this.logger.warn(LOG_MESSAGES.AGENT.LLM_PROVIDER_RELIEVED, {
+				model: relief.model,
+				providerHost: new URL(relief.baseURL).hostname,
+				reason:
+					error instanceof LlmClientError
+						? error.message
+						: "LLM provider unavailable",
+			})
+			return await this.attempt(relief, messages, tools, onText)
+		}
+	}
+
+	/**
+	 * A rate limit is the provider asking for a pause, not a failed decision: pausing the whole
+	 * incident over it would strand the run. The wait the provider asks for is honoured, capped,
+	 * and the request is repeated a bounded number of times; every other failure surfaces at once.
+	 */
+	private async attempt(
+		configuration: LlmConfiguration,
+		messages: LlmMessage[],
+		tools: LlmToolDefinition[],
+		onText?: (text: string) => Promise<void>,
+	): Promise<unknown> {
+		for (let attempt = 1; ; attempt++) {
+			try {
+				return await this.request(
+					configuration,
+					messages,
+					tools,
+					onText,
+				)
+			} catch (error) {
+				const pause =
+					error instanceof LlmClientError
+						? error.retryAfterMilliseconds
+						: 0
+				if (pause === 0 || attempt >= MAXIMUM_ATTEMPTS) {
+					throw error
+				}
+				this.logger.warn(LOG_MESSAGES.AGENT.LLM_RETRYING, {
+					attempt,
+					model: configuration.model,
+					waitMilliseconds: pause * attempt,
+				})
+				await sleep(pause * attempt)
+			}
+		}
 	}
 
 	private async request(
@@ -136,7 +231,9 @@ export class LlmClientService {
 		const endpoint = `${configuration.baseURL.replace(/\/+$/, "")}/chat/completions`
 		const requestBody = {
 			...(configuration.streamOutput ? { stream: true } : {}),
-			max_tokens: configuration.maximumOutputTokens,
+			...(new URL(configuration.baseURL).hostname === "api.openai.com"
+				? { max_completion_tokens: configuration.maximumOutputTokens }
+				: { max_tokens: configuration.maximumOutputTokens }),
 			messages,
 			model: configuration.model,
 			...(configuration.reasoningEffort === ""
@@ -161,12 +258,15 @@ export class LlmClientService {
 				"LLM request exceeds the configured context byte budget",
 			)
 		}
+		const started = Date.now()
+		const requestIdentifier = randomUUID()
 		try {
 			const response = await firstValueFrom(
 				this.httpService.post<unknown>(endpoint, requestBody, {
 					headers: {
 						Authorization: `Bearer ${configuration.apiKey}`,
 						"Content-Type": "application/json",
+						"X-Client-Request-Id": requestIdentifier,
 					},
 					maxBodyLength: MAXIMUM_REQUEST_BYTES,
 					maxContentLength: MAXIMUM_RESPONSE_BYTES,
@@ -212,10 +312,79 @@ export class LlmClientService {
 			}
 			return response.data
 		} catch (error) {
-			if (error instanceof LlmClientError) throw error
-			throw safeRequestError(error)
+			const safeError =
+				error instanceof LlmClientError
+					? error
+					: safeRequestError(error)
+
+			this.logger.warn("LLM provider request failed", {
+				elapsedMilliseconds: Date.now() - started,
+				maximumOutputTokens: configuration.maximumOutputTokens,
+				model: configuration.model,
+				providerHost: new URL(configuration.baseURL).hostname,
+				reason: safeError.message,
+				reasoningEffort:
+					configuration.reasoningEffort || "provider-default",
+				requestBytes: Buffer.byteLength(serializedRequest, "utf8"),
+				requestIdentifier,
+				streamOutput: configuration.streamOutput,
+				timeoutMilliseconds: configuration.timeoutMilliseconds,
+				toolCount: tools.length,
+				...(await failureDetails(error, configuration.apiKey)),
+			})
+			throw safeError
 		}
 	}
+}
+
+/**
+ * The pause the provider asked for, bounded, or zero when the status is the caller's to fix.
+ * A missing or unusable Retry-After falls back to a short pause.
+ */
+function providerPauseMilliseconds(status: number, headers: unknown): number {
+	if (!RETRYABLE_STATUSES.has(status)) {
+		return 0
+	}
+	const header = isRecord(headers) ? headers["retry-after"] : undefined
+	const requested =
+		typeof header === "string" && /^\d{1,6}$/.test(header)
+			? Number(header) * 1000
+			: DEFAULT_RETRY_MILLISECONDS
+	return Math.min(
+		Math.max(requested, DEFAULT_RETRY_MILLISECONDS),
+		MAXIMUM_RETRY_MILLISECONDS,
+	)
+}
+
+/**
+ * The same request aimed at the relief provider. A caller that asked for the fast model gets the
+ * relief provider's fast model; anything else goes to its main model, because model names do not
+ * carry across providers. The relief has no relief of its own, so the switch happens once.
+ */
+function reliefConfiguration(
+	configuration: LlmConfiguration,
+): LlmConfiguration | null {
+	const { fallback } = configuration
+	if (!fallback) {
+		return null
+	}
+	const model =
+		configuration.model === configuration.fastModel
+			? fallback.fastModel
+			: fallback.model
+	return {
+		...configuration,
+		apiKey: fallback.apiKey,
+		baseURL: fallback.baseURL,
+		fallback: null,
+		fastModel: fallback.fastModel,
+		model: model.length ? model : fallback.model,
+		reasoningEffort: fallback.reasoningEffort,
+	}
+}
+
+function sleep(milliseconds: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
 function mergeCompletionOverrides(
@@ -259,7 +428,12 @@ function mergeCompletionOverrides(
 function parseCompletionResponse(
 	value: unknown,
 	maximumOutputTokens: number,
-): { message: LlmMessage; usage: unknown; model: string } {
+): {
+	message: LlmMessage
+	usage: unknown
+	model: string
+	finishReason?: string | null
+} {
 	if (!isRecord(value)) throw malformedResponse()
 	if (typeof value.model !== "string" || !value.model.trim()) {
 		throw malformedResponse()
@@ -285,6 +459,10 @@ function parseCompletionResponse(
 		? validateUsage(value.usage, maximumOutputTokens)
 		: undefined
 	return {
+		finishReason:
+			typeof firstChoice.finish_reason === "string"
+				? firstChoice.finish_reason
+				: null,
 		message: parseAssistantMessage(firstChoice.message),
 		model: value.model,
 		usage,
@@ -293,15 +471,19 @@ function parseCompletionResponse(
 
 function parseAssistantMessage(value: Record<string, unknown>): LlmMessage {
 	if (value.role !== "assistant") throw malformedResponse()
+	// Providers that answer with tool calls alone may leave `content` out entirely instead of
+	// sending null. That is an empty answer, not a malformed one, so only a present field of
+	// the wrong shape is rejected.
 	if (
-		!hasOwn(value, "content") ||
-		(value.content !== null && typeof value.content !== "string")
+		hasOwn(value, "content") &&
+		value.content !== null &&
+		typeof value.content !== "string"
 	) {
 		throw malformedResponse()
 	}
 
 	const message: LlmMessage = {
-		content: value.content as string | null,
+		content: typeof value.content === "string" ? value.content : null,
 		role: "assistant",
 	}
 	if (hasOwn(value, "tool_calls")) {
@@ -369,11 +551,33 @@ function validateUsage(value: unknown, maximumOutputTokens: number): unknown {
 			"LLM provider response exceeded the configured output token limit",
 		)
 	}
-	const sanitized: Record<string, number> = {}
+	const sanitized: Record<string, unknown> = {}
 	for (const property of tokenMetrics) {
 		if (typeof value[property] === "number") {
 			sanitized[property] = value[property] as number
 		}
+	}
+	for (const [group, fields] of Object.entries({
+		completion_tokens_details: [
+			"reasoning_tokens",
+			"audio_tokens",
+			"accepted_prediction_tokens",
+			"rejected_prediction_tokens",
+		],
+		prompt_tokens_details: ["cached_tokens", "audio_tokens"],
+	})) {
+		if (!isRecord(value[group])) continue
+		const details: Record<string, number> = {}
+		for (const field of fields) {
+			const metric = value[group][field]
+			if (
+				typeof metric === "number" &&
+				Number.isSafeInteger(metric) &&
+				metric >= 0
+			)
+				details[field] = metric
+		}
+		if (Object.keys(details).length) sanitized[group] = details
 	}
 	return sanitized
 }
@@ -396,7 +600,10 @@ function safeRequestError(error: unknown): LlmClientError {
 					"LLM provider redirect is not allowed",
 				)
 			}
-			return new LlmClientError(`LLM provider returned HTTP ${status}`)
+			return new LlmClientError(
+				`LLM provider returned HTTP ${status}`,
+				providerPauseMilliseconds(status, error.response?.headers),
+			)
 		}
 		if (
 			error.code === "ECONNABORTED" ||

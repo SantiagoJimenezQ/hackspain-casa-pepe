@@ -95,6 +95,8 @@ export interface AgentStatus {
 	readonly engine: "llm"
 	readonly model: string
 	readonly runIdentifier: string
+	/** Language the scenario and everything the agent writes are in. */
+	readonly language: ScenarioLanguage
 	readonly incidentStatus: string
 	readonly cycles: number
 	readonly maximumCycles: number

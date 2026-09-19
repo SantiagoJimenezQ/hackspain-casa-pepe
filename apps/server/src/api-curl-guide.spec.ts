@@ -33,6 +33,7 @@ import { CurrentPlanResponse, PlanRecord } from "@plans/types/plan.type"
 import { RecoveryActionEntity } from "@recovery/entities/recovery-action.entity"
 import { RecoveryModule } from "@recovery/recovery.module"
 import { ReplaysModule } from "@replays/replays.module"
+import { ApprovalScenariosFixture } from "@root/testing/approval-scenarios.fixture"
 import { InMemoryRepository } from "@root/testing/in-memory-repository"
 import {
 	createScriptedLlmClient,
@@ -40,6 +41,7 @@ import {
 } from "@root/testing/scripted-llm.helper"
 import { waitFor } from "@root/testing/wait-for.helper"
 import { ScenariosModule } from "@scenarios/scenarios.module"
+import { ScenariosService } from "@scenarios/services/scenarios.service"
 import {
 	ScenarioDefinition,
 	ScenarioSummary,
@@ -189,6 +191,9 @@ describe("API curl walkthrough contract", () => {
 				ReplaysModule,
 			],
 		})
+		builder = builder
+			.overrideProvider(ScenariosService)
+			.useClass(ApprovalScenariosFixture)
 		for (const entity of ENTITIES) {
 			builder = builder
 				.overrideProvider(getRepositoryToken(entity))
@@ -492,13 +497,15 @@ describe("API curl walkthrough contract", () => {
 			`/api/plans/current?runIdentifier=${runIdentifier}`,
 			(body) =>
 				body.kind === "plan" &&
-				body.plan.status === "completed" &&
+				body.plan.version >= 4 &&
+				body.plan.status === "active" &&
+				body.plan.steps.every((step) => step.status === "completed") &&
 				body.plan.steps.some(
 					(step) =>
 						step.identifier === "stp_route-assignment_verify" &&
 						step.status === "completed",
 				),
-			"completed recovery plan",
+			"finished actions with unresolved recovery priorities",
 		)
 		expect(completed.kind).toBe("plan")
 
@@ -543,7 +550,7 @@ describe("API curl walkthrough contract", () => {
 			`/api/learning/reports/${runIdentifier}`,
 		)
 		expect(report.status).toBe(200)
-		expect(report.body.planVersions).toHaveLength(2)
+		expect(report.body.planVersions).toHaveLength(4)
 		expect(report.body.approvals.map((item) => item.status).sort()).toEqual(
 			["approved", "superseded"],
 		)
@@ -557,7 +564,7 @@ describe("API curl walkthrough contract", () => {
 			`/api/plans?runIdentifier=${runIdentifier}`,
 		)
 		expect(plans.status).toBe(200)
-		expect(plans.body).toHaveLength(2)
+		expect(plans.body).toHaveLength(4)
 
 		const activity = await request<Page<ActivityRecord>>(
 			baseURL,
@@ -739,11 +746,16 @@ describe("API curl walkthrough contract", () => {
 			),
 		).toBe(true)
 
-		const plan = await request<CurrentPlanResponse>(
+		// The engineer call does not depend on the model: it is dispatched before the first
+		// turn, so even a dead provider leaves an opening plan holding that call and nothing else.
+		const plans = await request<ReadonlyArray<PlanRecord>>(
 			baseURL,
-			`/api/plans/current?runIdentifier=${started.runIdentifier}`,
+			`/api/plans?runIdentifier=${started.runIdentifier}`,
 		)
-		expect(plan.status).toBe(200)
-		expect(plan.body.kind).toBe("none")
+		expect(plans.status).toBe(200)
+		const opening = plans.body.find((candidate) => candidate.version === 1)
+		expect(opening?.steps.map((step) => step.invocation.name)).toEqual([
+			"call_engineer",
+		])
 	})
 })

@@ -146,10 +146,13 @@ describe("ElevenLabsEngineerCallAdapter", () => {
 			agent_phone_number_id: "phone_test",
 			conversation_initiation_client_data: {
 				dynamic_variables: {
+					call_identifier: "call_test",
 					contact_name: "Lucía Responsable",
 					incident_description: "First sentence. Second sentence.",
 					location: "eu-west-1",
 					outage_time: "",
+					questions: "",
+					questions_count: "0",
 					services_down: "orders, tracking",
 				},
 			},
@@ -355,6 +358,138 @@ describe("ElevenLabsEngineerCallAdapter", () => {
 			response({ conversation_id: "conv_test", status: "done" }),
 		)
 		await expect(adapter.getResult(call())).resolves.toBeNull()
+	})
+
+	it("settles a cancelled call instead of leaving it ringing until the timeout", async () => {
+		const fetch = fetchMock()
+		fetch.mockResolvedValue(
+			response({
+				analysis: null,
+				conversation_id: "conv_test",
+				status: "cancelled",
+			}),
+		)
+		const adapter = new ElevenLabsEngineerCallAdapter(configuration())
+
+		const result = await adapter.getResult(call())
+
+		expect(result?.outcome).toBe("no-answer")
+		expect(result?.answers).toEqual([])
+	})
+
+	it("settles a conversation whose status is neither in flight nor done", async () => {
+		const fetch = fetchMock()
+		fetch.mockResolvedValue(
+			response({
+				analysis: null,
+				conversation_id: "conv_test",
+				status: "something-new",
+			}),
+		)
+		const adapter = new ElevenLabsEngineerCallAdapter(configuration())
+
+		const result = await adapter.getResult(call())
+
+		expect(result?.outcome).toBe("failed")
+	})
+
+	it("maps data collection results back to one answer per asked question", async () => {
+		const fetch = fetchMock()
+		fetch.mockResolvedValue(
+			response({
+				agent_id: "agent_test",
+				analysis: {
+					call_successful: "success",
+					data_collection_results: {
+						backup_capacity: {
+							rationale:
+								"Only seven of the twelve units are real.",
+							value: false,
+						},
+						"database-snapshot": {
+							rationale: "The snapshot is twelve minutes old.",
+							value: true,
+						},
+						routeAssignmentReadiness: {
+							value: "Ready once the database answers.",
+						},
+					},
+					transcript_summary:
+						"The engineer answered the three questions.",
+				},
+				conversation_id: "conv_test",
+				status: "done",
+				transcript: [],
+			}),
+		)
+		const adapter = new ElevenLabsEngineerCallAdapter(configuration())
+
+		const result = await adapter.getResult(
+			call({
+				questions: [
+					{
+						key: "database-snapshot",
+						question: "How old is the snapshot?",
+					},
+					{
+						key: "route-assignment-readiness",
+						question: "Is route assignment ready?",
+					},
+					{
+						key: "backup-capacity",
+						question: "Can we count on the units?",
+					},
+					{ key: "unanswered", question: "Never collected" },
+				],
+			}),
+		)
+
+		expect(result?.answers).toEqual([
+			{
+				answer: "The snapshot is twelve minutes old.",
+				confirmed: true,
+				key: "database-snapshot",
+				question: "How old is the snapshot?",
+			},
+			{
+				answer: "Ready once the database answers.",
+				key: "route-assignment-readiness",
+				question: "Is route assignment ready?",
+			},
+			{
+				answer: "Only seven of the twelve units are real.",
+				confirmed: false,
+				key: "backup-capacity",
+				question: "Can we count on the units?",
+			},
+		])
+	})
+
+	it("returns no answers when the agent collected nothing", async () => {
+		const fetch = fetchMock()
+		fetch.mockResolvedValue(
+			response({
+				agent_id: "agent_test",
+				analysis: { call_successful: "success" },
+				conversation_id: "conv_test",
+				status: "done",
+				transcript: [],
+			}),
+		)
+		const adapter = new ElevenLabsEngineerCallAdapter(configuration())
+
+		const result = await adapter.getResult(
+			call({
+				questions: [
+					{
+						key: "database-snapshot",
+						question: "How old is the snapshot?",
+					},
+				],
+			}),
+		)
+
+		expect(result?.answers).toEqual([])
 	})
 
 	it("maps literal authorization booleans and rationales separately from engineer answers", async () => {

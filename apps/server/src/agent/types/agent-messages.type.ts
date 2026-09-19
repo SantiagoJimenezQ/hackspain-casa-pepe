@@ -36,6 +36,12 @@ export interface AgentMessages {
 		unit: string,
 	): string
 	readonly contactEngineerTitle: string
+	readonly awaitingEngineerCall: string
+	readonly authorizedNotifyAllClients: string
+	readonly authorizedTrafficFailover: string
+	authorizationsRecorded(count: number, mode: string): string
+	readonly immediateCallReason: string
+	readonly immediateCallSummary: string
 	prepareTaskTitle(serviceName: string, backupRegion: string): string
 	prepareTaskReason(serviceName: string, reason: string): string
 	prepareTaskDescription(actionDescription: string): string
@@ -75,6 +81,38 @@ export interface AgentMessages {
 	readonly waitingForOperator: string
 	readonly couldNotRequestApproval: string
 	attemptFailedRetrying(attempt: number, message: string): string
+	/** Shown when a proposed action no longer matches the state the agent observed. */
+	actionNoLongerValid: string
+	/** Shown when the agent wants to wait while a planned step could already run. */
+	stepRunnableNow(stepIdentifier: string): string
+	/** Shown when the agent wants to wait on the opening engineer call alone. */
+	openingCallPlanOnly: string
+	/** Placeholder decision text while the commander picks its next move. */
+	selectingNextAction: string
+	/** Placeholder decision text while a specialist picks its next move. */
+	selectingNextSpecialistAction: string
+	/** Shown when fresh evidence invalidates a decision the agent had drafted. */
+	newEvidenceReassessing: string
+	/** Shown when the run the decision belongs to is no longer the live one. */
+	runNoLongerLive: string
+	/** Shown when the model answered with something other than a single tool call. */
+	expectedSingleToolCall: string
+	/** Shown when the agent has spent the actions this cycle allows. */
+	actionBudgetReached: string
+	/** Shown when a proposed action did not pass runtime validation. */
+	decisionRejectedDetail: string
+	/** Shown when the cycle stops because the turn budget ran out. */
+	turnBudgetReached: string
+	/** Shown when a specialist call to the model failed. */
+	specialistWithoutResult: string
+	/** Shown when a specialist action did not pass runtime validation. */
+	specialistActionRejected: string
+	/** Correction handed to a specialist whose action no longer matches the state. */
+	specialistActionNoLongerValid: string
+	/** Shown when a specialist used up its turns without reporting. */
+	specialistTurnBudgetReached: string
+	/** Shown when the provider left the cycle without a decision. */
+	providerUnavailable(detail: string): string
 	readonly toolWithoutResult: string
 	factsConfirmed(count: number, mode: string): string
 	taskCreated(taskIdentifier: string): string

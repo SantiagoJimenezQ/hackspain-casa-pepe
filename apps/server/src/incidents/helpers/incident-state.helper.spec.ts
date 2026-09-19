@@ -2,9 +2,15 @@ import {
 	applyImpact,
 	buildBaselineServices,
 	deriveIncidentStatus,
+	nextRecoveryUnits,
 	propagateDependencyHealth,
+	selectBackupResource,
 	updateServiceStatus,
 } from "@incidents/helpers/incident-state.helper"
+import {
+	createImpactedIncident,
+	createLastDegradedIncident,
+} from "@root/testing/incident.fixture"
 import { METEORITE_SCENARIO } from "@scenarios/constants/meteorite-scenario.constant"
 
 const BASELINE_TIMESTAMP = "2026-09-18T10:00:00.000Z"
@@ -99,6 +105,43 @@ describe("incident state helper", () => {
 		).toBe("recovered")
 		expect(deriveIncidentStatus("normal", impacted, IMPACT_TIMESTAMP)).toBe(
 			"normal",
+		)
+	})
+
+	it("selects Bahrain after Oman is fully allocated to the recovered database", () => {
+		const incident = createImpactedIncident(4)
+		const selected = selectBackupResource({
+			...incident,
+			resources: incident.resources.map((resource, index) =>
+				index === 0 ? { ...resource, allocatedCapacity: 4 } : resource,
+			),
+			services: incident.services.map((service) =>
+				service.identifier === "orders-database"
+					? { ...service, status: "healthy" }
+					: service,
+			),
+		})
+		expect(selected.identifier).toBe("backup-bahrain")
+	})
+
+	it("sizes failover from a degraded leftover and leaves a full Oman", () => {
+		const leftover = createLastDegradedIncident()
+		expect(nextRecoveryUnits(leftover)).toBe(1)
+		expect(selectBackupResource(leftover).identifier).toBe("backup-bahrain")
+	})
+
+	it("does not stay on a committed region with zero remaining units", () => {
+		const leftover = createLastDegradedIncident()
+		const recovered = {
+			...leftover,
+			services: leftover.services.map((service) => ({
+				...service,
+				status: "healthy" as const,
+			})),
+		}
+		expect(nextRecoveryUnits(recovered)).toBe(0)
+		expect(selectBackupResource(recovered).identifier).toBe(
+			"backup-bahrain",
 		)
 	})
 })

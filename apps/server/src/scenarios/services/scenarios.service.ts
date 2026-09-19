@@ -4,6 +4,7 @@ import { METEORITE_SCENARIO } from "@scenarios/constants/meteorite-scenario.cons
 import { METEORITE_SCENARIO_ES } from "@scenarios/constants/meteorite-scenario.es.constant"
 import {
 	ScenarioDefinition,
+	ScenarioLanguage,
 	ScenarioSummary,
 } from "@scenarios/types/scenario.type"
 
@@ -33,6 +34,17 @@ export class ScenariosService {
 			serviceCount: scenario.services.length,
 			title: scenario.title,
 		}))
+	}
+
+	/** The scenario written in this language; every language ships one. */
+	getByLanguage(language: ScenarioLanguage): ScenarioDefinition {
+		const scenario = this.list().find(
+			(candidate) => candidate.language === language,
+		)
+		if (!scenario) {
+			throw new EntityNotFoundException("Scenario", language)
+		}
+		return scenario
 	}
 
 	getByIdentifier(identifier: string): ScenarioDefinition {

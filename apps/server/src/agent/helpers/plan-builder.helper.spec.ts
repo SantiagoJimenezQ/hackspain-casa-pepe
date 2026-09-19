@@ -1,4 +1,5 @@
 import {
+	buildEngineerCallDraft,
 	buildPlanDraft,
 	stepIdentifierFor,
 } from "@agent/helpers/plan-builder.helper"
@@ -314,7 +315,18 @@ describe("buildPlanDraft", () => {
 	})
 
 	it("executes services one at a time in priority order and after the engineer call", () => {
-		const draft = buildPlanDraft(createInput(12))
+		const input = createInput(12)
+		const draft = buildPlanDraft({
+			...input,
+			incident: {
+				...input.incident,
+				services: input.incident.services.map((service) => ({
+					...service,
+					recoveryRequiresApproval:
+						service.identifier === "orders-database",
+				})),
+			},
+		})
 		const databaseExecute = stepOf(
 			draft.steps,
 			stepIdentifierFor("orders-database", "execute"),
@@ -430,5 +442,79 @@ describe("buildPlanDraft", () => {
 			"recover-now",
 		)
 		expect(draft.capacity.plannedUnits).toBe(7)
+	})
+
+	it("fails over to Bahrain after Oman is full and the database is healthy", () => {
+		const incident = createImpactedIncident(4)
+		const recovered = {
+			...incident,
+			resources: incident.resources.map((resource, index) =>
+				index === 0 ? { ...resource, allocatedCapacity: 4 } : resource,
+			),
+			services: incident.services.map((service) =>
+				service.identifier === "orders-database"
+					? { ...service, status: "healthy" as const }
+					: service,
+			),
+		}
+		const draft = buildPlanDraft({
+			...createInput(4),
+			incident: recovered,
+		})
+
+		expect(draft.capacity.resourceIdentifier).toBe("backup-bahrain")
+		expect(decisionOf(draft, "orders-database").decision).toBe(
+			"already-healthy",
+		)
+		expect(decisionOf(draft, "route-assignment").decision).toBe(
+			"recover-now",
+		)
+	})
+})
+
+describe("buildEngineerCallDraft", () => {
+	it("opens the run with the engineer call alone and commits no capacity", () => {
+		const draft = buildEngineerCallDraft(createInput(12))
+
+		expect(draft.steps).toHaveLength(1)
+		const call = stepOf(draft.steps, "stp_contact-engineer")
+		expect(call.invocation.name).toBe("call_engineer")
+		expect(call.order).toBe(1)
+		expect(call.dependsOn).toEqual([])
+		expect(call.requiresApproval).toBe(false)
+		expect(draft.capacity.plannedUnits).toBe(0)
+		expect(
+			draft.priorities.every(
+				(priority) => priority.decision !== "recover-now",
+			),
+		).toBe(true)
+	})
+
+	it("carries the configured engineer and every briefing question", () => {
+		const draft = buildEngineerCallDraft(createInput(12))
+
+		const call = stepOf(draft.steps, "stp_contact-engineer")
+		if (call.invocation.name !== "call_engineer") {
+			throw new Error("Expected a call_engineer invocation")
+		}
+		expect(call.invocation.input.engineerName).toBe("Marta Ruiz")
+		expect(call.invocation.input.engineerPhone).toBe("+34600000000")
+		expect(call.invocation.input.questions.map((item) => item.key)).toEqual(
+			METEORITE_SCENARIO.engineerBriefing.questions.map(
+				(question) => question.key,
+			),
+		)
+	})
+
+	it("ranks every known service exactly once", () => {
+		const draft = buildEngineerCallDraft(createInput(12))
+		const incident = createImpactedIncident(12)
+
+		expect(draft.priorities).toHaveLength(incident.services.length)
+		expect(
+			new Set(
+				draft.priorities.map((priority) => priority.serviceIdentifier),
+			).size,
+		).toBe(incident.services.length)
 	})
 })

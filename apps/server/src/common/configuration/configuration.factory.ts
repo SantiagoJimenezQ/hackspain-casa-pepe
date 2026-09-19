@@ -1,9 +1,11 @@
 import { EnvironmentVariables } from "@common/configuration/environment-variables.class"
+import { LLM_PROVIDER_DEFAULT_BASE_URLS } from "@common/constants/application.constant"
 import {
 	ApplicationConfiguration,
 	EngineerCallMode,
 	EngineerCallProvider,
 	Environment,
+	LlmProviderCredentials,
 	RecoveryMode,
 } from "@common/types/configuration.type"
 import { plainToInstance } from "class-transformer"
@@ -26,15 +28,114 @@ export function validateEnvironmentVariables(
 			`Invalid environment configuration -> ${descriptions.join(" | ")}`,
 		)
 	}
-	if (
-		variables.LLM_BASE_URL.length > 0 &&
-		!isAllowedLlmBaseURL(variables.LLM_BASE_URL)
-	) {
+	const resolvedBaseURL = resolveLlmProvider(variables).baseURL
+	if (resolvedBaseURL.length > 0 && !isAllowedLlmBaseURL(resolvedBaseURL)) {
 		throw new Error(
-			"Invalid environment configuration -> LLM_BASE_URL: use an HTTPS URL; HTTP is only allowed for loopback tests",
+			"Invalid environment configuration -> LLM base URL: use an HTTPS URL; HTTP is only allowed for loopback tests",
 		)
 	}
 	return variables
+}
+
+/**
+ * Resolves the active provider. `LLM_PROVIDER` picks a preset (openai, deepseek) and each
+ * preset falls back to the plain LLM_* variables for anything it leaves empty, so switching
+ * provider is a single variable and both sets of credentials can live side by side.
+ */
+export function resolveLlmProvider(
+	variables: EnvironmentVariables,
+): LlmProviderCredentials {
+	return resolveLlmCredentials(variables, variables.LLM_PROVIDER)
+}
+
+/**
+ * The provider that takes over when the primary one asks the caller to slow down. By default it
+ * is the other preset, so a rate limit on one account keeps the incident moving on the other;
+ * `LLM_FALLBACK_PROVIDER` names one explicitly, and `none` turns the relief off. A preset that
+ * resolves to the primary, or to credentials that cannot be used, is no relief at all.
+ */
+export function resolveLlmFallbackProvider(
+	variables: EnvironmentVariables,
+): LlmProviderCredentials | null {
+	const requested = variables.LLM_FALLBACK_PROVIDER
+	if (requested === "none") {
+		return null
+	}
+	const { [variables.LLM_PROVIDER]: other = "" } = OTHER_LLM_PROVIDER
+	const name = requested.length ? requested : other
+	if (!name.length) {
+		return null
+	}
+	const credentials = resolveLlmCredentials(variables, name)
+	if (
+		!credentials.apiKey.length ||
+		!credentials.baseURL.length ||
+		!credentials.model.length ||
+		!isAllowedLlmBaseURL(credentials.baseURL)
+	) {
+		return null
+	}
+	const primary = resolveLlmProvider(variables)
+	if (
+		credentials.baseURL === primary.baseURL &&
+		credentials.model === primary.model
+	) {
+		return null
+	}
+	return credentials
+}
+
+const OTHER_LLM_PROVIDER: Record<string, string> = {
+	deepseek: "openai",
+	openai: "deepseek",
+}
+
+function resolveLlmCredentials(
+	variables: EnvironmentVariables,
+	provider: string,
+): LlmProviderCredentials {
+	const preset = {
+		deepseek: {
+			apiKey: variables.LLM_DEEPSEEK_API_KEY,
+			baseURL: variables.LLM_DEEPSEEK_BASE_URL,
+			fastModel: variables.LLM_DEEPSEEK_FAST_MODEL,
+			model: variables.LLM_DEEPSEEK_MODEL,
+			reasoningEffort: variables.LLM_DEEPSEEK_REASONING_EFFORT,
+		},
+		openai: {
+			apiKey: variables.LLM_OPENAI_API_KEY,
+			baseURL: variables.LLM_OPENAI_BASE_URL,
+			fastModel: variables.LLM_OPENAI_FAST_MODEL,
+			model: variables.LLM_OPENAI_MODEL,
+			reasoningEffort: variables.LLM_OPENAI_REASONING_EFFORT,
+		},
+	}[provider]
+	if (!preset) {
+		return {
+			apiKey: variables.LLM_API_KEY,
+			baseURL: variables.LLM_BASE_URL,
+			fastModel: variables.LLM_FAST_MODEL,
+			model: variables.LLM_MODEL,
+			reasoningEffort: variables.LLM_REASONING_EFFORT,
+		}
+	}
+	const defaultBaseURL = LLM_PROVIDER_DEFAULT_BASE_URLS[provider] ?? ""
+	return {
+		apiKey: preset.apiKey.length ? preset.apiKey : variables.LLM_API_KEY,
+		baseURL: preset.baseURL.length
+			? preset.baseURL
+			: defaultBaseURL.length
+				? defaultBaseURL
+				: variables.LLM_BASE_URL,
+		fastModel: preset.fastModel.length
+			? preset.fastModel
+			: variables.LLM_FAST_MODEL,
+		model: preset.model.length ? preset.model : variables.LLM_MODEL,
+		reasoningEffort:
+			preset.reasoningEffort === ""
+				? variables.LLM_REASONING_EFFORT
+				: preset.reasoningEffort,
+	}
 }
 
 export function isAllowedLlmBaseURL(baseURL: string): boolean {
@@ -81,12 +182,15 @@ export function createApplicationConfiguration(
 			maximumCyclesPerRun: variables.AGENT_MAXIMUM_CYCLES_PER_RUN,
 			maximumStepAttempts: variables.AGENT_MAXIMUM_STEP_ATTEMPTS,
 			maximumStepsPerCycle: variables.AGENT_MAXIMUM_STEPS_PER_CYCLE,
+			requireOperatorApproval:
+				variables.AGENT_REQUIRE_OPERATOR_APPROVAL === "true",
 			toolTimeoutMilliseconds: variables.AGENT_TOOL_TIMEOUT_MILLISECONDS,
 		},
 		authentication: {
 			apiKey: variables.API_KEY,
 		},
 		database: {
+			poolMaximum: variables.DATABASE_POOL_MAXIMUM,
 			queryLogging: variables.DATABASE_QUERY_LOGGING === "true",
 			url: variables.SUPABASE_DATABASE_URL,
 		},
@@ -111,6 +215,8 @@ export function createApplicationConfiguration(
 			webhookSecret: variables.RESEND_WEBHOOK_SECRET,
 		},
 		engineerCall: {
+			fallbackToSimulated:
+				variables.ENGINEER_CALL_FALLBACK_TO_SIMULATED === "true",
 			mode: (variables.ENGINEER_CALL_MODE ??
 				variables.HAPPYROBOT_MODE) as EngineerCallMode,
 			provider: variables.ENGINEER_CALL_PROVIDER as EngineerCallProvider,
@@ -125,14 +231,11 @@ export function createApplicationConfiguration(
 			webhookSecret: variables.HAPPYROBOT_WEBHOOK_SECRET,
 		},
 		llm: {
-			apiKey: variables.LLM_API_KEY,
-			baseURL: variables.LLM_BASE_URL,
-			fastModel: variables.LLM_FAST_MODEL,
+			...resolveLlmProvider(variables),
+			fallback: resolveLlmFallbackProvider(variables),
 			fastTimeoutMilliseconds: variables.LLM_FAST_TIMEOUT_MILLISECONDS,
 			maximumOutputTokens: variables.LLM_MAXIMUM_OUTPUT_TOKENS,
 			maximumTurns: variables.LLM_MAXIMUM_TURNS,
-			model: variables.LLM_MODEL,
-			reasoningEffort: variables.LLM_REASONING_EFFORT,
 			streamOutput: variables.LLM_STREAM_OUTPUT === "true",
 			timeoutMilliseconds: variables.LLM_TIMEOUT_MILLISECONDS,
 		},

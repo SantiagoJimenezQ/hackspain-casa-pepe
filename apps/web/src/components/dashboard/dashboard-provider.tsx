@@ -11,11 +11,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useI18n } from "@/components/i18n/locale-provider";
 import { CasaPepeClientError, casaPepeClient } from "@/lib/casa-pepe-client";
+import { isLlmActivityType } from "@/lib/agent-trace";
 import type { ActivityRecord, LearningInsight, Overview, RunReport } from "@/lib/casa-pepe-types";
+import type { Locale } from "@/lib/i18n";
 
 type DashboardStatus = "loading" | "active" | "error";
-type DemoAction = "start" | "impact" | "twist" | "reset" | "cycle" | null;
+type DemoAction = "start" | "impact" | "twist" | "reset" | "reset-learnings" | "cycle" | "language" | null;
 
 type DashboardContextValue = {
   status: DashboardStatus;
@@ -30,6 +33,9 @@ type DashboardContextValue = {
   triggerImpact: () => Promise<void>;
   triggerTwist: () => Promise<void>;
   resetDemo: () => Promise<void>;
+  switchLanguage: (locale: Locale) => Promise<void>;
+  resetLearnings: () => Promise<void>;
+  learningResetMessage: string | null;
   runAgentCycle: () => Promise<void>;
   decideApproval: (identifier: string, decision: "approve" | "reject", comment: string) => Promise<void>;
 };
@@ -50,14 +56,44 @@ const ACTIVITY_EVENTS = [
   "agent.cycle-finished", "agent.limit-reached", "replay.started", "replay.finished",
 ] as const;
 
+function outputIdentifierOf(event: ActivityRecord): string {
+  const payload = event.payload;
+  const value = payload && typeof payload === "object" ? payload.outputIdentifier : null;
+  return typeof value === "string" && value.trim() ? value : "";
+}
+
+function compactActivity(events: ActivityRecord[]) {
+  const completed = new Set(
+    events
+      .filter((event) => isLlmActivityType(event.type) && event.type !== "agent.llm-output")
+      .map(outputIdentifierOf)
+      .filter(Boolean),
+  );
+  const kept = events.filter((event) => {
+    if (event.type !== "agent.llm-output") return true;
+    const id = outputIdentifierOf(event);
+    return !id || !completed.has(id);
+  });
+  const llm: ActivityRecord[] = [];
+  const other: ActivityRecord[] = [];
+  for (const event of kept) {
+    if (isLlmActivityType(event.type)) llm.push(event);
+    else other.push(event);
+  }
+  return [...llm, ...other.slice(-100)].toSorted((left, right) => {
+    if (left.sequence !== right.sequence) return left.sequence - right.sequence;
+    return left.identifier.localeCompare(right.identifier);
+  });
+}
+
 function mergeActivity(current: ActivityRecord[], incoming: ActivityRecord) {
   const existing = current.find((item) => item.identifier === incoming.identifier);
   if (existing) {
-    return current.map((item) => item.identifier === incoming.identifier
+    return compactActivity(current.map((item) => item.identifier === incoming.identifier
       ? { ...item, ...incoming, payload: incoming.payload ?? item.payload }
-      : item);
+      : item));
   }
-  return [...current, incoming].toSorted((left, right) => left.sequence - right.sequence).slice(-100);
+  return compactActivity([...current, incoming]);
 }
 
 function mergeActivityList(current: ActivityRecord[], incoming: ActivityRecord[]) {
@@ -66,8 +102,11 @@ function mergeActivityList(current: ActivityRecord[], incoming: ActivityRecord[]
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<DashboardStatus>("loading");
+  const { locale, setLocale } = useI18n();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [insights, setInsights] = useState<LearningInsight[]>([]);
+  const [learningResetMessage, setLearningResetMessage] = useState<string | null>(null);
+  const learningGeneration = useRef(0);
   const [report, setReport] = useState<RunReport | null>(null);
   const [activity, setActivity] = useState<ActivityRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +117,31 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const startGeneration = useRef(0);
   const ensuringRun = useRef(false);
   const learningLoaded = useRef(false);
+
+  const loadLlmHistory = useCallback(async (runIdentifier: string, generation: number) => {
+    try {
+      let beforeSequence: number | undefined;
+      const pages: ActivityRecord[] = [];
+      for (let page = 0; page < 8; page += 1) {
+        const result = await casaPepeClient.llmHistory({
+          beforeSequence,
+          limit: 100,
+          runIdentifier,
+        });
+        if (!Array.isArray(result.items)) break;
+        pages.push(...result.items);
+        if (result.nextBeforeSequence == null) break;
+        beforeSequence = result.nextBeforeSequence;
+      }
+      if (generation !== startGeneration.current) return;
+      if (latestRunIdentifier.current !== runIdentifier) return;
+      startTransition(() => {
+        setActivity((current) => mergeActivityList(current, pages));
+      });
+    } catch {
+      // Live SSE still renders; older turns are additive history.
+    }
+  }, []);
 
   const applyOverview = useCallback((next: Overview) => {
     const nextSequence = Math.max(0, ...next.recentActivity.map((item) => item.sequence));
@@ -92,15 +156,20 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       setError(null);
       setStatus("active");
     });
-  }, []);
+    if (runChanged && next.incident.runIdentifier) {
+      void loadLlmHistory(next.incident.runIdentifier, startGeneration.current);
+    }
+  }, [loadLlmHistory]);
 
   const loadLearning = useCallback(async () => {
     if (learningLoaded.current) return;
     learningLoaded.current = true;
+    const generation = learningGeneration.current;
     const [insightsResult, reportResult] = await Promise.allSettled([
       casaPepeClient.insights(),
       casaPepeClient.report(),
     ]);
+    if (generation !== learningGeneration.current) return;
     startTransition(() => {
       if (insightsResult.status === "fulfilled") setInsights(insightsResult.value);
       if (reportResult.status === "fulfilled") setReport(reportResult.value);
@@ -190,6 +259,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     };
   }, [overview?.incident.runIdentifier, scheduleRefresh, status]);
 
+  // The run decides the language: its scenario, its plans and everything the agent already
+  // wrote are in it. The interface follows so no screen ever mixes two languages.
+  const runLanguage = overview?.agent.language;
+  useEffect(() => {
+    if (runLanguage !== undefined && runLanguage !== locale) setLocale(runLanguage);
+  }, [locale, runLanguage, setLocale]);
+
   const execute = useCallback(async (action: Exclude<DemoAction, null>, work: () => Promise<unknown>) => {
     setBusyAction(action);
     setError(null);
@@ -215,7 +291,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setBusyAction("start");
     setError(null);
     try {
-      await casaPepeClient.start();
+      await casaPepeClient.start(locale);
       await refreshOverview();
     } catch (cause) {
       const known = cause instanceof CasaPepeClientError ? cause : null;
@@ -224,7 +300,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     } finally {
       if (generation === startGeneration.current) setBusyAction(null);
     }
-  }, [refreshOverview]);
+  }, [locale, refreshOverview]);
 
   const triggerImpact = useCallback(() => execute("impact", casaPepeClient.impact), [execute]);
   const triggerTwist = useCallback(() => execute("twist", casaPepeClient.twist), [execute]);
@@ -233,6 +309,27 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     learningLoaded.current = false;
     await execute("reset", casaPepeClient.reset);
   }, [execute]);
+  /**
+   * The agent writes in the language of its scenario, so the selector moves the run to the
+   * scenario written in the chosen language. The interface switches first, and the run that
+   * comes back confirms it.
+   */
+  const switchLanguage = useCallback(async (next: Locale) => {
+    setLocale(next);
+    startGeneration.current += 1;
+    learningLoaded.current = false;
+    await execute("language", () => casaPepeClient.switchLanguage(next));
+  }, [execute, setLocale]);
+  const resetLearnings = useCallback(() => execute("reset-learnings", async () => {
+    setLearningResetMessage(null);
+    const { removed } = await casaPepeClient.resetLearnings();
+    learningGeneration.current += 1;
+    learningLoaded.current = false;
+    setInsights([]);
+    setReport((current) => current ? { ...current, lessons: [] } : null);
+    setLearningResetMessage(`${removed} aprendizajes borrados. Reinicia la demo para empezar sin memoria previa.`);
+    await loadLearning();
+  }), [execute, loadLearning]);
   const runAgentCycle = useCallback(() => execute("cycle", casaPepeClient.runCycle), [execute]);
   const decideApproval = useCallback(
     (identifier: string, decision: "approve" | "reject", comment: string) =>
@@ -243,9 +340,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact,
-      triggerTwist, resetDemo, runAgentCycle, decideApproval,
+      triggerTwist, resetDemo, switchLanguage, resetLearnings, learningResetMessage, runAgentCycle, decideApproval,
     }),
-    [status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact, triggerTwist, resetDemo, runAgentCycle, decideApproval],
+    [status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact, triggerTwist, resetDemo, switchLanguage, resetLearnings, learningResetMessage, runAgentCycle, decideApproval],
   );
 
   return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>;

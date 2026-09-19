@@ -1,8 +1,11 @@
 import { ActivityModule } from "@activity/activity.module"
 import { AgentController } from "@agent/controllers/agent.controller"
+import { ModelTestsController } from "@agent/controllers/model-tests.controller"
 import { OverviewController } from "@agent/controllers/overview.controller"
 import { LlmClientService } from "@agent/llm/llm-client.service"
 import { LlmLoopService } from "@agent/llm/llm-loop.service"
+import { ModelTestsService } from "@agent/llm/model-tests.service"
+import { SubagentRunnerService } from "@agent/llm/subagent-runner.service"
 import { AgentService } from "@agent/services/agent.service"
 import { AgentCycleStateService } from "@agent/services/agent-cycle-state.service"
 import { ApprovalsModule } from "@approvals/approvals.module"
@@ -17,7 +20,7 @@ import { TasksModule } from "@tasks/tasks.module"
 import { ToolsModule } from "@tools/tools.module"
 
 @Module({
-	controllers: [AgentController, OverviewController],
+	controllers: [AgentController, OverviewController, ModelTestsController],
 	exports: [AgentService],
 	imports: [
 		HttpModule,
@@ -32,10 +35,12 @@ import { ToolsModule } from "@tools/tools.module"
 		LearningModule,
 	],
 	providers: [
+		ModelTestsService,
 		AgentCycleStateService,
 		AgentService,
 		LlmClientService,
 		LlmLoopService,
+		SubagentRunnerService,
 	],
 })
 export class AgentModule {}

@@ -1,8 +1,12 @@
 import {
 	ENVIRONMENTS,
+	LLM_PROVIDERS,
 	LLM_REASONING_EFFORTS,
 } from "@common/constants/application.constant"
-import { LlmReasoningEffort } from "@common/types/configuration.type"
+import {
+	LlmProvider,
+	LlmReasoningEffort,
+} from "@common/types/configuration.type"
 import { Type } from "class-transformer"
 import {
 	IsIn,
@@ -45,6 +49,12 @@ export class EnvironmentVariables {
 	@IsIn(["true", "false"])
 	DATABASE_QUERY_LOGGING: string = "false"
 
+	@Type(() => Number)
+	@IsInt()
+	@Min(1)
+	@Max(20)
+	DATABASE_POOL_MAXIMUM: number = 1
+
 	@IsString()
 	@Matches(/^postgres(ql)?:\/\//, {
 		message: DATABASE_URL_MESSAGE,
@@ -72,6 +82,9 @@ export class EnvironmentVariables {
 
 	@IsIn(["elevenlabs", "happyrobot"])
 	ENGINEER_CALL_PROVIDER: string = "happyrobot"
+
+	@IsIn(["true", "false"])
+	ENGINEER_CALL_FALLBACK_TO_SIMULATED: string = "true"
 
 	@IsIn(["simulated", "live"])
 	HAPPYROBOT_MODE: string = "simulated"
@@ -150,6 +163,9 @@ export class EnvironmentVariables {
 	@Min(1)
 	AGENT_MAXIMUM_STEP_ATTEMPTS: number = 2
 
+	@IsIn(["true", "false"])
+	AGENT_REQUIRE_OPERATOR_APPROVAL: string = "true"
+
 	@Type(() => Number)
 	@IsInt()
 	@Min(1000)
@@ -167,6 +183,44 @@ export class EnvironmentVariables {
 
 	// The LLM is the default decision provider. Empty provider fields keep local
 	// startup possible; the client reports the missing configuration when called.
+	/** Pick a preset: openai or deepseek. Empty uses the plain LLM_BASE_URL/API_KEY/MODEL below. */
+	@IsIn(LLM_PROVIDERS)
+	LLM_PROVIDER: LlmProvider = ""
+
+	/** Provider used when the primary one rate-limits. Empty picks the other preset; none disables it. */
+	@IsIn(["", "openai", "deepseek", "none"])
+	LLM_FALLBACK_PROVIDER: string = ""
+
+	@IsString()
+	LLM_OPENAI_BASE_URL: string = ""
+
+	@IsString()
+	LLM_OPENAI_API_KEY: string = ""
+
+	@IsString()
+	LLM_OPENAI_MODEL: string = ""
+
+	@IsString()
+	LLM_OPENAI_FAST_MODEL: string = ""
+
+	@IsIn(LLM_REASONING_EFFORTS)
+	LLM_OPENAI_REASONING_EFFORT: LlmReasoningEffort = ""
+
+	@IsString()
+	LLM_DEEPSEEK_BASE_URL: string = ""
+
+	@IsString()
+	LLM_DEEPSEEK_API_KEY: string = ""
+
+	@IsString()
+	LLM_DEEPSEEK_MODEL: string = ""
+
+	@IsString()
+	LLM_DEEPSEEK_FAST_MODEL: string = ""
+
+	@IsIn(LLM_REASONING_EFFORTS)
+	LLM_DEEPSEEK_REASONING_EFFORT: LlmReasoningEffort = ""
+
 	@IsString()
 	LLM_BASE_URL: string = ""
 

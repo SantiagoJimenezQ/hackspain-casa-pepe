@@ -39,7 +39,11 @@ function configuration(overrides: Record<string, unknown> = {}) {
 		elevenLabs: {
 			pollIntervalMilliseconds: 1,
 		},
-		engineerCall: { mode: "live", provider: "elevenlabs" },
+		engineerCall: {
+			fallbackToSimulated: false,
+			mode: "live",
+			provider: "elevenlabs",
+		},
 		runtime: { publicBaseURL: "https://example.test" },
 		...overrides,
 	} as never
@@ -67,7 +71,7 @@ function command(): StartEngineerCallCommand {
 	}
 }
 
-function setup() {
+function setup(configurationOverrides: Record<string, unknown> = {}) {
 	const repository = new InMemoryRepository<EngineerCallEntity>()
 	const activity = { record: jest.fn().mockResolvedValue(undefined) }
 	const runs = { isRunActive: jest.fn().mockResolvedValue(true) }
@@ -83,15 +87,31 @@ function setup() {
 			providerReference: "conversation_test",
 		}),
 	}
+	const fallbackAdapter: EngineerCallAdapter = {
+		mode: "simulated",
+		start: jest.fn().mockResolvedValue({
+			kind: "accepted",
+			providerReference: "simulated:test",
+		}),
+	}
 	const service = new EngineersService(
 		repository as never,
 		adapter,
+		fallbackAdapter,
 		activity as never,
 		runs as never,
-		configuration(),
+		configuration(configurationOverrides),
 		events as never,
 	)
-	return { activity, adapter, events, repository, runs, service }
+	return {
+		activity,
+		adapter,
+		events,
+		fallbackAdapter,
+		repository,
+		runs,
+		service,
+	}
 }
 
 describe("EngineersService outbound call runtime", () => {
@@ -110,6 +130,7 @@ describe("EngineersService outbound call runtime", () => {
 		const restarted = new EngineersService(
 			first.repository as never,
 			first.adapter,
+			first.fallbackAdapter,
 			first.activity as never,
 			first.runs as never,
 			configuration(),
@@ -224,5 +245,133 @@ describe("EngineersService outbound call runtime", () => {
 		expect(setupState.activity.record).toHaveBeenCalledWith(
 			expect.objectContaining({ type: "engineer-call.failed" }),
 		)
+	})
+})
+
+describe("EngineersService live permissions", () => {
+	const report = {
+		callIdentifier: "",
+		notifyAllClients: true,
+		rationale: "He said yes to both.",
+		trafficFailoverAuthorized: true,
+	}
+
+	it("stores permissions while the call is still open, without ending it", async () => {
+		const state = setup()
+		const started = await state.service.startCall(command())
+
+		const record = await state.service.recordLiveAuthorizations({
+			...report,
+			callIdentifier: started.identifier,
+		})
+
+		expect(record.status).toBe("in-progress")
+		expect(record.result?.authorizations?.notifyAllClients.value).toBe(true)
+		expect(
+			record.result?.authorizations?.trafficFailoverAuthorized.value,
+		).toBe(true)
+		expect(state.activity.record).toHaveBeenCalledWith(
+			expect.objectContaining({ type: "engineer-call.authorized" }),
+		)
+		expect(state.events.emit).toHaveBeenCalledWith(
+			"domain.engineer-call.authorized",
+			expect.objectContaining({
+				call: expect.objectContaining({
+					identifier: started.identifier,
+				}),
+			}),
+		)
+	})
+
+	it("keeps a refusal as a refusal instead of dropping it", async () => {
+		const state = setup()
+		const started = await state.service.startCall(command())
+
+		const record = await state.service.recordLiveAuthorizations({
+			callIdentifier: started.identifier,
+			notifyAllClients: false,
+			rationale: "He refused.",
+			trafficFailoverAuthorized: false,
+		})
+
+		expect(record.result?.authorizations?.notifyAllClients.value).toBe(
+			false,
+		)
+	})
+
+	it("lets the provider analysis overwrite the live report when the call ends", async () => {
+		const state = setup()
+		const started = await state.service.startCall(command())
+		await state.service.recordLiveAuthorizations({
+			...report,
+			callIdentifier: started.identifier,
+		})
+
+		await state.service.completeCall(started.identifier, result)
+		const finished = await state.service.getByIdentifier(started.identifier)
+
+		expect(finished.status).toBe("completed")
+		expect(finished.result?.authorizations).toEqual(result.authorizations)
+		expect(finished.result?.transcript).toBe(result.transcript)
+	})
+
+	it("refuses a late report once the call is terminal", async () => {
+		const state = setup()
+		const started = await state.service.startCall(command())
+		await state.service.completeCall(started.identifier, result)
+
+		await expect(
+			state.service.recordLiveAuthorizations({
+				...report,
+				callIdentifier: started.identifier,
+			}),
+		).rejects.toThrow()
+	})
+
+	it("ignores a report from a run that is no longer active", async () => {
+		const state = setup()
+		const started = await state.service.startCall(command())
+		state.runs.isRunActive.mockResolvedValue(false)
+
+		await expect(
+			state.service.recordLiveAuthorizations({
+				...report,
+				callIdentifier: started.identifier,
+			}),
+		).rejects.toThrow()
+	})
+
+	it("keeps the response moving by simulating a call the provider refused", async () => {
+		const state = setup({
+			engineerCall: {
+				fallbackToSimulated: true,
+				mode: "live",
+				provider: "elevenlabs",
+			},
+		})
+		state.adapter.start = jest.fn().mockResolvedValue({
+			kind: "failed",
+			reason: "HTTP 401 error: account is not active",
+		})
+
+		const started = await state.service.startCall(command())
+
+		expect(started.status).toBe("in-progress")
+		expect(started.mode).toBe("simulated")
+		expect(started.providerReference).toBe("simulated:test")
+		expect(state.fallbackAdapter.start).toHaveBeenCalledTimes(1)
+	})
+
+	it("fails the call when the deployment forbids the simulated fallback", async () => {
+		const state = setup()
+		state.adapter.start = jest.fn().mockResolvedValue({
+			kind: "failed",
+			reason: "HTTP 401 error: account is not active",
+		})
+
+		const started = await state.service.startCall(command())
+
+		expect(started.status).toBe("failed")
+		expect(state.fallbackAdapter.start).not.toHaveBeenCalled()
 	})
 })

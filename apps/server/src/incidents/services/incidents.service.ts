@@ -5,6 +5,7 @@ import { insertEntity, updateEntity } from "@common/database/persistence.helper"
 import { StaleRunException } from "@common/exceptions/domain.exception"
 import { nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
+import { ConfigurationService } from "@common/services/configuration.service"
 import { IncidentEntity } from "@incidents/entities/incident.entity"
 import {
 	applyImpact,
@@ -38,6 +39,7 @@ import { ScenariosService } from "@scenarios/services/scenarios.service"
 import { SeededSimulationService } from "@scenarios/services/seeded-simulation.service"
 import {
 	ScenarioDefinition,
+	ScenarioLanguage,
 	ServiceHealthStatus,
 } from "@scenarios/types/scenario.type"
 import {
@@ -60,6 +62,7 @@ export class IncidentsService {
 		private readonly activityService: ActivityService,
 		private readonly eventEmitter: EventEmitter2,
 		private readonly seededSimulation: SeededSimulationService,
+		private readonly configuration: ConfigurationService,
 	) {}
 
 	async startRun(
@@ -73,7 +76,6 @@ export class IncidentsService {
 			scenario,
 			simulation,
 		)
-		await this.deactivateCurrentRun("A new run was started")
 		const entity = await insertEntity(
 			this.repository,
 			this.buildBaselineEntity(runtimeScenario, "live", "", simulation),
@@ -116,7 +118,6 @@ export class IncidentsService {
 			scenario,
 			replayCapacityState,
 		)
-		await this.deactivateCurrentRun("A replay was started")
 		const entity = await insertEntity(
 			this.repository,
 			this.buildBaselineEntity(
@@ -129,12 +130,43 @@ export class IncidentsService {
 		return toIncidentSnapshot(entity)
 	}
 
-	async reset(): Promise<IncidentSnapshot> {
-		const current = await this.runsService.findActiveEntity()
+	/**
+	 * The scenario carries the language of everything the agent writes, so changing language
+	 * means running the scenario written in it. A run already in that language is left alone;
+	 * any other run ends here, because its persisted prose cannot be rewritten.
+	 */
+	async switchLanguage(
+		language: ScenarioLanguage,
+		runIdentifier?: string,
+	): Promise<IncidentSnapshot> {
+		const scenario = this.scenariosService.getByLanguage(language)
+		const current = runIdentifier
+			? await this.runsService.getEntityByRunIdentifier(runIdentifier)
+			: await this.runsService.findActiveEntity()
+		if (current && current.scenarioIdentifier === scenario.identifier) {
+			return this.runsService.getByRunIdentifier(current.runIdentifier)
+		}
+		if (current) {
+			await this.deactivateRun(
+				current,
+				"The operator changed the language; this run ends here",
+			)
+		}
+		return this.startRun(scenario.identifier)
+	}
+
+	async reset(runIdentifier?: string): Promise<IncidentSnapshot> {
+		const current = runIdentifier
+			? await this.runsService.getEntityByRunIdentifier(runIdentifier)
+			: await this.runsService.findActiveEntity()
 		const scenarioIdentifier = current
 			? current.scenarioIdentifier
 			: this.scenariosService.list()[0].identifier
 		if (current) {
+			await this.deactivateRun(
+				current,
+				"The operator reset the scenario; this run ends here",
+			)
 			await this.activityService.record({
 				correlation: {},
 				incidentIdentifier: current.identifier,
@@ -154,8 +186,10 @@ export class IncidentsService {
 		return this.startRun(scenarioIdentifier)
 	}
 
-	async getActiveRunIdentifier(): Promise<string> {
-		return (await this.runsService.getActiveEntity()).runIdentifier
+	async getActiveRunIdentifier(
+		requestedRunIdentifier?: string,
+	): Promise<string> {
+		return this.runsService.resolveRunIdentifier(requestedRunIdentifier)
 	}
 
 	async setSimulationPaused(
@@ -293,9 +327,17 @@ export class IncidentsService {
 
 	@Interval(1000)
 	async advanceAutomaticSimulation(): Promise<void> {
-		const entity = await this.runsService.findActiveEntity()
+		// Sequential on purpose: this runs every second over every run people keep open.
+		for (const entity of await this.runsService.listLiveEntities()) {
+			await this.advanceAutomaticSimulationFor(entity)
+		}
+	}
+
+	private async advanceAutomaticSimulationFor(
+		entity: IncidentEntity,
+	): Promise<void> {
 		if (
-			!entity?.simulation ||
+			!entity.simulation ||
 			entity.simulation.mode !== "randomized" ||
 			entity.simulation.paused ||
 			entity.status === "normal" ||
@@ -373,8 +415,12 @@ export class IncidentsService {
 		return snapshot
 	}
 
-	async applyScenarioTwist(): Promise<IncidentSnapshot> {
-		const entity = await this.runsService.getActiveEntity()
+	async applyScenarioTwist(
+		runIdentifier?: string,
+	): Promise<IncidentSnapshot> {
+		const entity = runIdentifier
+			? await this.runsService.getEntityByRunIdentifier(runIdentifier)
+			: await this.runsService.getActiveEntity()
 		const scenario = this.scenariosService.getByIdentifier(
 			entity.scenarioIdentifier,
 		)
@@ -385,6 +431,7 @@ export class IncidentsService {
 				type: "capacity-limited",
 			},
 			"Demo controls",
+			entity.runIdentifier,
 		)
 	}
 
@@ -771,9 +818,11 @@ export class IncidentsService {
 		})
 	}
 
-	private async deactivateCurrentRun(reason: string): Promise<void> {
-		const current = await this.runsService.findActiveEntity()
-		if (!current) {
+	private async deactivateRun(
+		current: IncidentEntity,
+		reason: string,
+	): Promise<void> {
+		if (!current.active) {
 			return
 		}
 		current.active = false
@@ -794,6 +843,9 @@ export class IncidentsService {
 			},
 		]
 		await updateEntity(this.repository, current)
+		this.eventEmitter.emit(DOMAIN_EVENTS.INCIDENT_RUN_DEACTIVATED, {
+			runIdentifier: current.runIdentifier,
+		})
 	}
 
 	private buildBaselineEntity(
@@ -822,7 +874,11 @@ export class IncidentsService {
 			runIdentifier: createPrefixedIdentifier("run"),
 			runKind,
 			scenarioIdentifier: scenario.identifier,
-			services: buildBaselineServices(scenario, timestamp),
+			services: buildBaselineServices(
+				scenario,
+				timestamp,
+				this.configuration.agent.requireOperatorApproval,
+			),
 			simulation,
 			sourceRunIdentifier,
 			startedAt: timestamp,

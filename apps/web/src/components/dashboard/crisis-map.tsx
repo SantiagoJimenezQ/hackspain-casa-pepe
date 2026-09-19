@@ -313,7 +313,8 @@ function CrisisMapScene({
                     className={pulsing ? "pulse-ring" : undefined}
                   />
                   <circle r="11" fill="var(--map-node-fill)" stroke={COLORS[customer.status]} strokeWidth="1.6" />
-                  <image href={customer.logo} x="-8" y="-8" width="16" height="16" />
+                  <circle r="9" fill="var(--logo-plate)" />
+                  <image href={customer.logo} x="-7" y="-7" width="14" height="14" />
                   {theater ? (
                     <text x="14" y="4" fill="var(--foreground)" fontSize="10">{customer.shortName}</text>
                   ) : null}

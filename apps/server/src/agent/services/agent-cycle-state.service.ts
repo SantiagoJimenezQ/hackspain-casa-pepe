@@ -36,6 +36,8 @@ export class AgentCycleStateService {
 	}
 
 	finish(runIdentifier: string, outcome: CycleOutcome): boolean {
+		// A reset can forget this cycle while its provider request is in flight.
+		if (!this.states.has(runIdentifier)) return false
 		const state = this.get(runIdentifier)
 		this.states.set(runIdentifier, {
 			inProgress: false,

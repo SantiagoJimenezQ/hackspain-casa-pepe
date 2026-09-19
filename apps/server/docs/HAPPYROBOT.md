@@ -63,7 +63,7 @@ Permission values must be literal JSON booleans or null, never strings. Keep bot
 
 ## Rehearsal
 
-Preparation validation passed: 8 focused backend suites (62 tests), TypeScript checking and the server build. HappyRobot synthetic extraction correctly retained both approvals, partial approval/refusal, missing answers and an early affirmative before the permission question. The early-affirmative policy was subsequently updated at the user’s request to return true for both permissions; extraction tests cover an interrupted question and an early partial approval as well. Synthetic status tests covered completed, unanswered and failed calls. These checks do not validate a real phone conversation or callback delivery. The workflow has zero runs.
+Preparation validation passed: 8 focused backend suites (72 tests after integrating current main), TypeScript checking and the server build. HappyRobot synthetic extraction correctly retained both approvals, partial approval/refusal, missing answers and an early affirmative before the permission question. The early-affirmative policy was subsequently updated at the user’s request to return true for both permissions; extraction tests cover an interrupted question and an early partial approval as well. Synthetic status tests covered completed, unanswered and failed calls. These checks do not validate a real phone conversation or callback delivery. The workflow has zero runs.
 
 The local preparation environment is in the ignored, restricted-permission `apps/server/.env.happyrobot.local` file in this isolated checkout. It keeps call mode simulated and is not loaded automatically. Transfer its dedicated callback credential through deployment secret settings when deploying; do not commit it.
 

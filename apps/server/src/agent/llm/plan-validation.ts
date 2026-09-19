@@ -97,6 +97,7 @@ export const llmPlanSchema = {
 										required: ["key", "question"],
 										type: "object",
 									},
+									minItems: 1,
 									type: "array",
 								},
 							},
@@ -248,7 +249,13 @@ export const llmPlanSchema = {
 		priority: {
 			additionalProperties: false,
 			properties: {
-				blockedBy: { items: { type: "string" }, type: "array" },
+				blockedBy: {
+					description:
+						"Only unhealthy service dependency identifiers. No self references, fact identifiers or capacity blockers; describe those in reason.",
+					items: { type: "string" },
+					type: "array",
+					uniqueItems: true,
+				},
 				businessImpact: {
 					enum: ["critical", "high", "medium", "low"],
 					type: "string",
@@ -467,6 +474,23 @@ export function validateLlmPlan(
 			"must explain a conservative assumed capacity below the reported total",
 		)
 	}
+	const remainingReported =
+		context.resource.totalCapacity - context.resource.allocatedCapacity
+	const insight = input.capacityAssumption
+	const insightApplies =
+		insight !== null &&
+		(!insight.resourceIdentifier ||
+			insight.resourceIdentifier === context.resource.identifier)
+	if (
+		capacity.assumedCapacity === 0 &&
+		remainingReported > 0 &&
+		!(insightApplies && insight.assumedCapacity === 0)
+	) {
+		fail(
+			"plan.capacity.assumedCapacity",
+			"unconfirmed reported capacity is still usable; assumedCapacity cannot be 0 while remaining units exist",
+		)
+	}
 	const rawSteps = array(rawPlan.steps, "plan.steps")
 	const previousSteps = validatePreviousSteps(input.previousPlan)
 	const previousByIdentifier = new Map(
@@ -517,9 +541,14 @@ export function validateLlmPlan(
 		}
 	}
 
-	validateStepOrders(steps.map(({ step }) => step))
-	validateDependencyGraph(steps.map(({ step }) => step))
-	validateRecoverySteps(steps, priorities, capacity, context, input)
+	// The model is told to omit running and completed work, so it cannot know which numbers
+	// are already taken. Sequencing the merged list here keeps a carried step ahead of the work
+	// that depends on it, instead of sinking a plan over a number the model never saw.
+	const sequenced = sequenceSteps(steps)
+	validateStepOrders(sequenced.map(({ step }) => step))
+	validateDependencyGraph(sequenced.map(({ step }) => step))
+	validateRecoverySteps(sequenced, priorities, capacity, context, input)
+	validatePendingFactsHaveCall(sequenced, input)
 
 	const reason = nonEmptyString(rawPlan.reason, "plan.reason")
 	const summary = nonEmptyString(rawPlan.summary, "plan.summary")
@@ -528,9 +557,50 @@ export function validateLlmPlan(
 		capacity,
 		priorities,
 		reason,
-		steps: steps.map(({ step }) => step),
+		steps: sequenced.map(({ step }) => step),
 		summary,
 	}
+}
+
+/**
+ * `order` is bookkeeping the server owns: dependencies first, then the sequence the plan
+ * proposed. A step whose dependencies never resolve keeps its proposed position so the
+ * dependency check still reports the real problem.
+ */
+function sequenceSteps(
+	steps: ReadonlyArray<ParsedStep>,
+): ReadonlyArray<ParsedStep> {
+	const known = new Set(steps.map((parsed) => parsed.step.identifier))
+	const emitted = new Set<string>()
+	const sequenced: ParsedStep[] = []
+	let progressed = true
+	while (progressed) {
+		progressed = false
+		for (const parsed of steps) {
+			if (emitted.has(parsed.step.identifier)) {
+				continue
+			}
+			const ready = parsed.step.dependsOn.every(
+				(dependency) =>
+					!known.has(dependency) || emitted.has(dependency),
+			)
+			if (!ready) {
+				continue
+			}
+			emitted.add(parsed.step.identifier)
+			sequenced.push(parsed)
+			progressed = true
+		}
+	}
+	for (const parsed of steps) {
+		if (!emitted.has(parsed.step.identifier)) {
+			sequenced.push(parsed)
+		}
+	}
+	return sequenced.map((parsed, index) => ({
+		...parsed,
+		step: { ...parsed.step, order: index + 1 },
+	}))
 }
 
 function createValidationContext(input: PlanBuildInput): ValidationContext {
@@ -790,7 +860,9 @@ function validatePriorities(
 		) {
 			fail(
 				`${path}.capacityUnits`,
-				"must match the incident service recovery cost",
+				service.status === "healthy"
+					? "must be zero for a healthy service"
+					: "must match the incident service recovery cost",
 			)
 		}
 
@@ -1553,6 +1625,32 @@ function validateRecoverySteps(
 	void byIdentifier
 }
 
+function validatePendingFactsHaveCall(
+	steps: ReadonlyArray<ParsedStep>,
+	input: PlanBuildInput,
+): void {
+	const pendingFacts = input.incident.facts.some(
+		(fact) => fact.status === "pending",
+	)
+	if (!pendingFacts) {
+		return
+	}
+	const current = steps.some(
+		({ step }) =>
+			step.invocation.name === "call_engineer" ||
+			step.invocation.name === "contact_engineer",
+	)
+	const previous = (input.previousPlan?.steps ?? []).some(
+		(step) =>
+			(step.invocation.name === "call_engineer" ||
+				step.invocation.name === "contact_engineer") &&
+			step.status !== "failed",
+	)
+	if (!current && !previous) {
+		fail("plan.steps", "pending facts require a call_engineer step")
+	}
+}
+
 function parseInvocation(
 	value: unknown,
 	path: string,
@@ -1774,11 +1872,19 @@ function parseInvocation(
 	}
 }
 
+/**
+ * A call with no questions cannot collect anything: the voice agent receives an empty
+ * questions variable and the conversation leaves every fact pending.
+ */
 function parseQuestions(
 	value: unknown,
 	path: string,
 ): ReadonlyArray<{ readonly key: string; readonly question: string }> {
-	return array(value, path, MAX_QUESTIONS).map((candidate, index) => {
+	const candidates = array(value, path, MAX_QUESTIONS)
+	if (!candidates.length) {
+		fail(path, "an engineer call must ask at least one question")
+	}
+	return candidates.map((candidate, index) => {
 		const question = record(candidate, `${path}[${index}]`)
 		exactKeys(question, ["key", "question"], `${path}[${index}]`)
 		return {
@@ -1842,9 +1948,15 @@ function isTrustedStep(
 			(candidate) =>
 				candidate.identifier === step.identifier &&
 				CARRIED_STATUSES.has(candidate.status) &&
-				structurallyEqual(candidate, step),
+				structurallyEqual(withoutOrder(candidate), withoutOrder(step)),
 		),
 	)
+}
+
+/** `sequenceSteps` owns `order` after merge, so a carried step stays trusted when only that number changes. */
+function withoutOrder(step: PlanStep): unknown {
+	const { order: _order, ...rest } = step
+	return rest
 }
 
 function parseActor(value: unknown, path: string): Actor {

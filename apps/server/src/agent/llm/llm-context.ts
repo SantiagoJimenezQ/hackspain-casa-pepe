@@ -131,10 +131,20 @@ export function safeValidationError(message: string, raw: string): string {
 	} catch {
 		return "Arguments must be valid JSON."
 	}
-	let safe = message
-	for (const value of [...values].sort((a, b) => b.length - a.length)) {
-		safe = safe.split(value).join("[argument]")
-	}
+	const alternatives = [...values]
+		.sort((a, b) => b.length - a.length)
+		.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+	// Redact complete submitted tokens, not substrings of controlled field names
+	// or prose (for example, "postpone" must not corrupt "postponedUnits").
+	const safe = alternatives.length
+		? message.replace(
+				new RegExp(
+					`(?<![\\p{L}\\p{N}_-])(?:${alternatives.join("|")})(?![\\p{L}\\p{N}_-])`,
+					"gu",
+				),
+				"[argument]",
+			)
+		: message
 	return safe.slice(0, 1000)
 }
 

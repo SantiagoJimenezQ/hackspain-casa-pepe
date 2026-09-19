@@ -55,6 +55,10 @@ function withComment(base: string, comment: string): string {
 }
 
 const ENGLISH: AgentMessages = {
+	actionBudgetReached:
+		"Action budget reached; wait for operator or next event",
+	actionNoLongerValid:
+		"Action failed or state changed before dispatch. Reassess current state and tool records before retrying.",
 	approvalExpiredRequestAgain:
 		"The approval expired, it will be requested again",
 	approvalRequestedAgain:
@@ -62,6 +66,14 @@ const ENGLISH: AgentMessages = {
 	approvedBy: (name, comment) => withComment(`Approved by ${name}`, comment),
 	attemptFailedRetrying: (attempt, message) =>
 		`Attempt ${attempt} failed (${message}). Retrying`,
+	authorizationsRecorded: (count, mode) =>
+		`${count} ${count === 1 ? "authorization" : "authorizations"} granted by the on-call engineer in ${mode} mode`,
+	authorizedNotifyAllClients:
+		"The on-call engineer authorized notifying every client about the incident",
+	authorizedTrafficFailover:
+		"The on-call engineer authorized diverting traffic to the backup region",
+	awaitingEngineerCall:
+		"Waiting for the on-call engineer to confirm the pending facts before committing capacity",
 	capacityConfirmed: (units, reason) =>
 		`Backup capacity confirmed at ${units} units: ${reason}`,
 	changeBackInPlan: (serviceName, reason) =>
@@ -85,6 +97,8 @@ const ENGLISH: AgentMessages = {
 		`Postponed ${serviceName}: ${reason}`,
 	decisionRecoverNow: (rank, serviceName, reason) =>
 		`${rank}. ${serviceName}: ${reason}`,
+	decisionRejectedDetail:
+		"The proposed action did not pass runtime validation; the model must revise it.",
 	dependsOnBlocked: (dependencies) =>
 		`Depends on ${dependencies.join(", ")}, which cannot be recovered right now`,
 	engineerFollowUpDescription: (pendingFacts) =>
@@ -96,6 +110,7 @@ const ENGLISH: AgentMessages = {
 	engineerFollowUpTitle: "Chase the unconfirmed facts after the failed call",
 	engineerUnreachable: (pendingFacts) =>
 		`The engineer could not be reached after the allowed attempts. The plan continues with ${pendingFacts} unconfirmed ${pendingFacts === 1 ? "fact" : "facts"} and asks for confirmation by another channel`,
+	expectedSingleToolCall: "Expected exactly one declared tool call",
 	factsConfirmed: (count, mode) =>
 		`${count} facts confirmed by the engineer in ${mode} mode`,
 	followUpTaskDescription: (serviceIdentifier, detail) =>
@@ -105,6 +120,10 @@ const ENGLISH: AgentMessages = {
 	healthyNoAction: "Healthy, no action needed",
 	historicalCapacityAssumption: (reportedUnits, assumedUnits, unit, runs) =>
 		`The dashboard reports ${reportedUnits} ${unit} but in ${runs} previous ${runs === 1 ? "run" : "runs"} only ${assumedUnits} were really available. Planning with ${assumedUnits} until the capacity is confirmed`,
+	immediateCallReason:
+		"Only the on-call engineer can settle the pending facts, so the call goes out before any other work",
+	immediateCallSummary:
+		"The on-call engineer is being called right now. Every recovery stays postponed until the pending facts are settled",
 	impactLabel: (level) => IMPACT_LABELS_EN[level],
 	informationGathered: "Information gathered",
 	insufficientCapacity: (details) =>
@@ -112,9 +131,13 @@ const ENGLISH: AgentMessages = {
 	limitReached: (cycles) =>
 		`The agent stopped after ${cycles} cycles to avoid running without progress. An operator can request a cycle manually`,
 	modeLabel: (mode) => mode,
+	newEvidenceReassessing:
+		"New evidence arrived; reassessing before taking action",
 	nextStep: (title) => `Next: ${title}`,
 	notEvaluated: "Not evaluated",
 	nothingRunnable: "Nothing runnable right now",
+	openingCallPlanOnly:
+		"The active plan is the opening engineer call the server dispatched: it carries no recovery, task or communication step, so nothing will resume this run. Propose the plan this incident needs with propose_plan, or explain in a new reason why no step at all can be planned.",
 	outcomeLabel: (outcome) => outcome,
 	partiallyRecovered:
 		"Partially recovered. A follow-up task was assigned to finish the recovery",
@@ -133,6 +156,8 @@ const ENGLISH: AgentMessages = {
 		`Prepare ${serviceName} for recovery in ${backupRegion}`,
 	previousCallRunning: "A previous call for this step is still running",
 	proposedByAgent: "Proposed by the agent",
+	providerUnavailable: (detail) =>
+		`${detail}. Autonomous decisions paused. Check the provider configuration and request another cycle from the agent controls.`,
 	recoveredAndVerified: "Recovered and verified with an independent check",
 	recoverNow: (impact, impactDescription, units, unit) =>
 		`${IMPACT_LABELS_EN[impact]} impact: ${impactDescription}. Uses ${units} ${unit}`,
@@ -148,12 +173,25 @@ const ENGLISH: AgentMessages = {
 	requiredByDependent: (impact, dependentName, units, unit) =>
 		`${IMPACT_LABELS_EN[impact]} impact and required by ${dependentName}. Uses ${units} ${unit}`,
 	retryingAfterFailure: (reason) => `Retrying after failure: ${reason}`,
+	runNoLongerLive: "Run is inactive, replaced or replaying",
+	selectingNextAction: "Selecting the next investigation or action",
+	selectingNextSpecialistAction: "Selecting the next specialist action",
 	serviceChanged: (serviceIdentifier, status, reason) =>
 		`${serviceIdentifier} changed to ${status}: ${reason}`,
 	servicesChecked: (healthyCount, totalCount, discrepancies) =>
 		discrepancies.length
 			? `${healthyCount} of ${totalCount} services healthy. Discrepancies: ${discrepancies.join("; ")}`
 			: `${healthyCount} of ${totalCount} services healthy. The independent check matches the recorded state`,
+	specialistActionNoLongerValid:
+		"The action failed or the state changed before dispatch. Reassess and report what you know.",
+	specialistActionRejected:
+		"The specialist action did not pass runtime validation and was not performed.",
+	specialistTurnBudgetReached:
+		"The specialist reached its turn budget without reporting a result.",
+	specialistWithoutResult:
+		"The specialist returned no result; the commander decides how to continue.",
+	stepRunnableNow: (stepIdentifier) =>
+		`Step ${stepIdentifier} is runnable now: its dependencies are complete and it is neither running nor awaiting approval. Select it with execute_step, or explain in a new reason why it cannot run.`,
 	stepWaiting: (title, status) => `${title} (${status})`,
 	summaryAllHealthy: "Every service is healthy. Nothing left to recover.",
 	summaryNothingFits: (totalUnits, unit, postponed) =>
@@ -186,6 +224,8 @@ const ENGLISH: AgentMessages = {
 	triggerOperator: (operatorName) => `Cycle requested by ${operatorName}`,
 	triggerToolFinished: (toolCallIdentifier) =>
 		`Tool call ${toolCallIdentifier} finished`,
+	turnBudgetReached:
+		"Autonomous decisions paused at the turn budget. Review activity and request another cycle to continue.",
 	verificationFailed: (status, detail) =>
 		`Verification failed, the service is still ${status}: ${detail}`,
 	verifyReason:
@@ -201,12 +241,24 @@ const ENGLISH: AgentMessages = {
 }
 
 const SPANISH: AgentMessages = {
+	actionBudgetReached:
+		"Se agotaron las acciones del ciclo; se espera al operador o al siguiente evento",
+	actionNoLongerValid:
+		"La acción falló o el estado cambió antes de enviarla. Revisa el estado actual y el registro de herramientas antes de reintentar.",
 	approvalExpiredRequestAgain: "La aprobación expiró, se solicitará de nuevo",
 	approvalRequestedAgain:
 		"Se volverá a pedir aprobación para el plan revisado",
 	approvedBy: (name, comment) => withComment(`Aprobado por ${name}`, comment),
 	attemptFailedRetrying: (attempt, message) =>
 		`El intento ${attempt} falló (${message}). Reintentando`,
+	authorizationsRecorded: (count, mode) =>
+		`${count} ${count === 1 ? "autorización concedida" : "autorizaciones concedidas"} por la ingeniera de guardia en modo ${labelOr(MODE_LABELS_ES, mode)}`,
+	authorizedNotifyAllClients:
+		"La ingeniera de guardia autorizó avisar del incidente a todos los clientes",
+	authorizedTrafficFailover:
+		"La ingeniera de guardia autorizó desviar el tráfico a la región de respaldo",
+	awaitingEngineerCall:
+		"A la espera de que la ingeniera de guardia confirme los hechos pendientes antes de comprometer capacidad",
 	capacityConfirmed: (units, reason) =>
 		`Capacidad de respaldo confirmada en ${units} unidades: ${reason}`,
 	changeBackInPlan: (serviceName, reason) =>
@@ -230,6 +282,8 @@ const SPANISH: AgentMessages = {
 		`Pospuesto ${serviceName}: ${reason}`,
 	decisionRecoverNow: (rank, serviceName, reason) =>
 		`${rank}. ${serviceName}: ${reason}`,
+	decisionRejectedDetail:
+		"La acción propuesta no pasó la validación en tiempo de ejecución; el modelo debe revisarla.",
 	dependsOnBlocked: (dependencies) =>
 		`Depende de ${dependencies.join(", ")}, que no puede recuperarse ahora`,
 	engineerFollowUpDescription: (pendingFacts) =>
@@ -242,6 +296,8 @@ const SPANISH: AgentMessages = {
 		"Perseguir los hechos sin confirmar tras la llamada fallida",
 	engineerUnreachable: (pendingFacts) =>
 		`No se pudo contactar con la ingeniera tras los intentos permitidos. El plan continúa con ${pendingFacts} ${pendingFacts === 1 ? "hecho sin confirmar" : "hechos sin confirmar"} y pide confirmación por otro canal`,
+	expectedSingleToolCall:
+		"Se esperaba exactamente una llamada a herramienta declarada",
 	factsConfirmed: (count, mode) =>
 		`${count} hechos confirmados por la ingeniera en modo ${labelOr(MODE_LABELS_ES, mode)}`,
 	followUpTaskDescription: (serviceIdentifier, detail) =>
@@ -251,6 +307,10 @@ const SPANISH: AgentMessages = {
 	healthyNoAction: "Sano, no requiere acción",
 	historicalCapacityAssumption: (reportedUnits, assumedUnits, unit, runs) =>
 		`El panel indica ${reportedUnits} ${unit}, pero en ${runs} ${runs === 1 ? "ejecución anterior" : "ejecuciones anteriores"} solo había ${assumedUnits} disponibles. Se planifica con ${assumedUnits} hasta confirmar la capacidad`,
+	immediateCallReason:
+		"Solo la ingeniera de guardia puede resolver los hechos pendientes, así que la llamada sale antes que cualquier otro trabajo",
+	immediateCallSummary:
+		"Se está llamando ahora mismo a la ingeniera de guardia. Toda recuperación queda pospuesta hasta resolver los hechos pendientes",
 	impactLabel: (level) => IMPACT_LABELS_ES[level],
 	informationGathered: "Información recogida",
 	insufficientCapacity: (details) =>
@@ -258,9 +318,13 @@ const SPANISH: AgentMessages = {
 	limitReached: (cycles) =>
 		`El agente se detuvo tras ${cycles} ciclos para no seguir sin progreso. Un operador puede solicitar un ciclo manualmente`,
 	modeLabel: (mode) => labelOr(MODE_LABELS_ES, mode),
+	newEvidenceReassessing:
+		"Llegó evidencia nueva; se replantea antes de actuar",
 	nextStep: (title) => `Siguiente: ${title}`,
 	notEvaluated: "Sin evaluar",
 	nothingRunnable: "Nada ejecutable ahora mismo",
+	openingCallPlanOnly:
+		"El plan activo es solo la llamada inicial al ingeniero que lanzó el servidor: no contiene ningún paso de recuperación, tarea ni comunicación, así que nada reanudará esta ejecución. Propón con propose_plan el plan que necesita el incidente, o explica en un motivo nuevo por qué no se puede planificar ningún paso.",
 	outcomeLabel: (outcome) => labelOr(OUTCOME_LABELS_ES, outcome),
 	partiallyRecovered:
 		"Recuperado parcialmente. Se asignó una tarea de seguimiento para terminar la recuperación",
@@ -280,6 +344,8 @@ const SPANISH: AgentMessages = {
 		`Preparar ${serviceName} para recuperarlo en ${backupRegion}`,
 	previousCallRunning: "Una llamada anterior de este paso sigue en curso",
 	proposedByAgent: "Propuesto por el agente",
+	providerUnavailable: (detail) =>
+		`${detail}. Las decisiones autónomas quedan en pausa. Revisa la configuración del proveedor y pide otro ciclo desde los controles del agente.`,
 	recoveredAndVerified:
 		"Recuperado y verificado con una comprobación independiente",
 	recoverNow: (impact, impactDescription, units, unit) =>
@@ -297,12 +363,26 @@ const SPANISH: AgentMessages = {
 	requiredByDependent: (impact, dependentName, units, unit) =>
 		`Impacto ${IMPACT_LABELS_ES[impact]} y necesario para ${dependentName}. Usa ${units} ${unit}`,
 	retryingAfterFailure: (reason) => `Reintentando tras el fallo: ${reason}`,
+	runNoLongerLive: "La ejecución está inactiva, sustituida o en repetición",
+	selectingNextAction: "Eligiendo la siguiente investigación o acción",
+	selectingNextSpecialistAction:
+		"Eligiendo la siguiente acción del especialista",
 	serviceChanged: (serviceIdentifier, status, reason) =>
 		`${serviceIdentifier} pasó a ${labelOr(STATUS_LABELS_ES, status)}: ${reason}`,
 	servicesChecked: (healthyCount, totalCount, discrepancies) =>
 		discrepancies.length
 			? `${healthyCount} de ${totalCount} servicios sanos. Discrepancias: ${discrepancies.join("; ")}`
 			: `${healthyCount} de ${totalCount} servicios sanos. La comprobación independiente coincide con el estado registrado`,
+	specialistActionNoLongerValid:
+		"La acción falló o el estado cambió antes de enviarla. Replantea e informa de lo que sepas.",
+	specialistActionRejected:
+		"La acción del especialista no pasó la validación en tiempo de ejecución y no se ejecutó.",
+	specialistTurnBudgetReached:
+		"El especialista agotó sus turnos sin informar de un resultado.",
+	specialistWithoutResult:
+		"El especialista no devolvió resultado; el comandante decide cómo continuar.",
+	stepRunnableNow: (stepIdentifier) =>
+		`El paso ${stepIdentifier} se puede ejecutar ya: sus dependencias están completas y no está en curso ni esperando aprobación. Selecciónalo con execute_step, o explica en un motivo nuevo por qué no puede ejecutarse.`,
 	stepWaiting: (title, status) =>
 		`${title} (${labelOr(STEP_STATUS_LABELS_ES, status)})`,
 	summaryAllHealthy:
@@ -338,6 +418,8 @@ const SPANISH: AgentMessages = {
 	triggerOperator: (operatorName) => `Ciclo solicitado por ${operatorName}`,
 	triggerToolFinished: (toolCallIdentifier) =>
 		`Terminó la llamada a herramienta ${toolCallIdentifier}`,
+	turnBudgetReached:
+		"Las decisiones autónomas se detienen al agotar los turnos. Revisa la actividad y pide otro ciclo para continuar.",
 	verificationFailed: (status, detail) =>
 		`La verificación falló, el servicio sigue ${labelOr(STATUS_LABELS_ES, status)}: ${detail}`,
 	verifyReason:

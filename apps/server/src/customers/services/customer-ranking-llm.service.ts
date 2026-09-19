@@ -250,10 +250,12 @@ export class CustomerRankingLlmService {
 				},
 			],
 			[rankingTool(identifiers)],
+			undefined,
 			{
 				maximumOutputTokens: CUSTOMER_RANKING_MAXIMUM_OUTPUT_TOKENS,
 				model,
 				reasoningEffort: "none",
+				streamOutput: false,
 				timeoutMilliseconds,
 			},
 		)

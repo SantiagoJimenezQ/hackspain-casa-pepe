@@ -7,12 +7,15 @@ import {
 import {
 	AdapterCallOutcome,
 	AdapterCallRequest,
+	EngineerAnswer,
 	EngineerCallAdapter,
 	EngineerCallRecord,
 	EngineerCallResult,
+	EngineerQuestion,
 } from "@engineers/types/engineer.type"
 import { Injectable, Logger } from "@nestjs/common"
 import {
+	EngineerCallAuthorization,
 	EngineerCallAuthorizations,
 	EngineerCallIncidentContext,
 } from "../../../../../packages/contracts/outbound-calls"
@@ -37,6 +40,7 @@ type JSONRecord = Record<string, unknown>
 
 interface ElevenLabsOutboundCallResponse extends JSONRecord {
 	readonly success?: unknown
+	readonly message?: unknown
 	readonly conversation_id?: unknown
 	readonly callSid?: unknown
 }
@@ -53,11 +57,38 @@ const TERMINAL_FAILURE_STATUSES: ReadonlyMap<
 	string,
 	EngineerCallResult["outcome"]
 > = new Map([
+	["aborted", "failed"],
+	["busy", "no-answer"],
+	["canceled", "no-answer"],
+	["cancelled", "no-answer"],
+	["declined", "no-answer"],
 	["error", "failed"],
+	["expired", "no-answer"],
 	["failed", "failed"],
 	["failure", "failed"],
 	["no-answer", "no-answer"],
 	["no_answer", "no-answer"],
+	["rejected", "no-answer"],
+	["terminated", "failed"],
+	["timeout", "no-answer"],
+	["timed_out", "no-answer"],
+])
+
+/**
+ * Statuses that mean the conversation is still in flight. An empty status belongs here too: a
+ * partial response says nothing about the call. Every other status ends the call, so a hang-up
+ * or a provider abort settles on the next poll instead of ringing until the call timeout.
+ */
+const IN_FLIGHT_STATUSES: ReadonlySet<string> = new Set([
+	"",
+	"dialing",
+	"in-progress",
+	"in_progress",
+	"initiated",
+	"initializing",
+	"processing",
+	"queued",
+	"ringing",
 ])
 
 @Injectable()
@@ -101,6 +132,8 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 					request.call.engineer.name,
 					request.incidentContext,
 					request.call.purpose,
+					request.call.questions,
+					request.call.identifier,
 				),
 			},
 			to_number: destination,
@@ -143,9 +176,16 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 					...responseDiagnostic(response),
 					body,
 				})
+				const providerMessage =
+					typeof body?.message === "string" &&
+					body.message.trim().length
+						? body.message.trim()
+						: ""
 				return {
 					kind: "failed",
-					reason: "ElevenLabs returned an invalid outbound call response",
+					reason: providerMessage.length
+						? `ElevenLabs rejected the call: ${providerMessage}`
+						: "ElevenLabs returned an invalid outbound call response",
 				}
 			}
 
@@ -220,14 +260,43 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 					stage: "conversation",
 					status,
 				})
-				return buildResult(body, null, failureOutcome)
+				return buildResult(
+					body,
+					null,
+					failureOutcome,
+					call.questions,
+					call.result?.authorizations,
+				)
 			}
 
-			if (status !== "done" || !isRecord(body.analysis)) {
-				return null
+			if (status === "done") {
+				// The analysis lands a moment after the conversation ends; wait for it.
+				if (!isRecord(body.analysis)) {
+					return null
+				}
+				return buildResult(
+					body,
+					body.analysis,
+					"completed",
+					call.questions,
+					call.result?.authorizations,
+				)
 			}
-
-			return buildResult(body, body.analysis, "completed")
+			if (!IN_FLIGHT_STATUSES.has(status)) {
+				this.diagnostic(call, "result", startedAt, {
+					metadata: body.metadata,
+					stage: "conversation",
+					status,
+				})
+				return buildResult(
+					body,
+					null,
+					"failed",
+					call.questions,
+					call.result?.authorizations,
+				)
+			}
+			return null
 		} catch (error) {
 			this.diagnostic(call, "result", startedAt, {
 				error,
@@ -327,14 +396,22 @@ function dynamicVariables(
 	contactName: string,
 	context: EngineerCallIncidentContext,
 	purpose: string,
+	questions: ReadonlyArray<EngineerQuestion>,
+	callIdentifier: string,
 ): Record<string, string> {
 	return {
+		// The agent echoes this back when it reports permissions mid-call.
+		call_identifier: callIdentifier,
 		contact_name: contactName,
 		incident_description: limitToTwoSentences(
 			context.incidentDescription || purpose,
 		),
 		location: context.location,
 		outage_time: formatOutageTime(context.outageStartedAt),
+		questions: questions
+			.map((question, index) => `${index + 1}. ${question.question}`)
+			.join(" "),
+		questions_count: String(questions.length),
 		services_down: context.servicesDown.join(", "),
 	}
 }
@@ -350,23 +427,47 @@ function buildResult(
 	body: ElevenLabsConversationResponse,
 	analysis: JSONRecord | null,
 	outcome: EngineerCallResult["outcome"],
+	questions: ReadonlyArray<EngineerQuestion>,
+	live: EngineerCallAuthorizations | undefined,
 ): ProviderCallResult {
 	return {
-		answers: [],
+		answers: answersFrom(analysis?.data_collection_results, questions),
 		authorizations: {
-			notifyAllClients: authorizationFrom(
-				analysis?.data_collection_results,
-				"notify_all_clients",
+			notifyAllClients: preferConclusive(
+				authorizationFrom(
+					analysis?.data_collection_results,
+					"notify_all_clients",
+				),
+				live?.notifyAllClients,
 			),
-			trafficFailoverAuthorized: authorizationFrom(
-				analysis?.data_collection_results,
-				"traffic_failover_authorized",
+			trafficFailoverAuthorized: preferConclusive(
+				authorizationFrom(
+					analysis?.data_collection_results,
+					"traffic_failover_authorized",
+				),
+				live?.trafficFailoverAuthorized,
 			),
 		},
 		outcome,
 		summary: conversationSummary(analysis, outcome),
 		transcript: conversationTranscript(body.transcript),
 	}
+}
+
+/**
+ * Post-call analysis returns `null` whenever it cannot read a verdict from the transcript,
+ * which is common when the contact answers over the agent. A permission the agent already
+ * reported while on the line is better evidence than that silence, so it fills the gap. An
+ * analysed verdict still wins: it saw the whole conversation.
+ */
+function preferConclusive(
+	analysed: EngineerCallAuthorization,
+	live: EngineerCallAuthorization | undefined,
+): EngineerCallAuthorization {
+	if (analysed.value !== null || !live || live.value === null) {
+		return analysed
+	}
+	return live
 }
 
 async function readJSON<T>(response: Response): Promise<T | null> {
@@ -382,6 +483,83 @@ async function readJSON<T>(response: Response): Promise<T | null> {
 
 function isRecord(value: unknown): value is JSONRecord {
 	return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Maps the agent's data collection results back to one answer per asked question, so the
+ * conversation turns pending facts into confirmed ones. A boolean field decides `confirmed`
+ * directly; any other shape leaves the verdict to the server's answer interpretation.
+ */
+function answersFrom(
+	results: unknown,
+	questions: ReadonlyArray<EngineerQuestion>,
+): ReadonlyArray<EngineerAnswer> {
+	if (!isRecord(results)) {
+		return []
+	}
+	return questions.flatMap((question) => {
+		const entry = collectedEntry(results, question.key)
+		if (!entry) {
+			return []
+		}
+		const rationale = isText(entry.rationale) ? entry.rationale.trim() : ""
+		const answer: EngineerAnswer = {
+			answer: collectedAnswerText(entry.value, rationale),
+			key: question.key,
+			question: question.question,
+			...(isBoolean(entry.value) ? { confirmed: entry.value } : {}),
+		}
+		return [answer]
+	})
+}
+
+/**
+ * ElevenLabs identifiers cannot always carry the separators our question keys use, so an
+ * underscore or hyphen variant and a punctuation-insensitive match are accepted too.
+ */
+function collectedEntry(results: JSONRecord, key: string): JSONRecord | null {
+	for (const candidate of [
+		key,
+		key.replace(/-/g, "_"),
+		key.replace(/_/g, "-"),
+	]) {
+		const entry = results[candidate]
+		if (isRecord(entry)) {
+			return entry
+		}
+	}
+	const normalized = normalizeCollectedKey(key)
+	for (const [name, entry] of Object.entries(results)) {
+		if (normalizeCollectedKey(name) === normalized && isRecord(entry)) {
+			return entry
+		}
+	}
+	return null
+}
+
+function normalizeCollectedKey(key: string): string {
+	return key.toLowerCase().replace(/[^a-z0-9]/g, "")
+}
+
+function collectedAnswerText(value: unknown, rationale: string): string {
+	if (isText(value) && value.trim().length) {
+		return value.trim()
+	}
+	if (rationale.length) {
+		return rationale
+	}
+	if (isBoolean(value)) {
+		return value ? "yes" : "no"
+	}
+	return ""
+}
+
+function isText(value: unknown): value is string {
+	return Object.prototype.toString.call(value) === "[object String]"
+}
+
+function isBoolean(value: unknown): value is boolean {
+	return Object.prototype.toString.call(value) === "[object Boolean]"
 }
 
 function authorizationFrom(

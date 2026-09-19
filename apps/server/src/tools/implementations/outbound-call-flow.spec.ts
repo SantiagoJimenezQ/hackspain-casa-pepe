@@ -136,12 +136,10 @@ describe("outbound engineer call flow", () => {
 			{} as never,
 			{
 				completeCall,
-				getByIdentifier: jest
-					.fn()
-					.mockResolvedValue({
-						provider: "happyrobot",
-						questions: [],
-					}),
+				getByIdentifier: jest.fn().mockResolvedValue({
+					provider: "happyrobot",
+					questions: [],
+				}),
 				recordAuthorizations,
 			} as never,
 			{} as never,

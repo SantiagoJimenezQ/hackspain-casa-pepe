@@ -2,6 +2,7 @@ import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
 import { InvalidStateTransitionException } from "@common/exceptions/domain.exception"
 import { HappyRobotCallResultDTO } from "@engineers/dtos/happyrobot-call-result.dto"
 import { IncomingCallDTO } from "@engineers/dtos/incoming-call.dto"
+import { LiveAuthorizationDTO } from "@engineers/dtos/live-authorization.dto"
 import { EngineersService } from "@engineers/services/engineers.service"
 import { IncomingCallsService } from "@engineers/services/incoming-calls.service"
 import {
@@ -12,6 +13,8 @@ import {
 	Logger,
 	Optional,
 	Post,
+	RawBodyRequest,
+	Req,
 } from "@nestjs/common"
 import { ApiHeader, ApiOperation, ApiTags } from "@nestjs/swagger"
 import { RecoveryCallbackDTO } from "@recovery/dtos/recovery-callback.dto"
@@ -25,6 +28,7 @@ import {
 	InboundEmailsService,
 	ResendEmailReceivedEvent,
 } from "@webhooks/services/inbound-emails.service"
+import { Request } from "express"
 
 @ApiTags("Inbound webhooks")
 @Controller("webhooks")
@@ -49,9 +53,42 @@ export class InboundWebhooksController {
 	@Post("happyrobot/incoming")
 	@HttpCode(HttpStatus.ACCEPTED)
 	@HappyRobotInbound()
-	async incoming(@Body() body: IncomingCallDTO) {
+	async incoming(
+		@Body() body: IncomingCallDTO,
+		@Req() request: RawBodyRequest<Request>,
+	) {
+		// Preserve provider fields that DTO validation may strip from `body`.
+		const fullBody =
+			request.rawBody?.toString("utf8") ?? JSON.stringify(request.body)
+		this.logger.log(
+			`${LOG_MESSAGES.WEBHOOKS.INBOUND_RECEIVED} POST /api/webhooks/happyrobot/incoming body=${fullBody}`,
+		)
 		return this.incomingCalls.receive(body, "live")
 	}
+	@Post("elevenlabs/authorization")
+	@HttpCode(HttpStatus.ACCEPTED)
+	@HappyRobotInbound()
+	@ApiHeader({
+		description: "Shared secret configured in HAPPYROBOT_WEBHOOK_SECRET",
+		name: "x-happyrobot-signature",
+	})
+	@ApiOperation({
+		summary:
+			"Permissions granted during an ElevenLabs call, reported before it ends",
+	})
+	async elevenLabsAuthorization(@Body() body: LiveAuthorizationDTO) {
+		this.logger.log(LOG_MESSAGES.WEBHOOKS.INBOUND_RECEIVED, {
+			callIdentifier: body.callIdentifier,
+			provider: "ElevenLabs",
+		})
+		const call = await this.engineersService.recordLiveAuthorizations(body)
+		return {
+			accepted: true as const,
+			authorizations: call.result?.authorizations,
+			callIdentifier: call.identifier,
+		}
+	}
+
 	@Post("happyrobot")
 	@HttpCode(HttpStatus.ACCEPTED)
 	@HappyRobotInbound()

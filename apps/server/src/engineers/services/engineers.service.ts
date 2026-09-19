@@ -13,6 +13,7 @@ import { ConfigurationService } from "@common/services/configuration.service"
 import {
 	ENGINEER_CALL_ADAPTER,
 	ENGINEER_CALL_ENTITY_NAME,
+	ENGINEER_CALL_FALLBACK_ADAPTER,
 	HAPPYROBOT_CALLBACK_PATH,
 } from "@engineers/constants/engineer.constant"
 import { EngineerCallEntity } from "@engineers/entities/engineer-call.entity"
@@ -31,6 +32,10 @@ import { EventEmitter2 } from "@nestjs/event-emitter"
 import { Interval } from "@nestjs/schedule"
 import { InjectRepository } from "@nestjs/typeorm"
 import { In, Repository } from "typeorm"
+import {
+	EngineerCallAuthorizations,
+	LiveAuthorizationReport,
+} from "../../../../../packages/contracts/outbound-calls"
 
 @Injectable()
 export class EngineersService {
@@ -43,6 +48,8 @@ export class EngineersService {
 		private readonly repository: Repository<EngineerCallEntity>,
 		@Inject(ENGINEER_CALL_ADAPTER)
 		private readonly adapter: EngineerCallAdapter,
+		@Inject(ENGINEER_CALL_FALLBACK_ADAPTER)
+		private readonly fallbackAdapter: EngineerCallAdapter,
 		private readonly activityService: ActivityService,
 		private readonly runsService: RunsService,
 		private readonly configuration: ConfigurationService,
@@ -102,9 +109,23 @@ export class EngineersService {
 			title: "Engineer call started",
 			type: "engineer-call.started",
 		})
-		let outcome: AdapterCallOutcome
+		const outcome = await this.dispatch(this.adapter, record, command)
+		switch (outcome.kind) {
+			case "accepted":
+				return this.acceptCall(saved, outcome)
+			case "failed":
+				return this.fallbackCall(saved, command, outcome.reason)
+		}
+	}
+
+	/** Hands the call to an adapter and turns an adapter crash into a plain failed outcome. */
+	private async dispatch(
+		adapter: EngineerCallAdapter,
+		record: EngineerCallRecord,
+		command: StartEngineerCallCommand,
+	): Promise<AdapterCallOutcome> {
 		try {
-			outcome = await this.adapter.start(
+			return await adapter.start(
 				{
 					call: record,
 					callbackURL: `${this.configuration.runtime.publicBaseURL}/${HAPPYROBOT_CALLBACK_PATH}`,
@@ -115,22 +136,75 @@ export class EngineersService {
 					this.completeCall(callIdentifier, result),
 			)
 		} catch {
-			return this.failCall(
-				saved,
-				"Call provider failed before the outcome was known; inspect the provider before retrying",
-			)
+			return {
+				kind: "failed",
+				reason: "Call provider failed before the outcome was known; inspect the provider before retrying",
+			}
 		}
+	}
+
+	private async acceptCall(
+		entity: EngineerCallEntity,
+		outcome: Extract<AdapterCallOutcome, { readonly kind: "accepted" }>,
+	): Promise<EngineerCallRecord> {
+		entity.status = "in-progress"
+		entity.provider = outcome.provider ?? entity.provider
+		entity.providerReference = outcome.providerReference
+		entity.providerCallSid = outcome.providerCallSid ?? null
+		return toEngineerCallRecord(await updateEntity(this.repository, entity))
+	}
+
+	/**
+	 * A provider that refuses the dial leaves the incident without the engineer it depends on,
+	 * and the run then waits for facts that can never arrive. When the deployment allows it, the
+	 * same call is dispatched in simulated mode: the record says so, and the activity entry keeps
+	 * the provider rejection visible, so nobody mistakes it for a real conversation.
+	 */
+	private async fallbackCall(
+		entity: EngineerCallEntity,
+		command: StartEngineerCallCommand,
+		reason: string,
+	): Promise<EngineerCallRecord> {
+		const allowed =
+			this.configuration.engineerCall.fallbackToSimulated &&
+			this.adapter.mode === "live"
+		if (!allowed) {
+			return this.failCall(entity, reason)
+		}
+		this.logger.warn(LOG_MESSAGES.ENGINEERS.CALL_FALLBACK_TO_SIMULATED, {
+			callIdentifier: entity.identifier,
+			reason,
+		})
+		entity.mode = this.fallbackAdapter.mode
+		entity.provider = this.fallbackAdapter.provider ?? null
+		const record = toEngineerCallRecord(
+			await updateEntity(this.repository, entity),
+		)
+		await this.activityService.record({
+			correlation: {
+				engineerCallIdentifier: record.identifier,
+				planStepIdentifier: record.planStepIdentifier,
+				toolCallIdentifier: record.toolCallIdentifier,
+			},
+			incidentIdentifier: record.incidentIdentifier,
+			payload: { call: record, reason },
+			runIdentifier: record.runIdentifier,
+			simulated: true,
+			source: "integration",
+			summary: `The call provider refused to dial ${record.engineer.name}: ${reason}. The call continues in simulated mode so the response is not blocked.`,
+			title: "Engineer call switched to simulated mode",
+			type: "engineer-call.started",
+		})
+		const outcome = await this.dispatch(
+			this.fallbackAdapter,
+			record,
+			command,
+		)
 		switch (outcome.kind) {
 			case "accepted":
-				saved.status = "in-progress"
-				saved.provider = outcome.provider ?? saved.provider
-				saved.providerReference = outcome.providerReference
-				saved.providerCallSid = outcome.providerCallSid ?? null
-				return toEngineerCallRecord(
-					await updateEntity(this.repository, saved),
-				)
+				return this.acceptCall(entity, outcome)
 			case "failed":
-				return this.failCall(saved, outcome.reason)
+				return this.failCall(entity, reason)
 		}
 	}
 
@@ -187,10 +261,19 @@ export class EngineersService {
 		if (!result) return
 		try {
 			await this.completeCall(entity.identifier, result)
-		} catch {
+		} catch (error) {
+			// A provider that answers two polls with the same finished conversation is normal:
+			// the first result settled the call and this one adds nothing, so it is not a fault.
+			if (error instanceof InvalidStateTransitionException) {
+				this.logger.log(
+					LOG_MESSAGES.ENGINEERS.CALL_RESULT_ALREADY_SETTLED,
+					{ callIdentifier: entity.identifier },
+				)
+				return
+			}
 			this.logger.warn(LOG_MESSAGES.ENGINEERS.CALL_RESULT_IGNORED, {
 				callIdentifier: entity.identifier,
-				reason: "Result was rejected because the run or call state changed",
+				reason: "Result was rejected because the run is no longer active",
 			})
 		}
 	}
@@ -252,6 +335,85 @@ export class EngineersService {
 			title: "Engineer permissions received",
 			type: "engineer-call.authorization-received",
 		})
+	}
+
+	/**
+	 * Stores permissions the contact granted out loud while the line is still open. They go in
+	 * `result` because the call is not finished yet and nothing reads that field until the status
+	 * says so: every consumer switches on `status`. When the provider analysis finally lands,
+	 * `completeCall` overwrites this partial, and the adapter has already merged what it needs.
+	 */
+	async recordLiveAuthorizations(
+		report: LiveAuthorizationReport,
+	): Promise<EngineerCallRecord> {
+		const entity = await this.getEntity(report.callIdentifier)
+		if (!(await this.runsService.isRunActive(entity.runIdentifier))) {
+			this.logger.warn(LOG_MESSAGES.ENGINEERS.CALL_RESULT_IGNORED, {
+				callIdentifier: report.callIdentifier,
+				runIdentifier: entity.runIdentifier,
+			})
+			throw new StaleRunException(entity.runIdentifier)
+		}
+		// A terminal call already carries provider-analysed permissions. A late live report
+		// must never overwrite them.
+		if (entity.status !== "in-progress") {
+			this.logger.warn(
+				LOG_MESSAGES.ENGINEERS.CALL_AUTHORIZATION_IGNORED,
+				{
+					callIdentifier: report.callIdentifier,
+					status: entity.status,
+				},
+			)
+			throw new InvalidStateTransitionException(
+				ENGINEER_CALL_ENTITY_NAME,
+				entity.status,
+				"receive live permissions",
+			)
+		}
+		const authorizations: EngineerCallAuthorizations = {
+			notifyAllClients: {
+				rationale: report.rationale,
+				value: report.notifyAllClients,
+			},
+			trafficFailoverAuthorized: {
+				rationale: report.rationale,
+				value: report.trafficFailoverAuthorized,
+			},
+		}
+		const summary = summariseLivePermissions(entity.engineer.name, report)
+		entity.result = {
+			answers: [],
+			authorizations,
+			outcome: "completed",
+			summary,
+			transcript: "",
+		}
+		const record = toEngineerCallRecord(
+			await updateEntity(this.repository, entity),
+		)
+		this.logger.log(LOG_MESSAGES.ENGINEERS.CALL_AUTHORIZED, {
+			callIdentifier: record.identifier,
+			notifyAllClients: report.notifyAllClients,
+			trafficFailoverAuthorized: report.trafficFailoverAuthorized,
+		})
+		await this.activityService.record({
+			correlation: {
+				engineerCallIdentifier: record.identifier,
+				planStepIdentifier: record.planStepIdentifier,
+				toolCallIdentifier: record.toolCallIdentifier,
+			},
+			incidentIdentifier: record.incidentIdentifier,
+			payload: { authorizations, call: record },
+			runIdentifier: record.runIdentifier,
+			simulated: record.mode === "simulated",
+			source: "integration",
+			summary,
+			title: "Engineer granted permissions during the call",
+			type: "engineer-call.authorized",
+		})
+		const event: EngineerCallFinishedEvent = { call: record }
+		this.eventEmitter.emit(DOMAIN_EVENTS.ENGINEER_CALL_AUTHORIZED, event)
+		return record
 	}
 
 	async completeCall(
@@ -450,4 +612,21 @@ export function toEngineerCallRecord(
 		status: entity.status,
 		toolCallIdentifier: entity.toolCallIdentifier,
 	}
+}
+
+function summariseLivePermissions(
+	contactName: string,
+	report: LiveAuthorizationReport,
+): string {
+	const granted = [
+		report.notifyAllClients ? "notify every client" : "",
+		report.trafficFailoverAuthorized
+			? "fail traffic over to the backup"
+			: "",
+	].filter(Boolean)
+	const verdict =
+		granted.length > 0
+			? `authorised ${granted.join(" and ")}`
+			: "refused both permissions"
+	return `${contactName} ${verdict} while still on the call. Reported by the voice agent, pending the provider analysis.`
 }

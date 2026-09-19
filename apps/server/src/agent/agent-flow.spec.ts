@@ -27,6 +27,7 @@ import { PlansService } from "@plans/services/plans.service"
 import { PlanRecord } from "@plans/types/plan.type"
 import { RecoveryActionEntity } from "@recovery/entities/recovery-action.entity"
 import { RecoveryModule } from "@recovery/recovery.module"
+import { ApprovalScenariosFixture } from "@root/testing/approval-scenarios.fixture"
 import { InMemoryRepository } from "@root/testing/in-memory-repository"
 import {
 	createScriptedLlmClient,
@@ -38,6 +39,7 @@ import {
 	SPANISH_SCENARIO_IDENTIFIER,
 } from "@scenarios/constants/scenario.constant"
 import { ScenariosModule } from "@scenarios/scenarios.module"
+import { ScenariosService } from "@scenarios/services/scenarios.service"
 import { TaskEntity } from "@tasks/entities/task.entity"
 import { TasksService } from "@tasks/services/tasks.service"
 import { TasksModule } from "@tasks/tasks.module"
@@ -92,6 +94,9 @@ describe("agent flow (integration with in-memory repositories)", () => {
 				AgentModule,
 			],
 		})
+		builder = builder
+			.overrideProvider(ScenariosService)
+			.useClass(ApprovalScenariosFixture)
 		for (const entity of ENTITIES) {
 			builder = builder
 				.overrideProvider(getRepositoryToken(entity))
@@ -168,7 +173,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			"stp_contact-engineer",
 			"completed",
 		)
-		expect(planOne.version).toBe(1)
+		expect(planOne.version).toBe(2)
 		expect(planOne.summary.startsWith("Recuperar")).toBe(true)
 		expect(
 			planOne.priorities
@@ -199,11 +204,11 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			"pending",
 		)
 		expect(firstApprovals).toHaveLength(1)
-		expect(firstApprovals[0].planVersion).toBe(1)
+		expect(firstApprovals[0].planVersion).toBe(2)
 		expect((await tasksService.list(runIdentifier)).length).toBe(2)
 
 		await incidentsService.applyScenarioTwist()
-		const planTwo = await waitForPlanVersion(runIdentifier, 2)
+		const planTwo = await waitForPlanVersion(runIdentifier, 3)
 		expect(planTwo.capacity.resourceIdentifier).toBe("backup-bahrain")
 		expect(planTwo.capacity.totalCapacity).toBe(12)
 		expect(
@@ -235,7 +240,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			runIdentifier,
 			"pending",
 		)
-		expect(pendingApproval.planVersion).toBe(2)
+		expect(pendingApproval.planVersion).toBe(3)
 
 		await approvalsService.decide({
 			approvalIdentifier: pendingApproval.identifier,
@@ -250,8 +255,19 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		)
 		const finalPlan = await waitFor(async () => {
 			const plan = await plansService.findLatestPlan(runIdentifier)
-			return plan && plan.status === "completed" ? plan : null
-		}, "plan completion")
+			return plan?.version >= 4 &&
+				plan.steps.every((step) => step.status === "completed")
+				? plan
+				: null
+		}, "planned actions finishing")
+		expect(finalPlan.status).toBe("active")
+		expect(
+			finalPlan.priorities.some(
+				(priority) =>
+					priority.decision === "waiting-for-dependency" ||
+					priority.decision === "postpone",
+			),
+		).toBe(true)
 		const statuses = Object.fromEntries(
 			finalPlan.steps.map((step) => [step.identifier, step.status]),
 		)
@@ -269,7 +285,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			]),
 		)
 		expect(finalIncident.status).toBe("partially-recovered")
-		expect(finalIncident.backupRegion).toBe("me-south-1")
+		expect(finalIncident.backupRegion).toBe("riyadh")
 		expect(serviceStatuses).toEqual({
 			"customer-notifications": "degraded",
 			"driver-mobile-api": "healthy",
@@ -285,7 +301,10 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		).toBe(12)
 
 		const report = await runReportService.build(runIdentifier)
-		expect(report.planVersions).toHaveLength(2)
+		expect(report.planVersions).toHaveLength(4)
+		expect(
+			report.planVersions[0].summary.startsWith("Se está llamando"),
+		).toBe(true)
 		expect(
 			report.approvals.map((approval) => approval.status).sort(),
 		).toEqual(["approved", "superseded"])
@@ -334,7 +353,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			{ type: "meteorite-impact" },
 			"test",
 		)
-		const plan = await waitForPlanVersion(restarted.runIdentifier, 1)
+		const plan = await waitForPlanVersion(restarted.runIdentifier, 2)
 
 		expect(plan.capacity.resourceIdentifier).toBe("backup-bahrain")
 		expect(plan.capacity.totalCapacity).toBe(12)
@@ -376,7 +395,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			decision: "reject",
 			operatorName: "Luis",
 		})
-		const revised = await waitForPlanVersion(started.runIdentifier, 2)
+		const revised = await waitForPlanVersion(started.runIdentifier, 3)
 
 		const database = revised.priorities.find(
 			(priority) => priority.serviceIdentifier === "orders-database",

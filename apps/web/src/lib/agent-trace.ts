@@ -1,4 +1,19 @@
-import type { ActivityRecord, Incident, Overview, Plan, Service, ToolCall } from "@/lib/casa-pepe-types";
+import type {
+  ActivityRecord,
+  Incident,
+  LlmDisposition,
+  LlmPublicToolCall,
+  Overview,
+  Plan,
+  Service,
+  ToolCall,
+} from "@/lib/casa-pepe-types";
+import {
+  DEFAULT_LOCALE,
+  messageKey,
+  translate,
+  type Locale,
+} from "@/lib/i18n";
 import type { VisualStatus } from "@/lib/live-dashboard";
 
 export type ElementsToolState =
@@ -23,6 +38,7 @@ export type CurrentWork =
   | { kind: "tool"; tool: ToolCall; title: string; state: ElementsToolState }
   | { kind: "approval"; title: string; reason: string }
   | { kind: "thinking"; title: string }
+  | { kind: "settled"; title: string }
   | { kind: "idle"; title: string };
 
 export type DecidedApproval = {
@@ -33,27 +49,48 @@ export type DecidedApproval = {
   decidedBy?: string;
 };
 
+export type ReasoningStatus = "streaming" | "complete";
+
 export type TranscriptItem =
   | { kind: "tool"; tool: ToolCall }
   | { kind: "task"; id: string; title: string; status: string; children: TranscriptItem[] }
   | { kind: "approval"; approval: DecidedApproval }
-  | { kind: "thinking" };
+  | {
+      kind: "thinking";
+      id: string;
+      text: string;
+      status: ReasoningStatus;
+      occurredAt: string;
+      title?: string;
+      durationMs?: number;
+      disposition?: LlmDisposition;
+      dispositionReason?: string;
+      toolCalls?: LlmPublicToolCall[];
+      model?: string;
+      finishReason?: string | null;
+      usage?: unknown;
+      redacted?: boolean;
+    };
 
-const TOOL_LABELS: Record<string, { running: string; done: string }> = {
-  get_incident_context: { running: "Leyendo contexto del incidente", done: "Leyó el contexto del incidente" },
-  get_incident_state: { running: "Leyendo el estado del incidente", done: "Leyó el estado del incidente" },
-  get_service_health: { running: "Revisando salud de servicios", done: "Revisó la salud de servicios" },
-  get_recovery_capacity: { running: "Comprobando capacidad de recuperación", done: "Comprobó la capacidad de recuperación" },
-  execute_recovery: { running: "Recuperando", done: "Recuperó" },
-  verify_recovery: { running: "Verificando", done: "Verificó" },
-  publish_status_update: { running: "Publicando estado", done: "Publicó el estado" },
-  save_recovery_plan: { running: "Guardando el plan de recuperación", done: "Guardó el plan de recuperación" },
-  send_incident_email: { running: "Enviando el plan por correo", done: "Envió el plan por correo" },
-  request_approval: { running: "Pidiendo autorización", done: "Pidió autorización" },
-  call_engineer: { running: "Llamando al ingeniero", done: "Llamó al ingeniero" },
-  contact_engineer: { running: "Contactando al ingeniero", done: "Contactó al ingeniero" },
-  assign_task: { running: "Asignando una tarea", done: "Asignó una tarea" },
-};
+export const LLM_ACTIVITY_TYPES = [
+  "agent.llm-output",
+  "agent.llm-decision",
+  "agent.llm-failed",
+  "agent.llm-stale",
+  "agent.llm-rejected",
+] as const;
+
+export function isLlmActivityType(type: string) {
+  return (LLM_ACTIVITY_TYPES as readonly string[]).includes(type);
+}
+
+export const LIVE_REASONING_ID = "thinking-live";
+export const PLACEHOLDER_DECISION_SUMMARY = "Selecting the next investigation or action";
+
+/** Tools whose label lives in the dictionary; anything else falls back to its own name. */
+function toolMessageKey(name: string, tense: "running" | "done") {
+  return messageKey(`tool.${name}.${tense}`);
+}
 
 export function mapToolState(status: string): ElementsToolState {
   if (status === "pending") return "input-streaming";
@@ -133,10 +170,11 @@ function isFinishedStatus(status: string | undefined) {
 export function toolTitle(
   tool: Pick<ToolCall, "name" | "input"> & { status?: string },
   services: ReadonlyArray<Pick<Service, "identifier" | "name">> = [],
+  locale: Locale = DEFAULT_LOCALE,
 ) {
-  const labels = TOOL_LABELS[tool.name];
   const tense = isFinishedStatus(tool.status) ? "done" : "running";
-  const base = labels ? labels[tense] : tool.name.replaceAll("_", " ");
+  const key = toolMessageKey(tool.name, tense);
+  const base = key ? translate(locale, key) : tool.name.replaceAll("_", " ");
   if (tool.name === "execute_recovery" || tool.name === "verify_recovery") {
     const name = serviceName(inputServiceIdentifier(tool.input), services);
     return name ? `${base} ${name}` : base;
@@ -252,6 +290,17 @@ function decidedApprovalFromActivity(activity: ActivityRecord): DecidedApproval 
   };
 }
 
+/**
+ * The run is over: the incident is recovered (or the plan completed) and the server reports no cycle
+ * and no running tool call.
+ */
+export function agentSettled(overview: Pick<Overview, "incident" | "plan" | "agent">): boolean {
+  const recovered = overview.incident.status === "recovered";
+  const planCompleted = overview.plan?.kind === "plan" && overview.plan.plan.status === "completed";
+  if (!recovered && !planCompleted) return false;
+  return !overview.agent?.cycleInProgress && (overview.agent?.runningToolCalls ?? 0) === 0;
+}
+
 export function mergedToolCalls(overview: Overview, activity: ReadonlyArray<ActivityRecord> = []) {
   const byId = new Map<string, ToolCall>();
   for (const tool of overview.toolCalls) {
@@ -271,7 +320,16 @@ export function mergedToolCalls(overview: Overview, activity: ReadonlyArray<Acti
       subagent: tool.subagent ?? existing.subagent,
     } : tool);
   }
-  return sortedToolCalls([...byId.values()]);
+  const merged = [...byId.values()];
+  if (agentSettled(overview)) {
+    return sortedToolCalls(merged.map(settledToolCall));
+  }
+  return sortedToolCalls(merged);
+}
+
+function settledToolCall(tool: ToolCall): ToolCall {
+  if (tool.status !== "running" && tool.status !== "pending") return tool;
+  return { ...tool, status: "succeeded", finishedAt: tool.finishedAt || tool.startedAt };
 }
 
 export function decidedApprovals(activity: ReadonlyArray<ActivityRecord> = []) {
@@ -292,11 +350,19 @@ function planOf(overview: Overview): Plan | null {
   return overview.plan.kind === "plan" ? overview.plan.plan : null;
 }
 
-export function currentWork(overview: Overview, activity: ReadonlyArray<ActivityRecord> = []): CurrentWork {
-  const tools = mergedToolCalls(overview, activity);
+export function currentWork(
+  overview: Overview,
+  activity: ReadonlyArray<ActivityRecord> = [],
+  locale: Locale = DEFAULT_LOCALE,
+): CurrentWork {
+  const events = [...overview.recentActivity, ...activity];
+  if (agentSettled(overview)) {
+    return { kind: "settled", title: translate(locale, "agent.work.settled") };
+  }
+  const tools = mergedToolCalls(overview, events);
   const running = [...tools].reverse().find((tool) => tool.status === "running" || tool.status === "pending");
   if (running) {
-    return { kind: "tool", tool: running, title: toolTitle(running, overview.incident.services), state: mapToolState(running.status) };
+    return { kind: "tool", tool: running, title: toolTitle(running, overview.incident.services, locale), state: mapToolState(running.status) };
   }
   const awaiting = planOf(overview)?.steps.find((step) => step.status === "awaiting-approval");
   if (awaiting) {
@@ -305,10 +371,341 @@ export function currentWork(overview: Overview, activity: ReadonlyArray<Activity
   if (overview.pendingApprovals[0]) {
     return { kind: "approval", title: overview.pendingApprovals[0].actionSummary, reason: overview.pendingApprovals[0].reason };
   }
-  if (overview.agent.cycleInProgress) {
-    return { kind: "thinking", title: "Preparando el siguiente paso" };
+  if (overview.agent.cycleInProgress || agentStillDeciding(events)) {
+    return { kind: "thinking", title: liveThinkingLabel(events) };
   }
   return { kind: "idle", title: "En espera" };
+}
+
+export function isPlaceholderSummary(text: string) {
+  const trimmed = text.trim();
+  return !trimmed || trimmed === PLACEHOLDER_DECISION_SUMMARY;
+}
+
+function agentStillDeciding(events: ReadonlyArray<ActivityRecord>): boolean {
+  const ordered = uniqueActivity(events);
+  for (let index = ordered.length - 1; index >= 0; index -= 1) {
+    const event = ordered[index];
+    const type = event.type;
+    if (type === "agent.cycle-finished" || type === "agent.limit-reached" || type === "agent.llm-failed") {
+      return false;
+    }
+    if (type === "agent.llm-decision") return payloadDisposition(event) === "pending";
+    if (type === "agent.llm-output" || type === "agent.llm-rejected" || type === "agent.llm-stale") return true;
+  }
+  return false;
+}
+
+export function liveThinkingLabel(events: ReadonlyArray<ActivityRecord>): string {
+  const ordered = uniqueActivity(events);
+  for (let index = ordered.length - 1; index >= 0; index -= 1) {
+    const event = ordered[index];
+    if (!isLlmActivityType(event.type)) continue;
+    if (payloadDisposition(event) === "accepted") continue;
+    const call = payloadToolCalls(event)[0];
+    const name = call?.name || payloadTools(event)[0];
+    if (name) return toolTitle({ name, input: toolCallInput(call) });
+    if (event.type === "agent.llm-output") return "Pensando";
+  }
+  return "Pensando";
+}
+
+function uniqueActivity(events: ReadonlyArray<ActivityRecord>): ActivityRecord[] {
+  const byId = new Map<string, ActivityRecord>();
+  for (const event of events) {
+    const existing = byId.get(event.identifier);
+    if (!existing || event.sequence >= existing.sequence) {
+      byId.set(event.identifier, event);
+    }
+  }
+  return [...byId.values()].toSorted((left, right) => {
+    if (left.sequence !== right.sequence) return left.sequence - right.sequence;
+    const time = Date.parse(left.occurredAt) - Date.parse(right.occurredAt);
+    if (time !== 0) return time;
+    return left.identifier.localeCompare(right.identifier);
+  });
+}
+
+function outputIdentifierOf(event: ActivityRecord): string {
+  const payload = asRecord(event.payload);
+  const value = payload?.outputIdentifier;
+  return typeof value === "string" && value.trim() ? value : "";
+}
+
+function payloadCompleteText(event: ActivityRecord): string | null | undefined {
+  const payload = asRecord(event.payload);
+  if (!payload || !("text" in payload)) return undefined;
+  if (payload.text === null) return null;
+  return typeof payload.text === "string" ? payload.text : undefined;
+}
+
+function payloadText(event: ActivityRecord): string {
+  const payload = asRecord(event.payload);
+  return typeof payload?.text === "string" ? payload.text : "";
+}
+
+function payloadTools(event: ActivityRecord): string[] {
+  const tools = asRecord(event.payload)?.tools;
+  if (!Array.isArray(tools)) return [];
+  return tools.filter((value): value is string => typeof value === "string" && value.trim() !== "");
+}
+
+function payloadToolCalls(event: ActivityRecord): LlmPublicToolCall[] {
+  const tools = asRecord(event.payload)?.toolCalls;
+  if (!Array.isArray(tools)) return [];
+  return tools.flatMap((item) => {
+    const record = asRecord(item);
+    if (!record) return [];
+    const id = typeof record.id === "string" ? record.id.trim() : "";
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    if (!id || !name) return [];
+    return [{ id, name, arguments: record.arguments }];
+  });
+}
+
+function toolCallInput(call: LlmPublicToolCall | undefined): Record<string, unknown> {
+  return asRecord(call?.arguments) ?? {};
+}
+
+function payloadDisposition(event: ActivityRecord): LlmDisposition | undefined {
+  const value = asRecord(event.payload)?.disposition;
+  if (value === "pending" || value === "accepted" || value === "rejected" || value === "stale" || value === "incomplete") {
+    return value;
+  }
+  if (event.type === "agent.llm-rejected") return "rejected";
+  if (event.type === "agent.llm-stale") return "stale";
+  if (event.type === "agent.llm-failed") return "incomplete";
+  if (event.type === "agent.llm-decision") return "accepted";
+  return undefined;
+}
+
+function payloadDispositionReason(event: ActivityRecord): string {
+  const value = asRecord(event.payload)?.dispositionReason;
+  if (typeof value === "string" && value.trim()) return value;
+  if (event.type === "agent.llm-rejected" || event.type === "agent.llm-stale" || event.type === "agent.llm-failed") {
+    return isPlaceholderSummary(event.summary) ? "" : event.summary;
+  }
+  return "";
+}
+
+function payloadModel(event: ActivityRecord): string {
+  const value = asRecord(event.payload)?.model;
+  return typeof value === "string" ? value : "";
+}
+
+function payloadFinishReason(event: ActivityRecord): string | null | undefined {
+  const payload = asRecord(event.payload);
+  if (!payload || !("finishReason" in payload)) return undefined;
+  if (payload.finishReason === null) return null;
+  return typeof payload.finishReason === "string" ? payload.finishReason : undefined;
+}
+
+function payloadRedacted(event: ActivityRecord): boolean {
+  return asRecord(event.payload)?.redacted === true;
+}
+
+type ReasoningDraft = {
+  id: string;
+  fragments: string[];
+  seen: Set<string>;
+  occurredAt: string;
+  finishedAt: string;
+  status: ReasoningStatus;
+  completeText?: string | null;
+  summary: string;
+  tools: string[];
+  toolCalls: LlmPublicToolCall[];
+  disposition?: LlmDisposition;
+  dispositionReason?: string;
+  model?: string;
+  finishReason?: string | null;
+  usage?: unknown;
+  redacted?: boolean;
+};
+
+function applyPublicTurn(draft: ReasoningDraft, event: ActivityRecord) {
+  draft.status = "complete";
+  draft.finishedAt = event.occurredAt;
+  draft.summary = event.summary;
+  const completeText = payloadCompleteText(event);
+  if (completeText !== undefined) draft.completeText = completeText;
+  const tools = payloadTools(event);
+  if (tools.length) draft.tools = tools;
+  const calls = payloadToolCalls(event);
+  if (calls.length) draft.toolCalls = calls;
+  const disposition = payloadDisposition(event);
+  if (disposition) draft.disposition = disposition;
+  const reason = payloadDispositionReason(event);
+  if (reason) draft.dispositionReason = reason;
+  const model = payloadModel(event);
+  if (model) draft.model = model;
+  const finishReason = payloadFinishReason(event);
+  if (finishReason !== undefined) draft.finishReason = finishReason;
+  const usage = asRecord(event.payload)?.usage;
+  if (usage !== undefined) draft.usage = usage;
+  if (payloadRedacted(event)) draft.redacted = true;
+}
+
+function latestOpenDraft(drafts: Map<string, ReasoningDraft>) {
+  const values = [...drafts.values()];
+  for (let index = values.length - 1; index >= 0; index -= 1) {
+    const draft = values[index];
+    if (draft.disposition === "rejected" || draft.disposition === "stale" || draft.disposition === "incomplete") continue;
+    return draft;
+  }
+  return values.at(-1);
+}
+
+function reasoningDrafts(events: ReadonlyArray<ActivityRecord>): ReasoningDraft[] {
+  const drafts = new Map<string, ReasoningDraft>();
+  const ordered = uniqueActivity(events);
+
+  const draftFor = (id: string, event: ActivityRecord): ReasoningDraft => {
+    const existing = drafts.get(id);
+    if (existing) return existing;
+    const created: ReasoningDraft = {
+      id,
+      fragments: [],
+      seen: new Set(),
+      occurredAt: event.occurredAt,
+      finishedAt: "",
+      status: "streaming",
+      summary: "",
+      tools: [],
+      toolCalls: [],
+    };
+    drafts.set(id, created);
+    return created;
+  };
+
+  for (const event of ordered) {
+    if (event.type === "agent.llm-output") {
+      const id = outputIdentifierOf(event);
+      if (!id) continue;
+      const draft = draftFor(id, event);
+      if (draft.status === "complete") continue;
+      if (draft.seen.has(event.identifier)) continue;
+      draft.seen.add(event.identifier);
+      const text = payloadText(event);
+      if (text && !isPlaceholderSummary(text)) draft.fragments.push(text);
+      if (payloadRedacted(event)) draft.redacted = true;
+      continue;
+    }
+    if (event.type === "agent.llm-decision") {
+      applyPublicTurn(draftFor(outputIdentifierOf(event) || event.identifier, event), event);
+      continue;
+    }
+    if (event.type === "agent.llm-rejected" || event.type === "agent.llm-stale" || event.type === "agent.llm-failed") {
+      const id = outputIdentifierOf(event);
+      const draft = id ? draftFor(id, event) : latestOpenDraft(drafts);
+      if (!draft) continue;
+      applyPublicTurn(draft, event);
+    }
+  }
+
+  return [...drafts.values()];
+}
+
+function reasoningDurationMs(startedAt: string, finishedAt: string) {
+  const started = Date.parse(startedAt);
+  const finished = Date.parse(finishedAt || startedAt);
+  if (!Number.isFinite(started) || !Number.isFinite(finished)) return 0;
+  return Math.max(0, finished - started);
+}
+
+export function formatReasoningDuration(durationMs: number) {
+  const seconds = Math.floor(Math.max(0, durationMs) / 1000);
+  return seconds < 1 ? "<1s" : `${seconds}s`;
+}
+
+export function reasoningHeadline(text: string, max = 72) {
+  const line = text.trim().split(/\n/)[0]?.trim() ?? "";
+  if (!line) return "";
+  if (line.length <= max) return line;
+  return `${line.slice(0, max).trimEnd()}…`;
+}
+
+export function dispositionTitle(disposition?: LlmDisposition) {
+  if (disposition === "pending") return "Validando";
+  if (disposition === "rejected") return "Rechazado";
+  if (disposition === "stale") return "Obsoleto";
+  if (disposition === "incomplete") return "Incompleto";
+  return "";
+}
+
+export function completedReasoningLabel(text: string, durationMs = 0, disposition?: LlmDisposition) {
+  const duration = formatReasoningDuration(durationMs);
+  const headline = reasoningHeadline(text);
+  const status = dispositionTitle(disposition);
+  const parts = [headline, status, duration].filter((part) => part !== "");
+  if (!headline && !status) return `Pensó ${duration}`;
+  return parts.join(" · ");
+}
+
+function draftToolName(draft: ReasoningDraft) {
+  return draft.toolCalls[0]?.name || draft.tools.find((value) => value.trim() !== "") || "";
+}
+
+function reasoningBody(draft: ReasoningDraft): string {
+  if (draft.completeText !== undefined) {
+    if (draft.completeText && !isPlaceholderSummary(draft.completeText)) return draft.completeText;
+    if (draft.dispositionReason) return draft.dispositionReason;
+    return "";
+  }
+  const fragments = draft.fragments.join("");
+  if (!isPlaceholderSummary(fragments)) return fragments;
+  if (!isPlaceholderSummary(draft.summary)) return draft.summary;
+  return draft.dispositionReason ?? "";
+}
+
+function reasoningTitle(draft: ReasoningDraft, body: string) {
+  const headline = reasoningHeadline(body);
+  if (headline) return headline;
+  const name = draftToolName(draft);
+  if (name) return toolTitle({ name, input: toolCallInput(draft.toolCalls[0]) });
+  if (draft.disposition === "rejected") return "Propuesta rechazada";
+  if (draft.disposition === "stale") return "Propuesta obsoleta";
+  if (draft.disposition === "incomplete") return "Respuesta incompleta";
+  return "Pensando";
+}
+
+function toThinkingItem(draft: ReasoningDraft): Extract<TranscriptItem, { kind: "thinking" }> {
+  const text = reasoningBody(draft);
+  const streaming = draft.status === "streaming" || draft.disposition === "pending";
+  const title = draft.status === "streaming" && draft.disposition === undefined
+    ? "Pensando"
+    : reasoningTitle(draft, text);
+  return {
+    kind: "thinking",
+    id: draft.id,
+    text,
+    status: streaming ? "streaming" : "complete",
+    occurredAt: draft.occurredAt,
+    durationMs: reasoningDurationMs(draft.occurredAt, draft.finishedAt),
+    title,
+    disposition: draft.disposition,
+    dispositionReason: draft.dispositionReason,
+    toolCalls: draft.toolCalls,
+    model: draft.model,
+    finishReason: draft.finishReason,
+    usage: draft.usage,
+    redacted: draft.redacted,
+  };
+}
+
+function reasoningTurns(events: ReadonlyArray<ActivityRecord>): Extract<TranscriptItem, { kind: "thinking" }>[] {
+  return reasoningDrafts(events)
+    .map(toThinkingItem)
+    .filter((item) => item.status === "streaming" || item.text !== "" || (item.toolCalls?.length ?? 0) > 0 || Boolean(item.disposition));
+}
+
+export function reasoningDefaultOpen(
+  item: Extract<TranscriptItem, { kind: "thinking" }>,
+  items: ReadonlyArray<TranscriptItem>,
+): boolean {
+  if (item.status === "streaming" || item.disposition === "pending") return true;
+  const index = items.findIndex((entry) => entry.kind === "thinking" && entry.id === item.id);
+  return index === items.length - 1;
 }
 
 function parentIdOf(tool: ToolCall) {
@@ -356,6 +753,12 @@ function nestTools(tools: ReadonlyArray<ToolCall>): TranscriptItem[] {
   return items;
 }
 
+function itemKindOrder(item: TranscriptItem): number {
+  if (item.kind === "thinking") return 0;
+  if (item.kind === "approval") return 2;
+  return 1;
+}
+
 function itemTime(item: TranscriptItem): number {
   if (item.kind === "tool") return toolTime(item.tool);
   if (item.kind === "approval") return Date.parse(item.approval.occurredAt) || 0;
@@ -363,7 +766,8 @@ function itemTime(item: TranscriptItem): number {
     const times = item.children.map(itemTime).filter((value) => value > 0);
     return times.length ? Math.min(...times) : 0;
   }
-  return Number.POSITIVE_INFINITY;
+  if (item.id === LIVE_REASONING_ID) return Number.POSITIVE_INFINITY;
+  return Date.parse(item.occurredAt) || 0;
 }
 
 export function buildTranscript(overview: Overview, activity: ReadonlyArray<ActivityRecord> = []): TranscriptItem[] {
@@ -371,13 +775,25 @@ export function buildTranscript(overview: Overview, activity: ReadonlyArray<Acti
   const tools = mergedToolCalls(overview, events);
   const nested = nestTools(tools);
   const remainders = decidedApprovals(events).map((approval): TranscriptItem => ({ kind: "approval", approval }));
-  const items = [...nested, ...remainders].toSorted((left, right) => {
+  const thoughts = reasoningTurns(events);
+  const items = [...nested, ...remainders, ...thoughts].toSorted((left, right) => {
     const delta = itemTime(left) - itemTime(right);
     if (delta !== 0) return delta;
+    const kindDelta = itemKindOrder(left) - itemKindOrder(right);
+    if (kindDelta !== 0) return kindDelta;
     return transcriptId(left).localeCompare(transcriptId(right));
   });
-  if (currentWork(overview, events).kind === "thinking") {
-    items.push({ kind: "thinking" });
+  const work = currentWork(overview, activity);
+  const hasLiveTurn = thoughts.some((item) => item.status === "streaming" || item.disposition === "pending");
+  if (work.kind === "thinking" && !hasLiveTurn) {
+    items.push({
+      kind: "thinking",
+      id: LIVE_REASONING_ID,
+      text: "",
+      status: "streaming",
+      occurredAt: "",
+      title: liveThinkingLabel(events),
+    });
   }
   return items;
 }
@@ -386,7 +802,7 @@ function transcriptId(item: TranscriptItem) {
   if (item.kind === "tool") return item.tool.identifier;
   if (item.kind === "task") return item.id;
   if (item.kind === "approval") return item.approval.identifier;
-  return "thinking";
+  return item.id;
 }
 
 export function recoveryStartTimes(

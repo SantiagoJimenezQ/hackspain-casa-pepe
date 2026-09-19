@@ -1,8 +1,15 @@
 import { ActivityService } from "@activity/services/activity.service"
-import { AGENT_TICK_INTERVAL_MILLISECONDS } from "@agent/constants/agent.constant"
+import {
+	AGENT_STALLED_RUN_MILLISECONDS,
+	AGENT_TICK_INTERVAL_MILLISECONDS,
+} from "@agent/constants/agent.constant"
 import { AGENT_MESSAGES } from "@agent/constants/agent-messages.constant"
 import { interpretAnswer } from "@agent/helpers/answer-interpretation.helper"
-import { stepIdentifierFor } from "@agent/helpers/plan-builder.helper"
+import {
+	buildEngineerCallDraft,
+	stepIdentifierFor,
+} from "@agent/helpers/plan-builder.helper"
+import { isPlanSettled } from "@agent/helpers/plan-completion.helper"
 import {
 	LlmLoopService,
 	LlmLoopState,
@@ -31,6 +38,7 @@ import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { EngineersService } from "@engineers/services/engineers.service"
 import { IncomingCallsService } from "@engineers/services/incoming-calls.service"
+import { IncidentEntity } from "@incidents/entities/incident.entity"
 import { toIncidentSnapshot } from "@incidents/helpers/incident-state.helper"
 import { IncidentsService } from "@incidents/services/incidents.service"
 import { RunsService } from "@incidents/services/runs.service"
@@ -47,27 +55,28 @@ import { PlansService } from "@plans/services/plans.service"
 import { PlanRecord, PlanStep } from "@plans/types/plan.type"
 import { RecoveryService } from "@recovery/services/recovery.service"
 import { ScenarioDefinition } from "@scenarios/types/scenario.type"
+import { TasksService } from "@tasks/services/tasks.service"
+import { TaskUpdatedEvent } from "@tasks/types/task.type"
 import { ToolsService } from "@tools/services/tools.service"
 import {
 	ToolCallFinishedEvent,
 	ToolCallRecord,
 	ToolInvocation,
 } from "@tools/types/tool.type"
+import { EngineerCallAuthorizations } from "../../../../../packages/contracts/outbound-calls"
+
+/** Marks a fact the engineer settled by authorizing the work rather than by answering it. */
+const AUTHORIZED_BY_VOICE = "authorized by voice"
 
 const RUNNABLE_STATUSES: ReadonlyArray<PlanStep["status"]> = [
 	"proposed",
 	"approved",
 ]
 
-const OPEN_STATUSES: ReadonlyArray<PlanStep["status"]> = [
-	"proposed",
-	"approved",
-	"awaiting-approval",
-	"running",
-]
-
 @Injectable()
 export class AgentService {
+	private readonly stalledNudges = new Map<string, number>()
+
 	private readonly pendingChanges = new Map<string, AgentTrigger>()
 	private readonly logger = new Logger(AgentService.name)
 
@@ -85,7 +94,14 @@ export class AgentService {
 		private readonly cycleState: AgentCycleStateService,
 		private readonly incomingCalls: IncomingCallsService,
 		private readonly llmLoop: LlmLoopService,
+		private readonly tasksService: TasksService,
 	) {}
+
+	@OnEvent(DOMAIN_EVENTS.INCIDENT_RUN_DEACTIVATED)
+	onRunDeactivated(event: { runIdentifier: string }): void {
+		this.pendingChanges.delete(event.runIdentifier)
+		this.cycleState.forget(event.runIdentifier)
+	}
 
 	@OnEvent(DOMAIN_EVENTS.INCOMING_CALL_CONFIRMED, {
 		async: true,
@@ -175,6 +191,15 @@ export class AgentService {
 		}
 	}
 
+	@OnEvent(DOMAIN_EVENTS.TASK_UPDATED, { async: true, promisify: true })
+	async onTaskUpdated({ task }: TaskUpdatedEvent): Promise<void> {
+		await this.requestCycle(task.runIdentifier, {
+			description: `Task ${task.identifier} changed to ${task.status}; reassess its recorded evidence`,
+			harnessEventIdentifier: task.identifier,
+			kind: "conditions-changed",
+		})
+	}
+
 	@OnEvent(DOMAIN_EVENTS.APPROVAL_DECIDED, { async: true, promisify: true })
 	async onApprovalDecided(event: ApprovalDecidedEvent): Promise<void> {
 		const { approval } = event
@@ -214,10 +239,13 @@ export class AgentService {
 
 	@Interval(AGENT_TICK_INTERVAL_MILLISECONDS)
 	async tick(): Promise<void> {
-		const active = await this.runsService.findActiveEntity()
-		if (!active) {
-			return
+		// Sequential on purpose: a parallel sweep over every run exhausts the connection pool.
+		for (const active of await this.runsService.listLiveEntities()) {
+			await this.tickRun(active)
 		}
+	}
+
+	private async tickRun(active: IncidentEntity): Promise<void> {
 		if (
 			active.runKind === "replay" ||
 			active.status === "normal" ||
@@ -245,7 +273,71 @@ export class AgentService {
 				).timeoutsExpired(expiredApprovals.length, expiredCalls.length),
 				kind: "timeouts-expired",
 			})
+			return
 		}
+		await this.resumeStalledRun(active)
+	}
+
+	/**
+	 * A cycle lost to a restart or a provider failure leaves the run idle with runnable work
+	 * and no event left to resume it. Nothing else notices, so the tick nudges it, spaced out
+	 * so a run the agent deliberately parked is not hammered.
+	 */
+	private async resumeStalledRun(active: IncidentEntity): Promise<void> {
+		if (this.cycleState.get(active.runIdentifier).inProgress) {
+			return
+		}
+		const nudgedAt = this.stalledNudges.get(active.runIdentifier) ?? 0
+		if (Date.now() - nudgedAt < AGENT_STALLED_RUN_MILLISECONDS) {
+			return
+		}
+		// A cycle that failed never reached a decision, so there is no parked plan to respect
+		// and no runnable step to look for: the provider simply refused. The run gets another
+		// cycle, spaced like every other nudge, instead of ending on a rate limit.
+		const { lastOutcome } = this.cycleState.get(active.runIdentifier)
+		if (lastOutcome && lastOutcome.kind === "failed") {
+			this.stalledNudges.set(active.runIdentifier, Date.now())
+			this.logger.warn(LOG_MESSAGES.AGENT.STALLED_RUN_RESUMED, {
+				runIdentifier: active.runIdentifier,
+			})
+			await this.requestCycle(active.runIdentifier, {
+				kind: "follow-up",
+			})
+			return
+		}
+		const plan = await this.plansService.findActivePlan(
+			active.runIdentifier,
+		)
+		if (!plan) {
+			return
+		}
+		const statusByIdentifier = new Map(
+			plan.steps.map((step) => [step.identifier, step.status]),
+		)
+		const awaited = plan.steps.some(
+			(step) =>
+				step.status === "running" ||
+				step.status === "awaiting-approval",
+		)
+		if (awaited) {
+			return
+		}
+		const runnable = plan.steps.some(
+			(step) =>
+				step.status === "proposed" &&
+				step.dependsOn.every(
+					(dependency) =>
+						statusByIdentifier.get(dependency) === "completed",
+				),
+		)
+		if (!runnable) {
+			return
+		}
+		this.stalledNudges.set(active.runIdentifier, Date.now())
+		this.logger.warn(LOG_MESSAGES.AGENT.STALLED_RUN_RESUMED, {
+			runIdentifier: active.runIdentifier,
+		})
+		await this.requestCycle(active.runIdentifier, { kind: "follow-up" })
 	}
 
 	async requestCycle(
@@ -302,6 +394,7 @@ export class AgentService {
 			engine: "llm",
 			engineerCallMode: this.engineersService.mode,
 			incidentStatus: incident.status,
+			language: this.scenarioOf(incident).language,
 			lastCycleAt: state.lastCycleAt,
 			lastCycleOutcome: state.lastOutcome,
 			maximumCycles: this.configuration.agent.maximumCyclesPerRun,
@@ -386,6 +479,7 @@ export class AgentService {
 			runIdentifier,
 			trigger: trigger.kind,
 		})
+		await this.callEngineerImmediately(incident, messages)
 
 		const outcome = await this.llmLoop.run({
 			execute: async (identifier, expected) => {
@@ -423,13 +517,7 @@ export class AgentService {
 				)
 				const updated =
 					await this.plansService.findLatestPlan(runIdentifier)
-				if (
-					updated?.status === "active" &&
-					!updated.steps.some((candidate) =>
-						OPEN_STATUSES.includes(candidate.status),
-					)
-				)
-					await this.plansService.markCompleted(updated.identifier)
+				await this.completePlanIfSettled(updated, runIdentifier)
 				return this.plansService.findLatestPlan(runIdentifier)
 			},
 			investigate: (invocation) =>
@@ -467,11 +555,9 @@ export class AgentService {
 			},
 		})
 		const finalPlan = await this.plansService.findLatestPlan(runIdentifier)
-		if (
-			finalPlan?.status === "active" &&
-			!finalPlan.steps.some((step) => OPEN_STATUSES.includes(step.status))
-		)
-			await this.plansService.markCompleted(finalPlan.identifier)
+		if (!(await this.runsService.getByRunIdentifier(runIdentifier)).active)
+			return { kind: "skipped", reason: "The run is no longer active" }
+		await this.completePlanIfSettled(finalPlan, runIdentifier)
 		if (
 			outcome.kind === "completed" &&
 			outcome.executedSteps >=
@@ -493,6 +579,63 @@ export class AgentService {
 		return outcome
 	}
 
+	/**
+	 * The on-call engineer is the only source for the pending facts and the phone takes about a
+	 * minute to answer, so the run opens with the call instead of reaching it through the model:
+	 * a plan holding just that step is persisted and dispatched before the first model turn, and
+	 * the investigation then runs while it rings. Later cycles already have a plan and skip this.
+	 */
+	private async callEngineerImmediately(
+		incident: IncidentSnapshot,
+		messages: AgentMessages,
+	): Promise<void> {
+		const existing = await this.plansService.findLatestPlan(
+			incident.runIdentifier,
+		)
+		const pendingFacts = incident.facts.filter(
+			(fact) => fact.status === "pending",
+		)
+		if (existing || !pendingFacts.length) {
+			return
+		}
+		const input = await this.buildLlmInput(
+			incident,
+			null,
+			messages.triggerImpact,
+			messages,
+		)
+		if (!input.briefing.questions.length) {
+			return
+		}
+		await this.incidentsService.markResponding(incident.runIdentifier)
+		const plan = await this.createPlanVersion(
+			incident,
+			null,
+			messages.triggerImpact,
+			messages,
+			buildEngineerCallDraft(input),
+		)
+		this.logger.log(LOG_MESSAGES.AGENT.ENGINEER_CALL_DISPATCHED, {
+			planVersion: plan.version,
+			runIdentifier: incident.runIdentifier,
+		})
+		for (const step of plan.steps.filter(
+			(candidate) => candidate.invocation.name === "call_engineer",
+		)) {
+			await this.executeStep(incident, plan, step, messages)
+		}
+	}
+
+	private async completePlanIfSettled(
+		plan: PlanRecord | null,
+		runIdentifier: string,
+	): Promise<void> {
+		if (!plan || plan.status !== "active") return
+		const tasks = await this.tasksService.list(runIdentifier)
+		if (isPlanSettled(plan, tasks))
+			await this.plansService.markCompleted(plan.identifier)
+	}
+
 	private async observeForLlm(
 		runIdentifier: string,
 		trigger: AgentTrigger,
@@ -506,21 +649,32 @@ export class AgentService {
 			describeTrigger(trigger, this.messagesFor(incident)),
 			this.messagesFor(incident),
 		)
-		const [approvals, incomingCalls, calls, toolCalls, learning] =
+		const [approvals, incomingCalls, calls, toolCalls, learning, tasks] =
 			await Promise.all([
 				this.approvalsService.list(runIdentifier),
 				this.incomingCalls.list(runIdentifier),
 				this.engineersService.list(runIdentifier),
 				this.toolsService.list(runIdentifier),
 				this.learningService.list(this.scenarioOf(incident).family),
+				this.tasksService.list(runIdentifier),
 			])
 		return {
 			blocked: incomingCalls.some((call) => call.status === "pending"),
 			evidence: {
 				approvals,
 				calls,
+				engineerCall: {
+					mode: this.engineersService.mode,
+					provider: this.engineersService.provider,
+					// Every configured provider asks the questions the server sends and
+					// reports one collected entry per question key, so the commander may
+					// plan technical questions whichever one is dialing.
+					technicalQuestionsSupported: true,
+				},
 				incomingCalls,
 				learning,
+				recovery: { mode: this.recoveryService.mode },
+				tasks,
 				toolCalls: toolCalls.slice(-30),
 			},
 			input,
@@ -972,6 +1126,12 @@ export class AgentService {
 					output.answers,
 					output.mode,
 				)
+				const authorized = await this.recordAuthorizationsFromCall(
+					incident,
+					output.authorizations,
+					output.mode,
+					messages,
+				)
 				await this.plansService.updateStep(
 					plan.identifier,
 					step.identifier,
@@ -979,10 +1139,16 @@ export class AgentService {
 						attempts: step.attempts,
 						resultSummary: output.summary,
 						status: "completed",
-						statusReason: messages.factsConfirmed(
-							confirmed,
-							output.mode,
-						),
+						statusReason:
+							confirmed === 0 && authorized > 0
+								? messages.authorizationsRecorded(
+										authorized,
+										output.mode,
+									)
+								: messages.factsConfirmed(
+										confirmed,
+										output.mode,
+									),
 						toolCallIdentifier: toolCall.identifier,
 					},
 				)
@@ -1171,6 +1337,71 @@ export class AgentService {
 			statusReason: messages.verificationFailed(status, detail),
 			toolCallIdentifier: toolCall.identifier,
 		})
+	}
+
+	/**
+	 * A permission-only voice agent answers no technical question, but the on-call engineer's
+	 * explicit go-ahead is evidence of its own: it is recorded as a confirmed fact, and an
+	 * authorized failover settles the backup capacity the same engineer would otherwise have
+	 * confirmed by voice. A refusal or an unclear answer records nothing, so silence never
+	 * unblocks anything.
+	 */
+	private async recordAuthorizationsFromCall(
+		incident: IncidentSnapshot,
+		authorizations: EngineerCallAuthorizations | undefined,
+		mode: "simulated" | "live",
+		messages: AgentMessages,
+	): Promise<number> {
+		if (!authorizations) {
+			return 0
+		}
+		const source = `${this.configuration.demo.engineerName} (${mode})`
+		const granted: ReadonlyArray<[boolean, string]> = [
+			[
+				authorizations.notifyAllClients.value === true,
+				messages.authorizedNotifyAllClients,
+			],
+			[
+				authorizations.trafficFailoverAuthorized.value === true,
+				messages.authorizedTrafficFailover,
+			],
+		]
+		let recorded = 0
+		for (const [allowed, statement] of granted) {
+			if (!allowed) {
+				continue
+			}
+			await this.incidentsService.recordFact(
+				incident.runIdentifier,
+				statement,
+				"confirmed",
+				source,
+			)
+			recorded += 1
+		}
+		if (authorizations.trafficFailoverAuthorized.value === true) {
+			await this.incidentsService.confirmResourceCapacity(
+				incident.runIdentifier,
+				incident.resources[0].identifier,
+				true,
+				`Authorized by ${this.configuration.demo.engineerName}`,
+			)
+			// The engineer who owns these facts has told us to go ahead, so the questions the
+			// call was meant to settle are settled by that decision. The source says where the
+			// confirmation came from, so an operator can tell a voice go-ahead from an answer.
+			const authorizedSource = `${source} ${AUTHORIZED_BY_VOICE}`
+			for (const question of this.scenarioOf(incident).engineerBriefing
+				.questions) {
+				await this.incidentsService.recordFact(
+					incident.runIdentifier,
+					question.confirmsFact,
+					"confirmed",
+					authorizedSource,
+				)
+				recorded += 1
+			}
+		}
+		return recorded
 	}
 
 	private async recordFactsFromCall(

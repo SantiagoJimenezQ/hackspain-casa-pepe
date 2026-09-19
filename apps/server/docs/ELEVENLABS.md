@@ -26,6 +26,53 @@ The supplied `elevenlabs/GUIA-AGENTE.md`, `agent.json`, and `llamada.json` were 
 - [Outbound call via Twilio](https://elevenlabs.io/docs/api-reference/integrations/twilio/outbound-call)
 - [Conversation details](https://elevenlabs.io/docs/api-reference/conversations/get)
 
+## Agent setup in the ElevenLabs dashboard
+
+The application never edits the hosted agent, so its prompt and its Analysis fields are configured
+once in the ElevenLabs dashboard.
+
+### Dynamic variables the server sends
+
+Every outbound call carries these, usable in the prompt as `{{name}}`:
+
+| Variable | Contents |
+|---|---|
+| `contact_name` | Person being called |
+| `incident_description` | Two-sentence summary of the incident |
+| `location` | Affected region |
+| `outage_time` | Start of the outage in `HH:MM UTC`, empty when unknown |
+| `services_down` | Comma-separated list of affected services |
+| `questions` | The agent's questions, numbered, as a single line |
+| `questions_count` | How many questions were sent |
+
+The prompt should ask the `{{questions}}` one at a time and wait for a clear answer to each,
+instead of following a fixed script, because the questions are written per incident by the agent.
+
+### Data collection fields
+
+Analysis, Data collection. Each field becomes an entry in `analysis.data_collection_results`.
+
+Authorizations, read into `result.authorizations`:
+
+| Identifier | Type |
+|---|---|
+| `notify_all_clients` | Boolean |
+| `traffic_failover_authorized` | Boolean |
+
+Question answers, read into `result.answers`, one field per question key used by the scenario:
+
+| Identifier | Type |
+|---|---|
+| `database-snapshot` | Boolean |
+| `route-assignment-readiness` | Boolean |
+| `backup-capacity` | Boolean |
+
+The identifier must match the question `key`. Separators are forgiving: `database-snapshot`,
+`database_snapshot` and `databaseSnapshot` all match. A Boolean field decides `confirmed` directly
+and its rationale becomes the answer text; a String field leaves the verdict to the server's answer
+interpretation. A question with no matching field simply produces no answer, and its fact stays
+pending.
+
 ## Runtime behavior
 
 The adapter sends `contact_name`, `location`, `outage_time`, `incident_description`, and `services_down` as `conversation_initiation_client_data.dynamic_variables`. Incident context comes from the persisted run. The incident description is limited to two sentences to keep the opening concise.
@@ -38,7 +85,7 @@ the time rather than inventing one. The server sends the persisted incident's
 `impactedAt` through `outageStartedAt`, formatted as `HH:mm UTC` in `outage_time`.
 Legacy calls, standalone checks and invalid timestamps send an empty value;
 the call start time is never substituted. This prompt update was saved and read back through the API;
-its spoken behavior has not yet been tested in a call.
+a subsequent direct-provider call verified the time was spoken and the region omitted (see the contract linked below).
 
 `providerReference` stores ElevenLabs' `conversation_id`; `providerCallSid` stores Twilio's `callSid`. Pending call records live in the database. The server polls conversation details until analysis is ready or the configured call timeout is reached; no publicly reachable ElevenLabs callback endpoint is required. Keep the NestJS process running for scheduled polling. A request-only/serverless deployment needs a persistent worker or an equivalent scheduler.
 
@@ -178,5 +225,10 @@ validates the combined extraction and hangup, but not a strict one-question flow
 the clarification was longer than intended. The agent also read `me-central-1`
 despite the prompt instruction to omit technical region codes. The subsequent
 prompt update replaces location with `outage_time` and forbids all location
-references. That final wording still needs a live voice rehearsal; the long
-clarification remains a conversation-quality issue.
+references. A subsequent direct-provider call with `outage_time: "14:30 UTC"` completed
+in 18 seconds, omitted the region, asked one combined question, captured both
+permissions as `true`, and invoked `end_call`. It did not require clarification.
+The longer clarification observed in this earlier call remains relevant when
+responses are ambiguous.
+
+Agent input, asynchronous results and next-action rules: [call_engineer contract](CALL-ENGINEER-CONTRACT.md).

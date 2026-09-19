@@ -31,3 +31,5 @@ The agent panel reconstructs each public model turn from `agent.llm-output` frag
 History older than the live 100-event window is loaded through the authenticated `GET /activity/llm` cursor and merged by `outputIdentifier`. Live typing still requires `LLM_STREAM_OUTPUT=true` on the backend; without it the turn appears when the completed record arrives.
 
 The dashboard renders the backend’s actual incident, services, capacity, plan, approvals, calls, tools, tasks, activity, learning insights, and current run report.
+
+The top bar’s **Borrar aprendizajes** button deletes all saved learning insights through the authenticated API and shows the number removed. It leaves the current incident and its existing plans intact. Use **Reiniciar** afterwards to start a fresh run without prior learning; the run may accumulate new lessons as it progresses.

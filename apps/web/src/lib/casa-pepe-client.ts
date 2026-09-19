@@ -80,6 +80,7 @@ export const casaPepeClient = {
     return request<LlmHistoryPage>(`/api/casa-pepe/activity/llm${suffix}`);
   },
   insights: () => request<LearningInsight[]>("/api/casa-pepe/learning/insights"),
+  resetLearnings: () => request<{ removed: number }>("/api/casa-pepe/learning/insights", { method: "DELETE" }),
   report: () => request<RunReport>(withRun("/api/casa-pepe/learning/reports/current")),
   start: () =>
     startRun(

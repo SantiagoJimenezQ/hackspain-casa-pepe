@@ -155,6 +155,38 @@ describe("live dashboard provider", () => {
     vi.restoreAllMocks();
   });
 
+  it.each([true, false])("resets saved learning with truthful feedback (success=%s)", async (succeeds) => {
+    let removed = false;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/overview")) return Response.json(idleSnapshot);
+      if (url.endsWith("/learning/insights") && init?.method === "DELETE") {
+        if (!succeeds) return Response.json({ message: "No se pudieron borrar los aprendizajes" }, { status: 500 });
+        removed = true;
+        return Response.json({ removed: 2 });
+      }
+      if (url.endsWith("/learning/insights")) return Response.json(removed ? [] : [{ identifier: "lesson-1" }]);
+      return Response.json({ lessons: removed ? [] : ["Previous capacity shortfall"] });
+    });
+    function LearningProbe() {
+      const { insights, error } = useDashboard();
+      return <><p>Lessons: {insights.length}</p>{error ? <p>{error}</p> : null}</>;
+    }
+    const { user } = renderWithProviders(<><TopBar /><LearningProbe /></>);
+    await screen.findByText("Lessons: 1");
+    await user.click(screen.getByRole("button", { name: "Borrar aprendizajes" }));
+    if (succeeds) {
+      await screen.findByText("Lessons: 0");
+      expect(screen.getByRole("status")).toHaveTextContent("2 aprendizajes borrados");
+    } else {
+      await screen.findByText("No se pudieron borrar los aprendizajes");
+      expect(screen.getByText("Lessons: 1")).toBeInTheDocument();
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    }
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/demo/reset"))).toBe(false);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Borrar aprendizajes" })).toBeEnabled());
+  });
+
   it("boots an idle run when the backend has no active scenario", async () => {
     let started = false;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {

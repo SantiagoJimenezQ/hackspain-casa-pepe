@@ -16,7 +16,7 @@ import { isLlmActivityType } from "@/lib/agent-trace";
 import type { ActivityRecord, LearningInsight, Overview, RunReport } from "@/lib/casa-pepe-types";
 
 type DashboardStatus = "loading" | "active" | "error";
-type DemoAction = "start" | "impact" | "twist" | "reset" | "cycle" | null;
+type DemoAction = "start" | "impact" | "twist" | "reset" | "reset-learnings" | "cycle" | null;
 
 type DashboardContextValue = {
   status: DashboardStatus;
@@ -31,6 +31,8 @@ type DashboardContextValue = {
   triggerImpact: () => Promise<void>;
   triggerTwist: () => Promise<void>;
   resetDemo: () => Promise<void>;
+  resetLearnings: () => Promise<void>;
+  learningResetMessage: string | null;
   runAgentCycle: () => Promise<void>;
   decideApproval: (identifier: string, decision: "approve" | "reject", comment: string) => Promise<void>;
 };
@@ -99,6 +101,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<DashboardStatus>("loading");
   const [overview, setOverview] = useState<Overview | null>(null);
   const [insights, setInsights] = useState<LearningInsight[]>([]);
+  const [learningResetMessage, setLearningResetMessage] = useState<string | null>(null);
+  const learningGeneration = useRef(0);
   const [report, setReport] = useState<RunReport | null>(null);
   const [activity, setActivity] = useState<ActivityRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -156,10 +160,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const loadLearning = useCallback(async () => {
     if (learningLoaded.current) return;
     learningLoaded.current = true;
+    const generation = learningGeneration.current;
     const [insightsResult, reportResult] = await Promise.allSettled([
       casaPepeClient.insights(),
       casaPepeClient.report(),
     ]);
+    if (generation !== learningGeneration.current) return;
     startTransition(() => {
       if (insightsResult.status === "fulfilled") setInsights(insightsResult.value);
       if (reportResult.status === "fulfilled") setReport(reportResult.value);
@@ -292,6 +298,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     learningLoaded.current = false;
     await execute("reset", casaPepeClient.reset);
   }, [execute]);
+  const resetLearnings = useCallback(() => execute("reset-learnings", async () => {
+    setLearningResetMessage(null);
+    const { removed } = await casaPepeClient.resetLearnings();
+    learningGeneration.current += 1;
+    learningLoaded.current = false;
+    setInsights([]);
+    setReport((current) => current ? { ...current, lessons: [] } : null);
+    setLearningResetMessage(`${removed} aprendizajes borrados. Reinicia la demo para empezar sin memoria previa.`);
+    await loadLearning();
+  }), [execute, loadLearning]);
   const runAgentCycle = useCallback(() => execute("cycle", casaPepeClient.runCycle), [execute]);
   const decideApproval = useCallback(
     (identifier: string, decision: "approve" | "reject", comment: string) =>
@@ -302,9 +318,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact,
-      triggerTwist, resetDemo, runAgentCycle, decideApproval,
+      triggerTwist, resetDemo, resetLearnings, learningResetMessage, runAgentCycle, decideApproval,
     }),
-    [status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact, triggerTwist, resetDemo, runAgentCycle, decideApproval],
+    [status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact, triggerTwist, resetDemo, resetLearnings, learningResetMessage, runAgentCycle, decideApproval],
   );
 
   return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>;

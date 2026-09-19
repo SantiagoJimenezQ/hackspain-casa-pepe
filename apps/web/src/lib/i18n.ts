@@ -29,6 +29,7 @@ const es = {
   "agent.title": "Agente de Respuesta",
   "agent.active": "Activo",
   "agent.copy": "Copiar razonamiento",
+  "agent.copyDebug": "Copiar chat (debug)",
   "agent.copied": "Copiado",
   "agent.more": "Más acciones",
   "agent.executingCount": "Ejecutando {completed}/{total}",
@@ -203,6 +204,11 @@ const es = {
   "plan.todos.completed": "{completed} de {total} tareas completadas",
   "plan.todos.toggle": "Mostrar u ocultar las tareas del plan",
 
+  "call.calling": "Llamando a {name}",
+  "call.ended": "Llamada finalizada",
+  "call.failed": "No se ha podido completar la llamada",
+  "call.noAnswer": "Sin respuesta",
+
   "language.label": "Idioma",
   "language.es": "ES",
   "language.en": "EN",
@@ -225,6 +231,7 @@ const en: { [K in keyof typeof es]: string } = {
   "agent.title": "Response agent",
   "agent.active": "Active",
   "agent.copy": "Copy reasoning",
+  "agent.copyDebug": "Copy chat (debug)",
   "agent.copied": "Copied",
   "agent.more": "More actions",
   "agent.executingCount": "Running {completed}/{total}",
@@ -398,6 +405,11 @@ const en: { [K in keyof typeof es]: string } = {
   "plan.todos.progress": "{completed} of {total} To-dos",
   "plan.todos.completed": "{completed} of {total} To-dos Completed",
   "plan.todos.toggle": "Show or hide plan to-dos",
+
+  "call.calling": "Calling {name}",
+  "call.ended": "Call ended",
+  "call.failed": "Call could not be completed",
+  "call.noAnswer": "No answer",
 
   "language.label": "Language",
   "language.es": "ES",

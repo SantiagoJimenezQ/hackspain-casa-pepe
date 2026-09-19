@@ -2,6 +2,7 @@
 
 import { CircleDashed } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
+import { ActiveCallBanner } from "@/components/dashboard/active-call-banner";
 import { AgentPanel } from "@/components/dashboard/agent-panel";
 import { CrisisMap } from "@/components/dashboard/crisis-map";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
@@ -247,7 +248,8 @@ export function LiveOperationsDashboard() {
     return <div className="flex flex-1 items-center justify-center"><CircleDashed className="size-6 animate-spin" /></div>;
   }
   return (
-    <div className="min-h-0 flex-1 overflow-hidden p-3">
+    <div className="relative min-h-0 flex-1 overflow-hidden p-3">
+      <ActiveCallBanner />
       <div className="grid h-full min-h-0 grid-cols-[minmax(0,1.45fr)_minmax(420px,.9fr)] gap-3">
         <div className="grid min-h-0 grid-rows-[minmax(220px,1.2fr)_minmax(0,1fr)] gap-3">
           <MapPanel />

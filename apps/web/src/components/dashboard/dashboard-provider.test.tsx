@@ -343,6 +343,7 @@ describe("live dashboard chrome", () => {
     expect(screen.getByText("Migrando")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Trabajo del agente" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ir al último" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copiar chat (debug)" })).toBeInTheDocument();
     expect(screen.queryByText("Completado")).not.toBeInTheDocument();
     expect(screen.queryByText("En curso")).not.toBeInTheDocument();
     expect(screen.queryByText(/Trabajo del agente ·/)).not.toBeInTheDocument();
@@ -760,5 +761,40 @@ describe("live dashboard chrome", () => {
     await user.click(screen.getByRole("button", { name: "2 de 2 tareas completadas" }));
     expect(screen.getByText("Preparar la recuperación")).toBeVisible();
     expect(screen.getByText("Recuperar y verificar")).toBeVisible();
+  });
+
+  it("shows a CallKit banner while an engineer call is in progress", async () => {
+    const startedAt = new Date(Date.now() - 12_000).toISOString();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (isOverview(url)) {
+        return new Response(
+          JSON.stringify({
+            ...snapshot,
+            engineerCalls: [
+              {
+                identifier: "call_1",
+                engineer: { name: "Marta Ruiz", role: "Ingeniera de plataforma" },
+                purpose: "Confirmar el failover",
+                mode: "simulated",
+                status: "in-progress",
+                result: null,
+                failureReason: "",
+                startedAt,
+                finishedAt: "",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    });
+
+    renderWithProviders(<LiveOperationsDashboard />);
+
+    await waitFor(() => expect(screen.getByText("Llamando a Marta Ruiz")).toBeInTheDocument());
+    expect(screen.getByRole("status", { name: /Llamando a Marta Ruiz/ })).toHaveTextContent(/\d{2}:\d{2}/);
+    expect(screen.getByText("Ingeniera de plataforma")).toBeInTheDocument();
   });
 });

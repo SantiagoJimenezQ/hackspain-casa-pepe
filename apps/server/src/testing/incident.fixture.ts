@@ -75,3 +75,25 @@ export function createImpactedIncident(
 		updatedAt: FIXTURE_IMPACT_TIMESTAMP,
 	}
 }
+
+export function createLastDegradedIncident(): IncidentSnapshot {
+	const incident = createImpactedIncident(4)
+	return {
+		...incident,
+		resources: incident.resources.map((resource) => {
+			if (resource.identifier === "backup-oman") {
+				return { ...resource, allocatedCapacity: 4 }
+			}
+			if (resource.identifier === "backup-bahrain") {
+				return { ...resource, allocatedCapacity: 8 }
+			}
+			return resource
+		}),
+		services: incident.services.map((service) =>
+			service.identifier === "customer-notifications"
+				? service
+				: { ...service, status: "healthy" as const },
+		),
+		status: "partially-recovered",
+	}
+}

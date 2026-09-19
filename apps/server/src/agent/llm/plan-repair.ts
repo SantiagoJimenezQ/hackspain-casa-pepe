@@ -2,8 +2,14 @@ import {
 	AGENT_ACTOR_NAME,
 	CONTACT_ENGINEER_STEP_IDENTIFIER,
 } from "@agent/constants/agent.constant"
+import {
+	effectiveCapacity,
+	stepIdentifierFor,
+} from "@agent/helpers/plan-builder.helper"
 import { PlanBuildInput } from "@agent/types/agent.type"
 import { Actor } from "@common/types/identity.type"
+import { selectBackupResource } from "@incidents/helpers/incident-state.helper"
+import { BUSINESS_IMPACT_WEIGHTS } from "@scenarios/constants/scenario.constant"
 
 type UnknownRecord = Record<string, unknown>
 
@@ -24,6 +30,26 @@ const COMMUNICATION_STEP_NAMES: ReadonlySet<string> = new Set([
 const AGENT_ACTOR: Actor = { kind: "agent", name: AGENT_ACTOR_NAME }
 
 const OPERATOR_ACTOR: Actor = { kind: "operator", name: "Operator" }
+
+const PERMISSION_QUESTIONS: ReadonlyArray<{
+	readonly key: string
+	readonly question: string
+}> = [
+	{
+		key: "traffic-failover-authorized",
+		question:
+			"Do you authorize diverting production traffic to the backup region?",
+	},
+	{
+		key: "notify-all-clients",
+		question: "Do you authorize notifying all affected clients?",
+	},
+]
+
+const CALL_STEP_NAMES: ReadonlySet<string> = new Set([
+	"call_engineer",
+	"contact_engineer",
+])
 
 /** Steps the server owns once dispatched; a revision must carry them unchanged. */
 const CARRIED_STATUSES: ReadonlySet<string> = new Set(["running", "completed"])
@@ -78,8 +104,10 @@ function textOf(record: UnknownRecord, key: string): string {
  * Repairs the mechanical fields of a model-proposed plan before validation so
  * the model does not spend turns on formatting mistakes: actors, service scope,
  * capacity, approval flags and dependencies on postponed steps are derived from
- * trusted state. Business decisions (priorities, which services to recover,
- * questions, reasons) are never touched.
+ * trusted state. A first-cycle stall that skips the engineer call or treats
+ * unconfirmed reported capacity as zero is also corrected so recovery can start.
+ * After a region fills, the next backup with remaining capacity is selected so
+ * recovery continues instead of postponing every remaining service.
  */
 export function repairLlmPlanDraft(
 	value: unknown,
@@ -102,19 +130,26 @@ export function repairLlmPlanDraft(
 	const servicesByIdentifier = new Map(
 		input.incident.services.map((service) => [service.identifier, service]),
 	)
-	const postponedServices = new Set(
-		(Array.isArray(value.priorities) ? value.priorities : [])
-			.filter(isRecord)
-			.filter((priority) => priority.decision === "postpone")
-			.map((priority) => textOf(priority, "serviceIdentifier")),
-	)
 	const trustedByIdentifier = new Map(
 		(input.previousPlan ? input.previousPlan.steps : [])
 			.filter((step) => CARRIED_STATUSES.has(step.status))
 			.map((step) => [step.identifier, step]),
 	)
 	const withCall = withEngineerCall(value.steps, input, trustedByIdentifier)
-	const repairedSteps = withCall.map((step) => {
+	const recovered = withRecoverNow(
+		value.priorities,
+		withCall,
+		value.capacity,
+		input,
+		trustedByIdentifier,
+	)
+	const postponedServices = new Set(
+		(Array.isArray(recovered.priorities) ? recovered.priorities : [])
+			.filter(isRecord)
+			.filter((priority) => priority.decision === "postpone")
+			.map((priority) => textOf(priority, "serviceIdentifier")),
+	)
+	const repairedSteps = recovered.steps.map((step) => {
 		// Dispatched work is server state: the model only has to keep listing it.
 		const trusted = isRecord(step)
 			? trustedByIdentifier.get(textOf(step, "identifier"))
@@ -152,7 +187,10 @@ export function repairLlmPlanDraft(
 		})
 		return { ...step, dependsOn }
 	})
-	const priorities = repairPriorities(value.priorities, servicesByIdentifier)
+	const priorities = repairPriorities(
+		recovered.priorities,
+		servicesByIdentifier,
+	)
 	return onlyKeys(
 		{
 			...value,
@@ -182,8 +220,9 @@ function onlyKeys(
 }
 
 /**
- * Service names and blockers are copies of trusted state, so a revision should not be
- * rejected over their spelling or over listing something that is not a dependency.
+ * Service names, blockers and recovery costs are copies of trusted state, so a
+ * revision should not be rejected over their spelling, listing a non-dependency,
+ * or repeating a healthy service's original recovery cost.
  */
 function repairPriorities(
 	value: unknown,
@@ -209,22 +248,24 @@ function repairPriorities(
 			(dependency) =>
 				servicesByIdentifier.get(dependency)?.status !== "healthy",
 		)
+		if (service.status === "healthy") {
+			return {
+				...priority,
+				blockedBy: [],
+				capacityUnits: 0,
+				decision: "already-healthy",
+				serviceName: service.name,
+			}
+		}
 		const decision = textOf(priority, "decision")
 		const blockedBy =
 			decision === "recover-now" || decision === "already-healthy"
 				? []
 				: unhealthy
-		// The cost is a copy of trusted state, and it flips to zero the moment a service turns
-		// healthy. A model that keeps quoting the service's recovery cost after recovering it is
-		// right about the incident and wrong about the field, so the value is derived here
-		// instead of rejecting the plan over bookkeeping the server already knows.
 		return {
 			...priority,
 			blockedBy,
-			capacityUnits:
-				service.status === "healthy"
-					? 0
-					: service.recoveryCapacityUnits,
+			capacityUnits: service.recoveryCapacityUnits,
 			serviceName: service.name,
 		}
 	})
@@ -265,11 +306,7 @@ function repairCapacity(
 	if (!valid || seen.size !== servicesByIdentifier.size) {
 		return value
 	}
-	const resource =
-		input.incident.resources.find(
-			(candidate) =>
-				candidate.identifier === textOf(value, "resourceIdentifier"),
-		) ?? input.incident.resources[0]
+	const resource = planningResource(input)
 	if (!resource) {
 		return { ...value, postponedUnits }
 	}
@@ -279,9 +316,6 @@ function repairCapacity(
 		postponedUnits,
 		resourceIdentifier: resource.identifier,
 		totalCapacity: resource.totalCapacity,
-	}
-	if (!steps.length) {
-		return totals
 	}
 	const newRecoveryUnits = steps
 		.filter(isRecord)
@@ -300,18 +334,47 @@ function repairCapacity(
 			return total + (service ? service.recoveryCapacityUnits : 0)
 		}, 0)
 	const plannedUnits = resource.allocatedCapacity + newRecoveryUnits
-	// Committed work survives a capacity drop: the assumption is never raised past the real
-	// total, so remainingUnits is allowed to go negative instead of inventing capacity.
-	const assumedCapacity = Math.min(
-		numberOrDefault(value, "assumedCapacity", resource.totalCapacity),
-		resource.totalCapacity,
-	)
+	const assumedCapacity = resolvedAssumedCapacity(resource, input, value)
 	return {
 		...totals,
 		assumedCapacity,
 		plannedUnits,
 		remainingUnits: assumedCapacity - plannedUnits,
 	}
+}
+
+function remainingOf(
+	resource: PlanBuildInput["incident"]["resources"][number],
+	input: PlanBuildInput,
+): number {
+	return effectiveCapacity(resource, input) - resource.allocatedCapacity
+}
+
+function planningResource(input: PlanBuildInput) {
+	return selectBackupResource(input.incident, (candidate) =>
+		remainingOf(candidate, input),
+	)
+}
+
+function resolvedAssumedCapacity(
+	resource: PlanBuildInput["incident"]["resources"][number],
+	input: PlanBuildInput,
+	capacity: unknown,
+): number {
+	const usable = effectiveCapacity(resource, input)
+	const proposedResource = isRecord(capacity)
+		? textOf(capacity, "resourceIdentifier")
+		: ""
+	if (proposedResource.length && proposedResource !== resource.identifier) {
+		return usable
+	}
+	const proposed = isRecord(capacity)
+		? numberOrDefault(capacity, "assumedCapacity", usable)
+		: usable
+	return Math.min(
+		proposed === 0 && usable > 0 ? usable : proposed,
+		resource.totalCapacity,
+	)
 }
 
 function numberOrDefault(
@@ -414,15 +477,21 @@ function repairStep(
 			}
 			// The scenario decides: a plan cannot add an approval the service does not mandate.
 			const requiresApproval = service.recoveryRequiresApproval
+			const resource = planningResource(input)
 			return {
 				...base,
 				capacityUnits: service.recoveryCapacityUnits,
 				invocation: {
 					input: {
 						...toolInput,
+						actionDescription:
+							textOf(toolInput, "actionDescription") ||
+							service.recoveryActionDescription,
 						actionKind: service.recoveryActionKind,
 						approvalIdentifier: "",
 						capacityUnits: service.recoveryCapacityUnits,
+						resourceIdentifier: resource.identifier,
+						serviceIdentifier,
 					},
 					name,
 				},
@@ -460,9 +529,8 @@ function trustedAssignee(
 
 /**
  * A plan that leaves facts unconfirmed without calling the on-call engineer strands the
- * incident: the call is the only way to settle them. The scenario briefing already holds the
- * questions, so the step is added rather than rejected, and it runs first because it is
- * asynchronous and nothing else depends on it.
+ * incident. Briefing questions are preferred; when they are missing, a permission question
+ * still satisfies the nonempty-question contract so a live permissions-only call can start.
  */
 function withEngineerCall(
 	steps: ReadonlyArray<unknown>,
@@ -472,14 +540,14 @@ function withEngineerCall(
 	const pendingFacts = input.incident.facts.some(
 		(fact) => fact.status === "pending",
 	)
-	if (!pendingFacts || !input.briefing.questions.length) {
+	if (!pendingFacts) {
 		return steps
 	}
 	const alreadyCalled = (
 		input.previousPlan ? input.previousPlan.steps : []
 	).some(
 		(step) =>
-			step.invocation.name === "call_engineer" &&
+			CALL_STEP_NAMES.has(step.invocation.name) &&
 			step.status !== "failed",
 	)
 	const plannedCall = steps
@@ -487,11 +555,17 @@ function withEngineerCall(
 		.some(
 			(step) =>
 				isRecord(step.invocation) &&
-				textOf(step.invocation, "name") === "call_engineer",
+				CALL_STEP_NAMES.has(textOf(step.invocation, "name")),
 		)
 	if (alreadyCalled || plannedCall) {
 		return steps
 	}
+	const questions = input.briefing.questions.length
+		? input.briefing.questions.map((question) => ({
+				key: question.key,
+				question: question.question,
+			}))
+		: PERMISSION_QUESTIONS
 	const call = {
 		approvalIdentifier: "",
 		attempts: 0,
@@ -503,11 +577,10 @@ function withEngineerCall(
 				engineerName: input.engineer.name,
 				engineerPhone: input.engineer.phone,
 				engineerRole: input.engineer.role,
-				purpose: input.briefing.purpose,
-				questions: input.briefing.questions.map((question) => ({
-					key: question.key,
-					question: question.question,
-				})),
+				purpose:
+					input.briefing.purpose ||
+					"Request permission to notify affected clients and divert traffic to backup",
+				questions,
 			},
 			name: "call_engineer",
 		},
@@ -536,4 +609,420 @@ function withEngineerCall(
 	return [...trusted, call, ...rest].map((step, index) =>
 		isRecord(step) ? { ...step, order: index + 1 } : step,
 	)
+}
+
+type IncidentService = PlanBuildInput["incident"]["services"][number]
+type IncidentResource = PlanBuildInput["incident"]["resources"][number]
+
+function isExecuteForService(
+	step: unknown,
+	serviceIdentifier: string,
+	executeIdentifier: string,
+): boolean {
+	if (!isRecord(step) || !isRecord(step.invocation)) {
+		return false
+	}
+	if (textOf(step.invocation, "name") !== "execute_recovery") {
+		return false
+	}
+	return (
+		textOf(step, "identifier") === executeIdentifier ||
+		textOf(step, "serviceIdentifier") === serviceIdentifier ||
+		(isRecord(step.invocation.input) &&
+			textOf(step.invocation.input, "serviceIdentifier") ===
+				serviceIdentifier)
+	)
+}
+
+function hasExecuteRecovery(
+	steps: ReadonlyArray<unknown>,
+	serviceIdentifier: string,
+	trustedByIdentifier: ReadonlyMap<string, unknown>,
+): boolean {
+	const executeIdentifier = stepIdentifierFor(serviceIdentifier, "execute")
+	if (trustedByIdentifier.has(executeIdentifier)) {
+		return true
+	}
+	return steps.some((step) =>
+		isExecuteForService(step, serviceIdentifier, executeIdentifier),
+	)
+}
+
+function committedNewRecoveryUnits(
+	steps: ReadonlyArray<unknown>,
+	servicesByIdentifier: ReadonlyMap<string, IncidentService>,
+	trustedByIdentifier: ReadonlyMap<string, unknown>,
+): number {
+	return steps
+		.filter(isRecord)
+		.filter((step) => !trustedByIdentifier.has(textOf(step, "identifier")))
+		.reduce((total, step) => {
+			const serviceIdentifier = isRecord(step.invocation)
+				? isRecord(step.invocation.input)
+					? textOf(step.invocation.input, "serviceIdentifier")
+					: textOf(step, "serviceIdentifier")
+				: textOf(step, "serviceIdentifier")
+			if (
+				!isExecuteForService(
+					step,
+					serviceIdentifier,
+					stepIdentifierFor(serviceIdentifier, "execute"),
+				)
+			) {
+				return total
+			}
+			const service = servicesByIdentifier.get(serviceIdentifier)
+			return total + (service ? service.recoveryCapacityUnits : 0)
+		}, 0)
+}
+
+function unhealthyDependenciesOf(
+	service: IncidentService,
+	servicesByIdentifier: ReadonlyMap<string, IncidentService>,
+): string[] {
+	return service.dependencies.filter(
+		(dependency) =>
+			servicesByIdentifier.get(dependency)?.status !== "healthy",
+	)
+}
+
+function demoteRecoverNow(
+	priority: UnknownRecord,
+	kind: "waiting" | "postpone",
+	blockedBy: ReadonlyArray<string>,
+): UnknownRecord {
+	return {
+		...priority,
+		blockedBy: kind === "waiting" ? [...blockedBy] : [],
+		decision: kind === "waiting" ? "waiting-for-dependency" : "postpone",
+	}
+}
+
+function recoveryPair(
+	service: IncidentService,
+	resource: IncidentResource,
+	input: PlanBuildInput,
+) {
+	const executeIdentifier = stepIdentifierFor(service.identifier, "execute")
+	const execute = {
+		approvalIdentifier: "",
+		attempts: 0,
+		capacityUnits: service.recoveryCapacityUnits,
+		dependsOn: [],
+		identifier: executeIdentifier,
+		invocation: {
+			input: {
+				actionDescription: service.recoveryActionDescription,
+				actionKind: service.recoveryActionKind,
+				approvalIdentifier: "",
+				capacityUnits: service.recoveryCapacityUnits,
+				resourceIdentifier: resource.identifier,
+				serviceIdentifier: service.identifier,
+			},
+			name: "execute_recovery",
+		},
+		order: 0,
+		owner: service.recoveryRequiresApproval ? OPERATOR_ACTOR : AGENT_ACTOR,
+		reason: "Recover the highest-impact service that fits remaining capacity",
+		requiresApproval: service.recoveryRequiresApproval,
+		resultSummary: "",
+		serviceIdentifier: service.identifier,
+		status: "proposed",
+		statusReason: "",
+		title: `Recover ${service.name}`,
+		toolCallIdentifier: "",
+		updatedAt: input.incident.updatedAt,
+	}
+	const verify = {
+		approvalIdentifier: "",
+		attempts: 0,
+		capacityUnits: 0,
+		dependsOn: [executeIdentifier],
+		identifier: stepIdentifierFor(service.identifier, "verify"),
+		invocation: {
+			input: {
+				recoveryActionIdentifier: "",
+				serviceIdentifier: service.identifier,
+			},
+			name: "verify_recovery",
+		},
+		order: 0,
+		owner: AGENT_ACTOR,
+		reason: "Verify the recovery before depending on it",
+		requiresApproval: false,
+		resultSummary: "",
+		serviceIdentifier: service.identifier,
+		status: "proposed",
+		statusReason: "",
+		title: `Verify ${service.name}`,
+		toolCallIdentifier: "",
+		updatedAt: input.incident.updatedAt,
+	}
+	return { execute, verify }
+}
+
+function insertRecoverySteps(
+	steps: ReadonlyArray<unknown>,
+	services: ReadonlyArray<IncidentService>,
+	resource: IncidentResource,
+	input: PlanBuildInput,
+	trustedByIdentifier: ReadonlyMap<string, unknown>,
+): ReadonlyArray<unknown> {
+	if (!services.length) {
+		return steps
+	}
+	const previousHadCall = (input.previousPlan?.steps ?? []).some(
+		(step) =>
+			CALL_STEP_NAMES.has(step.invocation.name) &&
+			step.status !== "failed",
+	)
+	const maxCarriedOrder = Math.max(
+		0,
+		...(input.previousPlan?.steps ?? [])
+			.filter((step) => CARRIED_STATUSES.has(step.status))
+			.map((step) => step.order),
+	)
+	const injected: UnknownRecord[] = []
+	let order = maxCarriedOrder
+	for (const service of services) {
+		const pair = recoveryPair(service, resource, input)
+		injected.push({ ...pair.execute, order: ++order })
+		injected.push({ ...pair.verify, order: ++order })
+	}
+	if (!previousHadCall) {
+		return [...steps, ...injected].map((step, index) =>
+			isRecord(step) ? { ...step, order: index + 1 } : step,
+		)
+	}
+	const trusted = steps.filter(
+		(step) =>
+			isRecord(step) &&
+			trustedByIdentifier.has(textOf(step, "identifier")),
+	)
+	const rest = steps.filter(
+		(step) =>
+			!isRecord(step) ||
+			!trustedByIdentifier.has(textOf(step, "identifier")),
+	)
+	const restRenumbered = rest.map((step, index) =>
+		isRecord(step) ? { ...step, order: order + 1 + index } : step,
+	)
+	return [...trusted, ...injected, ...restRenumbered]
+}
+
+/**
+ * Recover-now must match execute/verify steps. Extra recover-now rows without
+ * steps are demoted when they cannot fit; otherwise their steps are injected.
+ * If nothing is recover-now, promote the highest-impact service that still fits.
+ */
+function withRecoverNow(
+	priorities: unknown,
+	steps: ReadonlyArray<unknown>,
+	capacity: unknown,
+	input: PlanBuildInput,
+	trustedByIdentifier: ReadonlyMap<string, unknown>,
+): { priorities: unknown; steps: ReadonlyArray<unknown> } {
+	if (!Array.isArray(priorities)) {
+		return { priorities, steps }
+	}
+	const servicesByIdentifier = new Map(
+		input.incident.services.map((service) => [service.identifier, service]),
+	)
+	const seen = new Set<string>()
+	const records = priorities.filter(isRecord)
+	const complete =
+		records.length === priorities.length &&
+		records.every((priority) => {
+			const identifier = textOf(priority, "serviceIdentifier")
+			if (
+				!identifier ||
+				!servicesByIdentifier.has(identifier) ||
+				seen.has(identifier)
+			) {
+				return false
+			}
+			seen.add(identifier)
+			return true
+		}) &&
+		seen.size === servicesByIdentifier.size
+	if (!complete) {
+		return { priorities, steps }
+	}
+	const blocked = new Set([
+		...input.rejectedServices.map((item) => item.serviceIdentifier),
+		...input.failedServices.map((item) => item.serviceIdentifier),
+	])
+	const resource = planningResource(input)
+	let remaining =
+		resolvedAssumedCapacity(resource, input, capacity) -
+		resource.allocatedCapacity -
+		committedNewRecoveryUnits(
+			steps,
+			servicesByIdentifier,
+			trustedByIdentifier,
+		)
+	const toInject: IncidentService[] = []
+	const eligibleIncomplete: IncidentService[] = []
+
+	function outcomeOf(
+		service: IncidentService,
+	): "keep" | "waiting" | "postpone" {
+		if (blocked.has(service.identifier)) {
+			return "postpone"
+		}
+		if (service.status === "healthy" || service.status === "recovering") {
+			return "keep"
+		}
+		const waiting = unhealthyDependenciesOf(service, servicesByIdentifier)
+		if (waiting.length) {
+			return "waiting"
+		}
+		if (service.recoveryCapacityUnits > remaining) {
+			return "postpone"
+		}
+		return "keep"
+	}
+
+	const nextPriorities = records.map((priority) => {
+		const service = servicesByIdentifier.get(
+			textOf(priority, "serviceIdentifier"),
+		)
+		if (
+			!service ||
+			textOf(priority, "decision") !== "recover-now" ||
+			service.status === "healthy" ||
+			service.status === "recovering"
+		) {
+			return priority
+		}
+		const planned = hasExecuteRecovery(
+			steps,
+			service.identifier,
+			trustedByIdentifier,
+		)
+		if (planned) {
+			return priority
+		}
+		const outcome = outcomeOf(service)
+		if (outcome === "keep") {
+			eligibleIncomplete.push(service)
+			return priority
+		}
+		return demoteRecoverNow(
+			priority,
+			outcome,
+			unhealthyDependenciesOf(service, servicesByIdentifier),
+		)
+	})
+
+	for (const service of [...eligibleIncomplete].sort(
+		(left, right) =>
+			BUSINESS_IMPACT_WEIGHTS[right.businessImpact] -
+			BUSINESS_IMPACT_WEIGHTS[left.businessImpact],
+	)) {
+		if (service.recoveryCapacityUnits > remaining) {
+			const index = nextPriorities.findIndex(
+				(priority) =>
+					isRecord(priority) &&
+					textOf(priority, "serviceIdentifier") ===
+						service.identifier,
+			)
+			if (index >= 0 && isRecord(nextPriorities[index])) {
+				nextPriorities[index] = demoteRecoverNow(
+					nextPriorities[index],
+					"postpone",
+					[],
+				)
+			}
+			continue
+		}
+		remaining -= service.recoveryCapacityUnits
+		toInject.push(service)
+	}
+
+	const hasUnhealthyRecoverNow = nextPriorities.some((priority) => {
+		if (!isRecord(priority)) {
+			return false
+		}
+		const service = servicesByIdentifier.get(
+			textOf(priority, "serviceIdentifier"),
+		)
+		return (
+			textOf(priority, "decision") === "recover-now" &&
+			service !== undefined &&
+			service.status !== "healthy"
+		)
+	})
+	if (!hasUnhealthyRecoverNow) {
+		const candidate = records
+			.map((priority) => {
+				const service = servicesByIdentifier.get(
+					textOf(priority, "serviceIdentifier"),
+				)
+				if (!service || blocked.has(service.identifier)) {
+					return null
+				}
+				if (
+					service.status === "healthy" ||
+					service.status === "recovering"
+				) {
+					return null
+				}
+				if (
+					unhealthyDependenciesOf(service, servicesByIdentifier)
+						.length
+				) {
+					return null
+				}
+				if (service.recoveryCapacityUnits > remaining) {
+					return null
+				}
+				return service
+			})
+			.filter((service): service is IncidentService => service !== null)
+			.sort(
+				(left, right) =>
+					BUSINESS_IMPACT_WEIGHTS[right.businessImpact] -
+					BUSINESS_IMPACT_WEIGHTS[left.businessImpact],
+			)[0]
+		if (candidate) {
+			if (
+				!hasExecuteRecovery(
+					steps,
+					candidate.identifier,
+					trustedByIdentifier,
+				)
+			) {
+				remaining -= candidate.recoveryCapacityUnits
+				toInject.push(candidate)
+			}
+			const index = nextPriorities.findIndex(
+				(priority) =>
+					isRecord(priority) &&
+					textOf(priority, "serviceIdentifier") ===
+						candidate.identifier,
+			)
+			if (index >= 0 && isRecord(nextPriorities[index])) {
+				nextPriorities[index] = {
+					...nextPriorities[index],
+					blockedBy: [],
+					decision: "recover-now",
+					reason:
+						textOf(nextPriorities[index], "reason") ||
+						"Highest-impact service that fits remaining reported capacity",
+				}
+			}
+		}
+	}
+
+	return {
+		priorities: nextPriorities,
+		steps: insertRecoverySteps(
+			steps,
+			toInject,
+			resource,
+			input,
+			trustedByIdentifier,
+		),
+	}
 }

@@ -474,6 +474,23 @@ export function validateLlmPlan(
 			"must explain a conservative assumed capacity below the reported total",
 		)
 	}
+	const remainingReported =
+		context.resource.totalCapacity - context.resource.allocatedCapacity
+	const insight = input.capacityAssumption
+	const insightApplies =
+		insight !== null &&
+		(!insight.resourceIdentifier ||
+			insight.resourceIdentifier === context.resource.identifier)
+	if (
+		capacity.assumedCapacity === 0 &&
+		remainingReported > 0 &&
+		!(insightApplies && insight.assumedCapacity === 0)
+	) {
+		fail(
+			"plan.capacity.assumedCapacity",
+			"unconfirmed reported capacity is still usable; assumedCapacity cannot be 0 while remaining units exist",
+		)
+	}
 	const rawSteps = array(rawPlan.steps, "plan.steps")
 	const previousSteps = validatePreviousSteps(input.previousPlan)
 	const previousByIdentifier = new Map(
@@ -531,6 +548,7 @@ export function validateLlmPlan(
 	validateStepOrders(sequenced.map(({ step }) => step))
 	validateDependencyGraph(sequenced.map(({ step }) => step))
 	validateRecoverySteps(sequenced, priorities, capacity, context, input)
+	validatePendingFactsHaveCall(sequenced, input)
 
 	const reason = nonEmptyString(rawPlan.reason, "plan.reason")
 	const summary = nonEmptyString(rawPlan.summary, "plan.summary")
@@ -1607,6 +1625,32 @@ function validateRecoverySteps(
 	void byIdentifier
 }
 
+function validatePendingFactsHaveCall(
+	steps: ReadonlyArray<ParsedStep>,
+	input: PlanBuildInput,
+): void {
+	const pendingFacts = input.incident.facts.some(
+		(fact) => fact.status === "pending",
+	)
+	if (!pendingFacts) {
+		return
+	}
+	const current = steps.some(
+		({ step }) =>
+			step.invocation.name === "call_engineer" ||
+			step.invocation.name === "contact_engineer",
+	)
+	const previous = (input.previousPlan?.steps ?? []).some(
+		(step) =>
+			(step.invocation.name === "call_engineer" ||
+				step.invocation.name === "contact_engineer") &&
+			step.status !== "failed",
+	)
+	if (!current && !previous) {
+		fail("plan.steps", "pending facts require a call_engineer step")
+	}
+}
+
 function parseInvocation(
 	value: unknown,
 	path: string,
@@ -1904,9 +1948,15 @@ function isTrustedStep(
 			(candidate) =>
 				candidate.identifier === step.identifier &&
 				CARRIED_STATUSES.has(candidate.status) &&
-				structurallyEqual(candidate, step),
+				structurallyEqual(withoutOrder(candidate), withoutOrder(step)),
 		),
 	)
+}
+
+/** `sequenceSteps` owns `order` after merge, so a carried step stays trusted when only that number changes. */
+function withoutOrder(step: PlanStep): unknown {
+	const { order: _order, ...rest } = step
+	return rest
 }
 
 function parseActor(value: unknown, path: string): Actor {

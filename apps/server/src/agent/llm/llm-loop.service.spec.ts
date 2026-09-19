@@ -11,7 +11,10 @@ import { SubagentRunnerService } from "@agent/llm/subagent-runner.service"
 import { PlanBuildInput, PlanDraft } from "@agent/types/agent.type"
 import { IncidentSnapshot } from "@incidents/types/incident.type"
 import { PlanRecord, PlanStep } from "@plans/types/plan.type"
-import { createImpactedIncident } from "@root/testing/incident.fixture"
+import {
+	createImpactedIncident,
+	createLastDegradedIncident,
+} from "@root/testing/incident.fixture"
 import { METEORITE_SCENARIO } from "@scenarios/constants/meteorite-scenario.constant"
 
 jest.mock("@agent/llm/plan-validation", () => ({
@@ -1041,6 +1044,122 @@ describe("LlmLoopService", () => {
 		expect(actions.execute).toHaveBeenCalledTimes(1)
 	})
 
+	it("rejects waiting after a local task while an engineer call is still runnable", async () => {
+		const incident = createImpactedIncident(12)
+		const base = createActivePlan(incident)
+		const plan: PlanRecord = {
+			...base,
+			steps: [
+				{
+					approvalIdentifier: "",
+					attempts: 0,
+					capacityUnits: 0,
+					dependsOn: [],
+					identifier: "stp_contact-engineer",
+					invocation: {
+						input: {
+							engineerName: "Marta Ruiz",
+							engineerPhone: "+34600000000",
+							engineerRole: "Platform on-call engineer",
+							purpose: "Confirm pending facts",
+							questions: [
+								{
+									key: "traffic-failover-authorized",
+									question: "Authorize failover?",
+								},
+							],
+						},
+						name: "call_engineer",
+					},
+					order: 1,
+					owner: { kind: "engineer", name: "Marta Ruiz" },
+					reason: "Call the on-call engineer",
+					requiresApproval: false,
+					resultSummary: "",
+					serviceIdentifier: "",
+					status: "proposed",
+					statusReason: "",
+					title: "Call Marta Ruiz",
+					toolCallIdentifier: "",
+					updatedAt: incident.updatedAt,
+				},
+				{
+					approvalIdentifier: "",
+					attempts: 0,
+					capacityUnits: 0,
+					dependsOn: [],
+					identifier: "stp_investigate_task",
+					invocation: {
+						input: {
+							assigneeName:
+								METEORITE_SCENARIO.supportContact.name,
+							assigneeRole:
+								METEORITE_SCENARIO.supportContact.role,
+							description: "Confirm snapshot",
+							priority: "critical",
+							serviceIdentifier: "orders-database",
+							title: "Confirm Muscat",
+						},
+						name: "assign_task",
+					},
+					order: 2,
+					owner: {
+						kind: "engineer",
+						name: METEORITE_SCENARIO.supportContact.name,
+					},
+					reason: "Need independent confirmation",
+					requiresApproval: false,
+					resultSummary: "",
+					serviceIdentifier: "orders-database",
+					status: "proposed",
+					statusReason: "",
+					title: "Coordinate confirmations",
+					toolCallIdentifier: "",
+					updatedAt: incident.updatedAt,
+				},
+				...base.steps,
+			],
+		}
+		const { activity, client, service } = createHarness(4)
+		const actions = createActions(() =>
+			createState(createInput(incident, plan)),
+		)
+		client.complete
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("execute_step", {
+						stepIdentifier: "stp_investigate_task",
+					}),
+				]),
+			)
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("wait_for_input", {
+						reason: "Waiting for operator confirmation",
+					}),
+				]),
+			)
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("wait_for_input", {
+						reason: "The call cannot run because the voice provider is limited",
+					}),
+				]),
+			)
+
+		const outcome = await service.run(actions as unknown as LlmLoopActions)
+
+		expect(outcome).toMatchObject({ executedSteps: 1, kind: "completed" })
+		expect(actions.execute).toHaveBeenCalledTimes(1)
+		expect(actions.execute).toHaveBeenCalledWith(
+			"stp_investigate_task",
+			expect.anything(),
+		)
+		expect(JSON.stringify(activityInputs(activity))).toContain(
+			"stp_contact-engineer",
+		)
+	})
+
 	it("executes the step selected by the model instead of the first ordered step", async () => {
 		const incident = createImpactedIncident(12)
 		const plan = createActivePlan(incident)
@@ -1212,5 +1331,389 @@ describe("complete public turn records", () => {
 			text: "Try a step",
 		})
 		expect(JSON.stringify(rejected)).not.toContain("private-value")
+	})
+
+	it("repairs a post-recovery propose_plan onto Bahrain instead of stalling", async () => {
+		const { validateLlmPlan: actualValidate } = jest.requireActual(
+			"@agent/llm/plan-validation",
+		) as { validateLlmPlan: typeof validateLlmPlan }
+		validateLlmPlanMock.mockReset()
+		validateLlmPlanMock.mockImplementation(actualValidate)
+		const incident = createImpactedIncident(4)
+		const recovered: IncidentSnapshot = {
+			...incident,
+			resources: incident.resources.map((resource, index) =>
+				index === 0 ? { ...resource, allocatedCapacity: 4 } : resource,
+			),
+			services: incident.services.map((service) =>
+				service.identifier === "orders-database"
+					? { ...service, status: "healthy" }
+					: service,
+			),
+			status: "partially-recovered",
+		}
+		const database = recovered.services.find(
+			(service) => service.identifier === "orders-database",
+		)
+		if (!database) throw new Error("fixture lacks orders-database")
+		const previous = createActivePlan(recovered)
+		const completedCall: PlanStep = {
+			approvalIdentifier: "",
+			attempts: 1,
+			capacityUnits: 0,
+			dependsOn: [],
+			identifier: "stp_engineer_call",
+			invocation: {
+				input: {
+					engineerName: "Marta Ruiz",
+					engineerPhone: "+34600000000",
+					engineerRole: "Platform on-call engineer",
+					purpose: "Request permission",
+					questions: [
+						{
+							key: "traffic-failover-authorized",
+							question: "Authorize failover?",
+						},
+					],
+				},
+				name: "call_engineer",
+			},
+			order: 1,
+			owner: { kind: "engineer", name: "Marta Ruiz" },
+			reason: "Call the engineer",
+			requiresApproval: false,
+			resultSummary: "Authorized",
+			serviceIdentifier: "",
+			status: "completed",
+			statusReason: "Completed",
+			title: "Call engineer",
+			toolCallIdentifier: "tool_call",
+			updatedAt: recovered.updatedAt,
+		}
+		const previousPlan: PlanRecord = {
+			...previous,
+			capacity: {
+				...previous.capacity,
+				assumedCapacity: 4,
+				plannedUnits: 4,
+				remainingUnits: 0,
+				resourceIdentifier: "backup-oman",
+				totalCapacity: 4,
+			},
+			steps: [
+				completedCall,
+				{
+					...createExecuteStep(recovered, "orders-database", 2),
+					attempts: 1,
+					status: "completed",
+					statusReason: "Completed",
+					toolCallIdentifier: "tool_execute",
+				},
+				{
+					approvalIdentifier: "",
+					attempts: 1,
+					capacityUnits: 0,
+					dependsOn: ["stp_orders-database_execute"],
+					identifier: "stp_orders-database_verify",
+					invocation: {
+						input: {
+							recoveryActionIdentifier: "",
+							serviceIdentifier: "orders-database",
+						},
+						name: "verify_recovery",
+					},
+					order: 3,
+					owner: { kind: "agent", name: "Casa Pepe agent" },
+					reason: "Verify the failover",
+					requiresApproval: false,
+					resultSummary: "Healthy",
+					serviceIdentifier: "orders-database",
+					status: "completed",
+					statusReason: "Completed",
+					title: "Verify database",
+					toolCallIdentifier: "tool_verify",
+					updatedAt: recovered.updatedAt,
+				},
+			],
+		}
+		const state = createState(createInput(recovered, previousPlan))
+		const dump = {
+			assumptions: ["Oman is full after the database failover"],
+			capacity: {
+				assumedCapacity: 4,
+				confirmed: false,
+				plannedUnits: 4,
+				postponedUnits: 10,
+				remainingUnits: 0,
+				resourceIdentifier: "backup-oman",
+				totalCapacity: 4,
+			},
+			priorities: recovered.services.map((service, index) => ({
+				blockedBy: [],
+				businessImpact: service.businessImpact,
+				capacityUnits: service.recoveryCapacityUnits,
+				decision:
+					service.identifier === "orders-database"
+						? "already-healthy"
+						: "postpone",
+				rank: index + 1,
+				reason: "Dump revision",
+				score: 100 - index,
+				serviceIdentifier: service.identifier,
+				serviceName: service.name,
+			})),
+			reason: "Preserve the recovered database",
+			steps: [
+				{
+					approvalIdentifier: "",
+					attempts: 0,
+					capacityUnits: 0,
+					dependsOn: [],
+					identifier: "stp_engineer_call_2",
+					invocation: {
+						input: {
+							engineerName: "Marta Ruiz",
+							engineerPhone: "+34600000000",
+							engineerRole: "Platform on-call engineer",
+							purpose: "Chase remaining facts",
+							questions: [
+								{
+									key: "backup-capacity-available",
+									question: "Authorize remaining capacity?",
+								},
+							],
+						},
+						name: "call_engineer",
+					},
+					order: 1,
+					owner: { kind: "engineer", name: "Marta Ruiz" },
+					reason: "Follow-up call",
+					requiresApproval: false,
+					resultSummary: "",
+					serviceIdentifier: "",
+					status: "proposed",
+					statusReason: "",
+					title: "Call engineer again",
+					toolCallIdentifier: "",
+					updatedAt: recovered.updatedAt,
+				},
+			],
+			summary: "Wait for another call",
+		}
+		const { client, service } = createHarness(2)
+		const actions = createActions(() => state)
+		actions.save.mockImplementation(async (draft) => ({
+			...previousPlan,
+			...draft,
+			identifier: "plan_repaired",
+			version: 2,
+		}))
+		client.complete
+			.mockResolvedValueOnce(
+				completion([toolCall("propose_plan", dump)], "Revising."),
+			)
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("wait_for_input", {
+						reason: "Waiting after the repaired plan",
+					}),
+				]),
+			)
+
+		const outcome = await service.run(actions as unknown as LlmLoopActions)
+
+		expect(outcome.kind).toBe("completed")
+		expect(actions.save).toHaveBeenCalled()
+		const saved = actions.save.mock.calls[0][0] as PlanDraft
+		expect(
+			saved.priorities.find(
+				(priority) => priority.serviceIdentifier === "orders-database",
+			),
+		).toMatchObject({ capacityUnits: 0, decision: "already-healthy" })
+		expect(
+			saved.priorities.find(
+				(priority) => priority.serviceIdentifier === "route-assignment",
+			)?.decision,
+		).toBe("recover-now")
+		expect(saved.capacity.resourceIdentifier).toBe("backup-bahrain")
+		expect(
+			saved.steps.find(
+				(step) => step.identifier === "stp_route-assignment_execute",
+			)?.status,
+		).toBe("proposed")
+		const executeOrder =
+			saved.steps.find(
+				(step) => step.identifier === "stp_route-assignment_execute",
+			)?.order ?? Number.POSITIVE_INFINITY
+		const followUpOrder =
+			saved.steps.find(
+				(step) => step.identifier === "stp_engineer_call_2",
+			)?.order ?? Number.POSITIVE_INFINITY
+		expect(executeOrder).toBeLessThan(followUpOrder)
+	})
+
+	it("accepts a leftover notifications propose_plan on Bahrain instead of stalling", async () => {
+		const { validateLlmPlan: actualValidate } = jest.requireActual(
+			"@agent/llm/plan-validation",
+		) as { validateLlmPlan: typeof validateLlmPlan }
+		validateLlmPlanMock.mockReset()
+		validateLlmPlanMock.mockImplementation(actualValidate)
+		const leftover = createLastDegradedIncident()
+		const database = leftover.services.find(
+			(service) => service.identifier === "orders-database",
+		)
+		if (!database) throw new Error("fixture lacks orders-database")
+		const previous = createActivePlan(leftover)
+		const completedCall: PlanStep = {
+			approvalIdentifier: "",
+			attempts: 1,
+			capacityUnits: 0,
+			dependsOn: [],
+			identifier: "stp_engineer_call",
+			invocation: {
+				input: {
+					engineerName: "Marta Ruiz",
+					engineerPhone: "+34600000000",
+					engineerRole: "Platform on-call engineer",
+					purpose: "Request permission",
+					questions: [
+						{
+							key: "traffic-failover-authorized",
+							question: "Authorize failover?",
+						},
+					],
+				},
+				name: "call_engineer",
+			},
+			order: 1,
+			owner: { kind: "engineer", name: "Marta Ruiz" },
+			reason: "Call the engineer",
+			requiresApproval: false,
+			resultSummary: "Authorized",
+			serviceIdentifier: "",
+			status: "completed",
+			statusReason: "Completed",
+			title: "Call engineer",
+			toolCallIdentifier: "tool_call",
+			updatedAt: leftover.updatedAt,
+		}
+		const previousPlan: PlanRecord = {
+			...previous,
+			capacity: {
+				...previous.capacity,
+				assumedCapacity: 4,
+				plannedUnits: 4,
+				remainingUnits: 0,
+				resourceIdentifier: "backup-oman",
+				totalCapacity: 4,
+			},
+			steps: [
+				completedCall,
+				{
+					...createExecuteStep(leftover, "orders-database", 2),
+					attempts: 1,
+					status: "completed",
+					statusReason: "Completed",
+					toolCallIdentifier: "tool_execute",
+				},
+				{
+					approvalIdentifier: "",
+					attempts: 1,
+					capacityUnits: 0,
+					dependsOn: ["stp_orders-database_execute"],
+					identifier: "stp_orders-database_verify",
+					invocation: {
+						input: {
+							recoveryActionIdentifier: "",
+							serviceIdentifier: "orders-database",
+						},
+						name: "verify_recovery",
+					},
+					order: 3,
+					owner: { kind: "agent", name: "Casa Pepe agent" },
+					reason: "Verify the failover",
+					requiresApproval: false,
+					resultSummary: "Healthy",
+					serviceIdentifier: "orders-database",
+					status: "completed",
+					statusReason: "Completed",
+					title: "Verify database",
+					toolCallIdentifier: "tool_verify",
+					updatedAt: leftover.updatedAt,
+				},
+			],
+		}
+		const state = createState(createInput(leftover, previousPlan))
+		const dump = {
+			assumptions: ["Oman is full and only notifications remain"],
+			capacity: {
+				assumedCapacity: 4,
+				confirmed: false,
+				plannedUnits: 4,
+				postponedUnits: 1,
+				remainingUnits: 0,
+				resourceIdentifier: "backup-oman",
+				totalCapacity: 4,
+			},
+			priorities: leftover.services.map((service, index) => ({
+				blockedBy: [],
+				businessImpact: service.businessImpact,
+				capacityUnits: service.recoveryCapacityUnits,
+				decision:
+					service.identifier === "customer-notifications"
+						? "postpone"
+						: "already-healthy",
+				rank: index + 1,
+				reason: "Dump revision",
+				score: 100 - index,
+				serviceIdentifier: service.identifier,
+				serviceName: service.name,
+			})),
+			reason: "No remaining Oman capacity",
+			steps: [],
+			summary: "Wait because Oman is full",
+		}
+		const { client, service } = createHarness(2)
+		const actions = createActions(() => state)
+		actions.save.mockImplementation(async (draft) => ({
+			...previousPlan,
+			...draft,
+			identifier: "plan_repaired",
+			version: 2,
+		}))
+		client.complete
+			.mockResolvedValueOnce(
+				completion([toolCall("propose_plan", dump)], "Revising."),
+			)
+			.mockResolvedValueOnce(
+				completion([
+					toolCall("wait_for_input", {
+						reason: "Waiting after the repaired plan",
+					}),
+				]),
+			)
+
+		const outcome = await service.run(actions as unknown as LlmLoopActions)
+
+		expect(outcome.kind).toBe("completed")
+		expect(actions.save).toHaveBeenCalled()
+		const saved = actions.save.mock.calls[0][0] as PlanDraft
+		expect(
+			saved.priorities.find(
+				(priority) =>
+					priority.serviceIdentifier === "customer-notifications",
+			)?.decision,
+		).toBe("recover-now")
+		expect(saved.capacity).toMatchObject({
+			plannedUnits: 9,
+			remainingUnits: 3,
+			resourceIdentifier: "backup-bahrain",
+		})
+		expect(
+			saved.steps.find(
+				(step) =>
+					step.identifier === "stp_customer-notifications_execute",
+			)?.status,
+		).toBe("proposed")
 	})
 })

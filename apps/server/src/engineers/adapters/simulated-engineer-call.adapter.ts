@@ -43,7 +43,14 @@ export class SimulatedEngineerCallAdapter implements EngineerCallAdapter {
 			deliverResult(request.call.identifier, {
 				answers,
 				outcome: "completed",
-				summary: request.simulatedScript.summary,
+				summary: answers.length
+					? answers
+							.map(
+								(answer) =>
+									`${answer.question}: ${answer.answer}`,
+							)
+							.join("\n")
+					: "Simulated call completed without questions; no technical facts or authorizations were obtained.",
 				transcript: answers
 					.map(
 						(answer) =>

@@ -526,22 +526,18 @@ In `HAPPYROBOT_MODE=live`, starting the call does `POST HAPPYROBOT_TRIGGER_URL` 
 ```json
 {
   "call_identifier": "call_…",
-  "run_identifier": "run_…",
-  "incident_identifier": "inc_…",
+  "incident_id": "inc_…",
   "engineer_name": "Marta Ruiz",
   "engineer_phone": "+34600000000",
-  "engineer_role": "Platform on-call engineer",
-  "purpose": "Confirm the state of the backup region…",
-  "questions": [
-    { "key": "database-snapshot", "question": "How old is the latest orders database snapshot…?" },
-    { "key": "route-assignment-readiness", "question": "Is the route assignment service ready…?" },
-    { "key": "backup-capacity", "question": "Can we count on the twelve compute units…?" }
-  ],
+  "severity": "high",
+  "incident_summary": "Confirm the state of the backup region…",
+  "affected_services": "Casa Pepe platform",
+  "ask_about": "1. [database-snapshot] How old is the latest orders database snapshot…?\n2. [route-assignment-readiness] Is the route assignment service ready…?\n3. [backup-capacity] Can we count on the twelve compute units…?",
   "callback_url": "<PUBLIC_BASE_URL>/api/webhooks/happyrobot"
 }
 ```
 
-The HappyRobot use case must: accept this JSON in a web trigger, run the voice agent with the three questions, extract one answer per `key` (ideally with a boolean `confirmed`), and finish with a webhook node that posts the result above to `callback_url` with the `x-happyrobot-signature` header. Field names on both sides can be adapted once the use case exists.
+The field names match the parameters of the HappyRobot "Predefined request" trigger of the `Casa Pepe — contact_engineer` workflow. `severity` and `affected_services` are fixed values because the call record does not carry them. `ask_about` lists the questions with their `key` in brackets so the extraction node can return one answer per key. The workflow must end with a webhook node that posts the result above to `callback_url` with the `x-happyrobot-signature` header and echoes `call_identifier` as `callIdentifier`.
 
 #### Timing and fallback
 

@@ -22,6 +22,38 @@ const AGENT_ACTOR: Actor = { kind: "agent", name: AGENT_ACTOR_NAME }
 
 const OPERATOR_ACTOR: Actor = { kind: "operator", name: "Operator" }
 
+/** Steps the server owns once dispatched; a revision must carry them unchanged. */
+const CARRIED_STATUSES: ReadonlySet<string> = new Set(["running", "completed"])
+
+const PLAN_KEYS: ReadonlyArray<string> = [
+	"priorities",
+	"capacity",
+	"steps",
+	"reason",
+	"summary",
+	"assumptions",
+]
+
+const STEP_KEYS: ReadonlyArray<string> = [
+	"approvalIdentifier",
+	"attempts",
+	"capacityUnits",
+	"dependsOn",
+	"identifier",
+	"invocation",
+	"order",
+	"owner",
+	"reason",
+	"requiresApproval",
+	"resultSummary",
+	"serviceIdentifier",
+	"status",
+	"statusReason",
+	"title",
+	"toolCallIdentifier",
+	"updatedAt",
+]
+
 function isRecord(value: unknown): value is UnknownRecord {
 	return (
 		value !== null &&
@@ -73,11 +105,20 @@ export function repairLlmPlanDraft(
 			.filter((priority) => priority.decision === "postpone")
 			.map((priority) => textOf(priority, "serviceIdentifier")),
 	)
+	const trustedByIdentifier = new Map(
+		(input.previousPlan ? input.previousPlan.steps : [])
+			.filter((step) => CARRIED_STATUSES.has(step.status))
+			.map((step) => [step.identifier, step]),
+	)
 	const repairedSteps = value.steps.map((step) => {
+		// Dispatched work is server state: the model only has to keep listing it.
 		const trusted = isRecord(step)
-			? carried.get(textOf(step, "identifier"))
+			? trustedByIdentifier.get(textOf(step, "identifier"))
 			: undefined
-		return trusted ?? repairStep(step, input, servicesByIdentifier)
+		if (trusted) {
+			return trusted
+		}
+		return repairStep(step, input, servicesByIdentifier)
 	})
 	const stepServiceByIdentifier = new Map(
 		repairedSteps
@@ -107,30 +148,160 @@ export function repairLlmPlanDraft(
 		})
 		return { ...step, dependsOn }
 	})
-	// This total is bookkeeping, not a model decision. Leave invalid priority
-	// lists to the validator rather than guessing missing services or costs.
-	let capacity = value.capacity
-	if (isRecord(capacity) && Array.isArray(value.priorities)) {
-		const identifiers = new Set<string>()
-		let postponedUnits = 0
-		const valid = value.priorities.every((priority) => {
-			if (!isRecord(priority)) return false
-			const identifier = textOf(priority, "serviceIdentifier")
-			const service = servicesByIdentifier.get(identifier)
-			if (!service || identifiers.has(identifier)) return false
-			identifiers.add(identifier)
-			if (priority.decision === "postpone")
-				postponedUnits += service.recoveryCapacityUnits
-			return true
-		})
-		if (
-			valid &&
-			identifiers.size === servicesByIdentifier.size &&
-			Number.isFinite(postponedUnits)
-		)
-			capacity = { ...capacity, postponedUnits }
+	const priorities = repairPriorities(value.priorities, servicesByIdentifier)
+	return onlyKeys(
+		{
+			...value,
+			capacity: repairCapacity(
+				value.capacity,
+				priorities,
+				steps,
+				trustedByIdentifier,
+				input,
+			),
+			priorities,
+			steps: steps.map((step) =>
+				isRecord(step) ? onlyKeys(step, STEP_KEYS) : step,
+			),
+		},
+		PLAN_KEYS,
+	)
+}
+
+function onlyKeys(
+	value: UnknownRecord,
+	keys: ReadonlyArray<string>,
+): UnknownRecord {
+	return Object.fromEntries(
+		Object.entries(value).filter(([key]) => keys.includes(key)),
+	)
+}
+
+/**
+ * Service names and blockers are copies of trusted state, so a revision should not be
+ * rejected over their spelling or over listing something that is not a dependency.
+ */
+function repairPriorities(
+	value: unknown,
+	servicesByIdentifier: ReadonlyMap<
+		string,
+		PlanBuildInput["incident"]["services"][number]
+	>,
+): unknown {
+	if (!Array.isArray(value)) {
+		return value
 	}
-	return { ...value, capacity, steps }
+	return value.map((priority) => {
+		if (!isRecord(priority)) {
+			return priority
+		}
+		const service = servicesByIdentifier.get(
+			textOf(priority, "serviceIdentifier"),
+		)
+		if (!service) {
+			return priority
+		}
+		const unhealthy = service.dependencies.filter(
+			(dependency) =>
+				servicesByIdentifier.get(dependency)?.status !== "healthy",
+		)
+		const decision = textOf(priority, "decision")
+		const blockedBy =
+			decision === "recover-now" || decision === "already-healthy"
+				? []
+				: unhealthy
+		return { ...priority, blockedBy, serviceName: service.name }
+	})
+}
+
+/**
+ * The capacity block is arithmetic over trusted state and the plan's own decisions, so it is
+ * derived here instead of being rejected field by field. Costs come from the incident, never
+ * from the model's numbers, and an incomplete or contradictory priority list is left to the
+ * validator rather than guessed.
+ */
+function repairCapacity(
+	value: unknown,
+	priorities: unknown,
+	steps: ReadonlyArray<unknown>,
+	trustedByIdentifier: ReadonlyMap<string, unknown>,
+	input: PlanBuildInput,
+): unknown {
+	if (!isRecord(value) || !Array.isArray(priorities)) {
+		return value
+	}
+	const servicesByIdentifier = new Map(
+		input.incident.services.map((service) => [service.identifier, service]),
+	)
+	const seen = new Set<string>()
+	let postponedUnits = 0
+	const valid = priorities.every((priority) => {
+		if (!isRecord(priority)) return false
+		const identifier = textOf(priority, "serviceIdentifier")
+		const service = servicesByIdentifier.get(identifier)
+		if (!service || seen.has(identifier)) return false
+		seen.add(identifier)
+		if (textOf(priority, "decision") === "postpone") {
+			postponedUnits += service.recoveryCapacityUnits
+		}
+		return true
+	})
+	if (!valid || seen.size !== servicesByIdentifier.size) {
+		return value
+	}
+	const resource =
+		input.incident.resources.find(
+			(candidate) =>
+				candidate.identifier === textOf(value, "resourceIdentifier"),
+		) ?? input.incident.resources[0]
+	if (!resource) {
+		return { ...value, postponedUnits }
+	}
+	const totals = {
+		...value,
+		confirmed: resource.confirmed,
+		postponedUnits,
+		resourceIdentifier: resource.identifier,
+		totalCapacity: resource.totalCapacity,
+	}
+	if (!steps.length) {
+		return totals
+	}
+	const newRecoveryUnits = steps
+		.filter(isRecord)
+		.filter((step) => !trustedByIdentifier.has(textOf(step, "identifier")))
+		.filter((step) => {
+			const invocation = step.invocation
+			return (
+				isRecord(invocation) &&
+				textOf(invocation, "name") === "execute_recovery"
+			)
+		})
+		.reduce((total, step) => {
+			const service = servicesByIdentifier.get(
+				textOf(step, "serviceIdentifier"),
+			)
+			return total + (service ? service.recoveryCapacityUnits : 0)
+		}, 0)
+	const plannedUnits = resource.allocatedCapacity + newRecoveryUnits
+	const assumedCapacity = Math.max(
+		numberOf(value, "assumedCapacity"),
+		plannedUnits,
+	)
+	return {
+		...totals,
+		assumedCapacity,
+		plannedUnits,
+		remainingUnits: assumedCapacity - plannedUnits,
+	}
+}
+
+function numberOf(value: UnknownRecord, key: string): number {
+	const candidate = value[key]
+	return Object.prototype.toString.call(candidate) === "[object Number]" &&
+		Number.isFinite(candidate)
+		? (candidate as number)
+		: 0
 }
 
 function repairStep(

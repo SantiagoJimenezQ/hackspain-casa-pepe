@@ -208,21 +208,24 @@ export class EngineersService {
 		}
 	}
 
+	/**
+	 * Stores permissions the contact granted out loud while the line is still open. They go in
+	 * `result` because the call is not finished yet and nothing reads that field until the status
+	 * says so: every consumer switches on `status`. When the provider analysis finally lands,
+	 * `completeCall` overwrites this partial, and the adapter has already merged what it needs.
+	 */
 	async recordLiveAuthorizations(
 		report: LiveAuthorizationReport,
 	): Promise<EngineerCallRecord> {
 		const entity = await this.getEntity(report.callIdentifier)
-		const runActive = await this.runsService.isRunActive(
-			entity.runIdentifier,
-		)
-		if (!runActive) {
+		if (!(await this.runsService.isRunActive(entity.runIdentifier))) {
 			this.logger.warn(LOG_MESSAGES.ENGINEERS.CALL_RESULT_IGNORED, {
 				callIdentifier: report.callIdentifier,
 				runIdentifier: entity.runIdentifier,
 			})
 			throw new StaleRunException(entity.runIdentifier)
 		}
-		// A finished call already has provider-analysed permissions; a late live report
+		// A terminal call already carries provider-analysed permissions. A late live report
 		// must never overwrite them.
 		if (entity.status !== "in-progress") {
 			this.logger.warn(
@@ -235,7 +238,7 @@ export class EngineersService {
 			throw new InvalidStateTransitionException(
 				ENGINEER_CALL_ENTITY_NAME,
 				entity.status,
-				"receive a live authorization",
+				"receive live permissions",
 			)
 		}
 		const authorizations: EngineerCallAuthorizations = {
@@ -248,7 +251,14 @@ export class EngineersService {
 				value: report.trafficFailoverAuthorized,
 			},
 		}
-		entity.liveAuthorizations = authorizations
+		const summary = summariseLivePermissions(entity.engineer.name, report)
+		entity.result = {
+			answers: [],
+			authorizations,
+			outcome: "completed",
+			summary,
+			transcript: "",
+		}
 		const record = toEngineerCallRecord(
 			await updateEntity(this.repository, entity),
 		)
@@ -268,7 +278,7 @@ export class EngineersService {
 			runIdentifier: record.runIdentifier,
 			simulated: record.mode === "simulated",
 			source: "integration",
-			summary: summariseAuthorizations(record.engineer.name, report),
+			summary,
 			title: "Engineer granted permissions during the call",
 			type: "engineer-call.authorized",
 		})
@@ -460,7 +470,6 @@ export function toEngineerCallRecord(
 			servicesDown: [],
 		},
 		incidentIdentifier: entity.incidentIdentifier,
-		liveAuthorizations: entity.liveAuthorizations ?? null,
 		mode: entity.mode,
 		planStepIdentifier: entity.planStepIdentifier,
 		provider: entity.provider ?? undefined,
@@ -476,7 +485,7 @@ export function toEngineerCallRecord(
 	}
 }
 
-function summariseAuthorizations(
+function summariseLivePermissions(
 	contactName: string,
 	report: LiveAuthorizationReport,
 ): string {
@@ -490,5 +499,5 @@ function summariseAuthorizations(
 		granted.length > 0
 			? `authorised ${granted.join(" and ")}`
 			: "refused both permissions"
-	return `${contactName} ${verdict} during the call. Claim reported by the voice agent, not a plan approval.`
+	return `${contactName} ${verdict} while still on the call. Reported by the voice agent, pending the provider analysis.`
 }

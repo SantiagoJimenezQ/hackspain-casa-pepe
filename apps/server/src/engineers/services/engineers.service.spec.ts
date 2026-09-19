@@ -165,7 +165,7 @@ describe("EngineersService outbound call runtime", () => {
 	})
 })
 
-describe("EngineersService live authorizations", () => {
+describe("EngineersService live permissions", () => {
 	const report = {
 		callIdentifier: "",
 		notifyAllClients: true,
@@ -173,7 +173,7 @@ describe("EngineersService live authorizations", () => {
 		trafficFailoverAuthorized: true,
 	}
 
-	it("stores permissions reported while the call is still open", async () => {
+	it("stores permissions while the call is still open, without ending it", async () => {
 		const state = setup()
 		const started = await state.service.startCall(command())
 
@@ -183,10 +183,10 @@ describe("EngineersService live authorizations", () => {
 		})
 
 		expect(record.status).toBe("in-progress")
-		expect(record.liveAuthorizations?.notifyAllClients.value).toBe(true)
-		expect(record.liveAuthorizations?.trafficFailoverAuthorized.value).toBe(
-			true,
-		)
+		expect(record.result?.authorizations?.notifyAllClients.value).toBe(true)
+		expect(
+			record.result?.authorizations?.trafficFailoverAuthorized.value,
+		).toBe(true)
 		expect(state.activity.record).toHaveBeenCalledWith(
 			expect.objectContaining({ type: "engineer-call.authorized" }),
 		)
@@ -211,13 +211,26 @@ describe("EngineersService live authorizations", () => {
 			trafficFailoverAuthorized: false,
 		})
 
-		expect(record.liveAuthorizations?.notifyAllClients.value).toBe(false)
-		expect(record.liveAuthorizations?.notifyAllClients.rationale).toBe(
-			"He refused.",
-		)
+		expect(record.result?.authorizations?.notifyAllClients.value).toBe(false)
 	})
 
-	it("refuses a late report once the provider analysis already landed", async () => {
+	it("lets the provider analysis overwrite the live report when the call ends", async () => {
+		const state = setup()
+		const started = await state.service.startCall(command())
+		await state.service.recordLiveAuthorizations({
+			...report,
+			callIdentifier: started.identifier,
+		})
+
+		await state.service.completeCall(started.identifier, result)
+		const finished = await state.service.getByIdentifier(started.identifier)
+
+		expect(finished.status).toBe("completed")
+		expect(finished.result?.authorizations).toEqual(result.authorizations)
+		expect(finished.result?.transcript).toBe(result.transcript)
+	})
+
+	it("refuses a late report once the call is terminal", async () => {
 		const state = setup()
 		const started = await state.service.startCall(command())
 		await state.service.completeCall(started.identifier, result)
@@ -230,7 +243,7 @@ describe("EngineersService live authorizations", () => {
 		).rejects.toThrow()
 	})
 
-	it("ignores a report that belongs to a run that is no longer active", async () => {
+	it("ignores a report from a run that is no longer active", async () => {
 		const state = setup()
 		const started = await state.service.startCall(command())
 		state.runs.isRunActive.mockResolvedValue(false)

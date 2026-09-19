@@ -265,7 +265,7 @@ export class ElevenLabsEngineerCallAdapter implements EngineerCallAdapter {
 					null,
 					failureOutcome,
 					call.questions,
-					call.liveAuthorizations,
+					call.result?.authorizations,
 				)
 			}
 
@@ -428,7 +428,7 @@ function buildResult(
 	analysis: JSONRecord | null,
 	outcome: EngineerCallResult["outcome"],
 	questions: ReadonlyArray<EngineerQuestion>,
-	live: EngineerCallAuthorizations | null | undefined,
+	live: EngineerCallAuthorizations | undefined,
 ): ProviderCallResult {
 	return {
 		answers: answersFrom(analysis?.data_collection_results, questions),
@@ -455,17 +455,17 @@ function buildResult(
 }
 
 /**
- * Post-call extraction returns `null` whenever it cannot read a verdict from the transcript,
- * which happens often when the contact answers over the agent. A permission the agent already
- * reported out loud is better evidence than that silence, so it fills the gap. An extracted
- * verdict still wins: it saw the whole conversation.
+ * Post-call analysis returns `null` whenever it cannot read a verdict from the transcript,
+ * which is common when the contact answers over the agent. A permission the agent already
+ * reported while on the line is better evidence than that silence, so it fills the gap. An
+ * analysed verdict still wins: it saw the whole conversation.
  */
 function preferConclusive(
-	extracted: EngineerCallAuthorization,
+	analysed: EngineerCallAuthorization,
 	live: EngineerCallAuthorization | undefined,
 ): EngineerCallAuthorization {
-	if (extracted.value !== null || !live || live.value === null) {
-		return extracted
+	if (analysed.value !== null || !live || live.value === null) {
+		return analysed
 	}
 	return live
 }

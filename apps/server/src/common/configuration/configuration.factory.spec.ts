@@ -16,6 +16,26 @@ const VALID = {
 }
 
 describe("validateEnvironmentVariables", () => {
+	it.each([
+		[
+			"https://workflows.platform.eu.happyrobot.ai/hooks/test",
+			"webhook-key",
+		],
+		[
+			"https://platform.eu.happyrobot.ai/api/v2/workflows/test/runs",
+			"workspace-key",
+		],
+	])("selects the correct credential for %s", (triggerURL, expected) => {
+		const variables = validateEnvironmentVariables({
+			...VALID,
+			HAPPY_ROBOT_API_KEY_WEBHOOK: "webhook-key",
+			HAPPYROBOT_API_KEY: "workspace-key",
+			HAPPYROBOT_TRIGGER_URL: triggerURL,
+		})
+		expect(
+			createApplicationConfiguration(variables).happyRobot.apiKey,
+		).toBe(expected)
+	})
 	it("accepts a Postgres connection string", () => {
 		expect(validateEnvironmentVariables(VALID).SUPABASE_DATABASE_URL).toBe(
 			VALID.SUPABASE_DATABASE_URL,

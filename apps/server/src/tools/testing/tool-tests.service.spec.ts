@@ -410,6 +410,41 @@ describe("ToolTestsService", () => {
 		expect(adapter.start).not.toHaveBeenCalled()
 	})
 
+	it.each(["failed", "no-answer"] as const)(
+		"preserves a %s telephony outcome after provider acceptance",
+		async (outcome) => {
+			const { instance } = service(
+				config({
+					happyRobot: {
+						apiKey: "test",
+						mode: "live",
+						triggerURL: "https://example.com/trigger",
+						webhookSecret: "secret",
+					},
+				}),
+				{
+					start: jest.fn().mockResolvedValue({
+						kind: "accepted",
+						provider: "happyrobot",
+						providerReference: "run_test",
+					}),
+				},
+			)
+			const record = await instance.execute({
+				engineer: { name: "Test", phone: "+34600000000" },
+				idempotencyKey: outcome,
+				mode: "live",
+				tool: "call_engineer",
+			})
+			const result = await instance.completeCall({
+				callIdentifier: record.identifier,
+				outcome,
+			})
+			expect(result.status).not.toBe("succeeded")
+			expect(result.result).toMatchObject({ outcome })
+		},
+	)
+
 	it("expires an overdue callback even when nobody polled and preserves completed callbacks", async () => {
 		const { instance, repository } = service(
 			config({

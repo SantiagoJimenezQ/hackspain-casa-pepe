@@ -11,6 +11,8 @@ export const LOG_MESSAGES = {
 		CYCLE_STARTED: "Agent cycle started",
 		PLAN_CREATED: "Initial response plan created",
 		PLAN_REVISED: "Response plan revised after a change in conditions",
+		STALLED_RUN_RESUMED:
+			"Idle run with runnable work resumed after a lost cycle",
 		STEP_EXECUTION_FAILED: "Failed to execute a plan step",
 		STEP_WAITING_FOR_APPROVAL: "Plan step is waiting for operator approval",
 		TRIGGER_RECEIVED: "Agent trigger received",

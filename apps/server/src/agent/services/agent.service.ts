@@ -1,5 +1,8 @@
 import { ActivityService } from "@activity/services/activity.service"
-import { AGENT_TICK_INTERVAL_MILLISECONDS } from "@agent/constants/agent.constant"
+import {
+	AGENT_STALLED_RUN_MILLISECONDS,
+	AGENT_TICK_INTERVAL_MILLISECONDS,
+} from "@agent/constants/agent.constant"
 import { AGENT_MESSAGES } from "@agent/constants/agent-messages.constant"
 import { interpretAnswer } from "@agent/helpers/answer-interpretation.helper"
 import { stepIdentifierFor } from "@agent/helpers/plan-builder.helper"
@@ -65,6 +68,8 @@ const RUNNABLE_STATUSES: ReadonlyArray<PlanStep["status"]> = [
 
 @Injectable()
 export class AgentService {
+	private readonly stalledNudges = new Map<string, number>()
+
 	private readonly pendingChanges = new Map<string, AgentTrigger>()
 	private readonly logger = new Logger(AgentService.name)
 
@@ -261,7 +266,57 @@ export class AgentService {
 				).timeoutsExpired(expiredApprovals.length, expiredCalls.length),
 				kind: "timeouts-expired",
 			})
+			return
 		}
+		await this.resumeStalledRun(active)
+	}
+
+	/**
+	 * A cycle lost to a restart or a provider failure leaves the run idle with runnable work
+	 * and no event left to resume it. Nothing else notices, so the tick nudges it, spaced out
+	 * so a run the agent deliberately parked is not hammered.
+	 */
+	private async resumeStalledRun(active: IncidentEntity): Promise<void> {
+		if (this.cycleState.get(active.runIdentifier).inProgress) {
+			return
+		}
+		const nudgedAt = this.stalledNudges.get(active.runIdentifier) ?? 0
+		if (Date.now() - nudgedAt < AGENT_STALLED_RUN_MILLISECONDS) {
+			return
+		}
+		const plan = await this.plansService.findActivePlan(
+			active.runIdentifier,
+		)
+		if (!plan) {
+			return
+		}
+		const statusByIdentifier = new Map(
+			plan.steps.map((step) => [step.identifier, step.status]),
+		)
+		const awaited = plan.steps.some(
+			(step) =>
+				step.status === "running" ||
+				step.status === "awaiting-approval",
+		)
+		if (awaited) {
+			return
+		}
+		const runnable = plan.steps.some(
+			(step) =>
+				step.status === "proposed" &&
+				step.dependsOn.every(
+					(dependency) =>
+						statusByIdentifier.get(dependency) === "completed",
+				),
+		)
+		if (!runnable) {
+			return
+		}
+		this.stalledNudges.set(active.runIdentifier, Date.now())
+		this.logger.warn(LOG_MESSAGES.AGENT.STALLED_RUN_RESUMED, {
+			runIdentifier: active.runIdentifier,
+		})
+		await this.requestCycle(active.runIdentifier, { kind: "follow-up" })
 	}
 
 	async requestCycle(

@@ -114,7 +114,7 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 				description:
 					"Promover la réplica de la región de respaldo activa a primaria y apuntar la plataforma hacia ella",
 				kind: "failover-database",
-				requiresApproval: true,
+				requiresApproval: false,
 			},
 			recoveryCapacityUnits: 4,
 			simulatedRecovery: {

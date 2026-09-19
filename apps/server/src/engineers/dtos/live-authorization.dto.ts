@@ -30,7 +30,8 @@ export class LiveAuthorizationDTO implements LiveAuthorizationReport {
 
 	@ApiPropertyOptional({
 		default: "",
-		description: "What the contact said, so an operator can audit the claim",
+		description:
+			"What the contact said, so an operator can audit the claim",
 	})
 	@IsOptional()
 	@IsString()

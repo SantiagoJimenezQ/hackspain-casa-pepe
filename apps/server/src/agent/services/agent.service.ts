@@ -63,6 +63,7 @@ import {
 	ToolCallRecord,
 	ToolInvocation,
 } from "@tools/types/tool.type"
+import { EngineerCallAuthorizations } from "../../../../../packages/contracts/outbound-calls"
 
 const RUNNABLE_STATUSES: ReadonlyArray<PlanStep["status"]> = [
 	"proposed",
@@ -1107,6 +1108,12 @@ export class AgentService {
 					output.answers,
 					output.mode,
 				)
+				const authorized = await this.recordAuthorizationsFromCall(
+					incident,
+					output.authorizations,
+					output.mode,
+					messages,
+				)
 				await this.plansService.updateStep(
 					plan.identifier,
 					step.identifier,
@@ -1114,10 +1121,16 @@ export class AgentService {
 						attempts: step.attempts,
 						resultSummary: output.summary,
 						status: "completed",
-						statusReason: messages.factsConfirmed(
-							confirmed,
-							output.mode,
-						),
+						statusReason:
+							confirmed === 0 && authorized > 0
+								? messages.authorizationsRecorded(
+										authorized,
+										output.mode,
+									)
+								: messages.factsConfirmed(
+										confirmed,
+										output.mode,
+									),
 						toolCallIdentifier: toolCall.identifier,
 					},
 				)
@@ -1306,6 +1319,57 @@ export class AgentService {
 			statusReason: messages.verificationFailed(status, detail),
 			toolCallIdentifier: toolCall.identifier,
 		})
+	}
+
+	/**
+	 * A permission-only voice agent answers no technical question, but the on-call engineer's
+	 * explicit go-ahead is evidence of its own: it is recorded as a confirmed fact, and an
+	 * authorized failover settles the backup capacity the same engineer would otherwise have
+	 * confirmed by voice. A refusal or an unclear answer records nothing, so silence never
+	 * unblocks anything.
+	 */
+	private async recordAuthorizationsFromCall(
+		incident: IncidentSnapshot,
+		authorizations: EngineerCallAuthorizations | undefined,
+		mode: "simulated" | "live",
+		messages: AgentMessages,
+	): Promise<number> {
+		if (!authorizations) {
+			return 0
+		}
+		const source = `${this.configuration.demo.engineerName} (${mode})`
+		const granted: ReadonlyArray<[boolean, string]> = [
+			[
+				authorizations.notifyAllClients.value === true,
+				messages.authorizedNotifyAllClients,
+			],
+			[
+				authorizations.trafficFailoverAuthorized.value === true,
+				messages.authorizedTrafficFailover,
+			],
+		]
+		let recorded = 0
+		for (const [allowed, statement] of granted) {
+			if (!allowed) {
+				continue
+			}
+			await this.incidentsService.recordFact(
+				incident.runIdentifier,
+				statement,
+				"confirmed",
+				source,
+			)
+			recorded += 1
+		}
+		if (authorizations.trafficFailoverAuthorized.value === true) {
+			await this.incidentsService.confirmResourceCapacity(
+				incident.runIdentifier,
+				incident.resources[0].identifier,
+				true,
+				`Authorized by ${this.configuration.demo.engineerName}`,
+			)
+		}
+		return recorded
 	}
 
 	private async recordFactsFromCall(

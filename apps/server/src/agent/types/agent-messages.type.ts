@@ -37,6 +37,9 @@ export interface AgentMessages {
 	): string
 	readonly contactEngineerTitle: string
 	readonly awaitingEngineerCall: string
+	readonly authorizedNotifyAllClients: string
+	readonly authorizedTrafficFailover: string
+	authorizationsRecorded(count: number, mode: string): string
 	readonly immediateCallReason: string
 	readonly immediateCallSummary: string
 	prepareTaskTitle(serviceName: string, backupRegion: string): string

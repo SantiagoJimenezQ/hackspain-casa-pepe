@@ -227,7 +227,14 @@ export class EngineersService {
 		}
 		// A terminal call already carries provider-analysed permissions. A late live report
 		// must never overwrite them.
-		if (entity.status !== "dialing" && entity.status !== "in-progress") {
+		if (entity.status !== "in-progress") {
+			this.logger.warn(
+				LOG_MESSAGES.ENGINEERS.CALL_AUTHORIZATION_IGNORED,
+				{
+					callIdentifier: report.callIdentifier,
+					status: entity.status,
+				},
+			)
 			throw new InvalidStateTransitionException(
 				ENGINEER_CALL_ENTITY_NAME,
 				entity.status,
@@ -483,8 +490,10 @@ function summariseLivePermissions(
 	report: LiveAuthorizationReport,
 ): string {
 	const granted = [
-		report.notifyAllClients ? "notifying every client" : "",
-		report.trafficFailoverAuthorized ? "failing traffic over to the backup" : "",
+		report.notifyAllClients ? "notify every client" : "",
+		report.trafficFailoverAuthorized
+			? "fail traffic over to the backup"
+			: "",
 	].filter(Boolean)
 	const verdict =
 		granted.length > 0

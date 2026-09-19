@@ -305,4 +305,50 @@ describe("postponed capacity bookkeeping", () => {
 			],
 		})
 	})
+	it("zeroes the cost of a service that is already healthy again", () => {
+		const built = input()
+		const recovered = {
+			...built,
+			incident: {
+				...built.incident,
+				services: built.incident.services.map((service) =>
+					service.identifier === "orders-database"
+						? { ...service, status: "healthy" as const }
+						: service,
+				),
+			},
+		}
+
+		const repaired = repairLlmPlanDraft(
+			{
+				priorities: [
+					{
+						capacityUnits: 4,
+						decision: "already-healthy",
+						serviceIdentifier: "orders-database",
+					},
+					{
+						capacityUnits: 999,
+						decision: "postpone",
+						serviceIdentifier: "events-stream",
+					},
+				],
+				steps: [],
+			},
+			recovered,
+		)
+
+		const events = recovered.incident.services.find(
+			(service) => service.identifier === "events-stream",
+		)
+		expect(repaired).toMatchObject({
+			priorities: [
+				{ capacityUnits: 0, serviceIdentifier: "orders-database" },
+				{
+					capacityUnits: events?.recoveryCapacityUnits,
+					serviceIdentifier: "events-stream",
+				},
+			],
+		})
+	})
 })

@@ -198,6 +198,17 @@ describe("engineer call authorizations", () => {
 			{} as never,
 			{} as never,
 		)
+		jest.spyOn(
+			service as unknown as { scenarioOf: () => unknown },
+			"scenarioOf",
+		).mockReturnValue({
+			engineerBriefing: {
+				questions: [
+					{ confirmsFact: "The snapshot is recent enough" },
+					{ confirmsFact: "Route assignment can run in the backup" },
+				],
+			},
+		})
 		const record = (
 			service as unknown as {
 				recordAuthorizationsFromCall: (
@@ -232,8 +243,14 @@ describe("engineer call authorizations", () => {
 			AGENT_MESSAGES.en,
 		)
 
-		expect(recorded).toBe(2)
-		expect(incidents.recordFact).toHaveBeenCalledTimes(2)
+		expect(recorded).toBe(4)
+		expect(incidents.recordFact).toHaveBeenCalledTimes(4)
+		expect(incidents.recordFact).toHaveBeenCalledWith(
+			"run",
+			"The snapshot is recent enough",
+			"confirmed",
+			expect.stringContaining("authorized by voice"),
+		)
 		expect(incidents.recordFact).toHaveBeenCalledWith(
 			"run",
 			AGENT_MESSAGES.en.authorizedTrafficFailover,

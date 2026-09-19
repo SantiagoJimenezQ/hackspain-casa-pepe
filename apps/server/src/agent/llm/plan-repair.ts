@@ -214,9 +214,19 @@ function repairPriorities(
 			decision === "recover-now" || decision === "already-healthy"
 				? []
 				: unhealthy
-		// The recovery cost stays the model's to get right: the validator must still catch a
-		// plan that miscounts what it is committing.
-		return { ...priority, blockedBy, serviceName: service.name }
+		// The cost is a copy of trusted state, and it flips to zero the moment a service turns
+		// healthy. A model that keeps quoting the service's recovery cost after recovering it is
+		// right about the incident and wrong about the field, so the value is derived here
+		// instead of rejecting the plan over bookkeeping the server already knows.
+		return {
+			...priority,
+			blockedBy,
+			capacityUnits:
+				service.status === "healthy"
+					? 0
+					: service.recoveryCapacityUnits,
+			serviceName: service.name,
+		}
 	})
 }
 

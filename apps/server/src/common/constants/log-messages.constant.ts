@@ -26,6 +26,11 @@ export const LOG_MESSAGES = {
 		REQUESTED: "Approval requested from the operator",
 		SUPERSEDED: "Pending approvals superseded by a new plan version",
 	},
+	CUSTOMERS: {
+		RANKING_FAILED:
+			"Customer recovery ranking fell back to the deterministic order",
+		RANKING_FINISHED: "Customer recovery ranking updated from the LLM",
+	},
 	DATABASE: {
 		CONNECTION_FAILED: "Failed to connect to the database",
 	},

@@ -53,6 +53,7 @@ export interface CustomerPriority {
 	readonly capacityUnitsToRecover: number
 	readonly nextAction: string
 	readonly reason: string
+	readonly justification?: string
 	readonly services: ReadonlyArray<CustomerServiceStatus>
 }
 
@@ -61,10 +62,15 @@ export interface CustomerPriorityCriterion {
 	readonly description: string
 }
 
+export type CustomerPrioritySource = "deterministic" | "llm"
+
 export interface CustomerPriorityReport {
 	readonly runIdentifier: string
 	readonly incidentIdentifier: string
 	readonly generatedAt: string
 	readonly criteria: ReadonlyArray<CustomerPriorityCriterion>
 	readonly customers: ReadonlyArray<CustomerPriority>
+	readonly source?: CustomerPrioritySource
+	readonly model?: string
+	readonly fallbackReason?: string
 }

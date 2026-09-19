@@ -81,6 +81,8 @@ export interface LlmConfiguration {
 	readonly baseURL: string
 	readonly apiKey: string
 	readonly model: string
+	readonly fastModel: string
+	readonly fastTimeoutMilliseconds: number
 	readonly timeoutMilliseconds: number
 	readonly maximumTurns: number
 	readonly maximumOutputTokens: number

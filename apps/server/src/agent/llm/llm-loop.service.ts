@@ -154,6 +154,7 @@ export class LlmLoopService {
 			return saved
 		}
 		let executed = 0
+		let waitChallenged = false
 		let state = await actions.observe()
 		for (let turn = 0; turn < this.configuration.llm.maximumTurns; turn++) {
 			state = await actions.observe()
@@ -381,7 +382,7 @@ export class LlmLoopService {
 						)
 						executed++
 						break
-					case "wait_for_input":
+					case "wait_for_input": {
 						if (
 							Object.keys(object).length !== 1 ||
 							typeof object.reason !== "string" ||
@@ -391,6 +392,15 @@ export class LlmLoopService {
 							throw new ToolArgumentsError(
 								"Expected a short, nonempty reason",
 							)
+						// Waiting for work that already finished leaves the run idle with
+						// nothing left to wake it, so a runnable step is surfaced once.
+						const runnable = runnableStepIdentifier(state)
+						if (runnable.length && !waitChallenged) {
+							waitChallenged = true
+							throw new ToolArgumentsError(
+								`Step ${runnable} is runnable now: its dependencies are complete and it is neither running nor awaiting approval. Select it with execute_step, or explain in a new reason why it cannot run.`,
+							)
+						}
 						await decision("accepted")
 						await record(
 							state,
@@ -405,6 +415,7 @@ export class LlmLoopService {
 							planVersion: state.input.previousPlan?.version ?? 0,
 							waitingFor: [object.reason],
 						}
+					}
 					case "delegate_investigation":
 					case "delegate_engineer_call":
 					case "delegate_communication": {
@@ -598,4 +609,35 @@ function correctionFor(name: string): string {
 	if (name === "propose_plan")
 		return "Fix the reported validation issue against currentState and the supplied PlanDraft schema. Pass the plan fields directly without input/plan wrappers; preserve trusted work and approvals."
 	return "Choose one of the declared function tools and follow its argument schema."
+}
+
+/**
+ * The first step the server would accept right now: proposed, with every dependency
+ * completed. An empty result means waiting is the only honest option.
+ */
+function runnableStepIdentifier(state: LlmLoopState): string {
+	const plan = state.input.previousPlan
+	if (!plan) {
+		return ""
+	}
+	const statusByIdentifier = new Map(
+		plan.steps.map((step) => [step.identifier, step.status]),
+	)
+	// Work in flight or an approval on the operator's desk will wake this loop on its own.
+	const awaited = plan.steps.some(
+		(step) =>
+			step.status === "running" || step.status === "awaiting-approval",
+	)
+	if (awaited) {
+		return ""
+	}
+	const runnable = plan.steps.find(
+		(step) =>
+			step.status === "proposed" &&
+			step.dependsOn.every(
+				(dependency) =>
+					statusByIdentifier.get(dependency) === "completed",
+			),
+	)
+	return runnable ? runnable.identifier : ""
 }

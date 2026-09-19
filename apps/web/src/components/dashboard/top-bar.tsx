@@ -27,9 +27,9 @@ export function TopBar() {
   const clearingLearnings = busyAction === "reset-learnings";
   return (
     <>
-      <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-3 border-b border-border bg-background/75 px-4 py-2 backdrop-blur">
+      <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-background/75 px-3 py-2 backdrop-blur sm:px-4">
         <div className="flex items-center gap-2.5">
-          <span className="relative flex size-7 shrink-0 overflow-hidden rounded-md bg-muted ring-1 ring-primary/30">
+          <span className="relative flex size-7 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-primary/30">
             <Image
               src="/agents/pepe.webp"
               alt="Pepe"
@@ -46,7 +46,7 @@ export function TopBar() {
 
         <div
           className={cn(
-            "ml-3 flex items-center gap-2 rounded-lg border px-2.5 py-1 transition-colors",
+            "flex items-center gap-2 rounded-xl border px-2.5 py-1 transition-colors sm:ml-2",
             recovered ? "border-status-up/45 bg-status-up/10" : "border-border bg-muted/40",
           )}
           title={recovered ? "Incidente resuelto" : "Tiempo desde el impacto"}
@@ -72,8 +72,8 @@ export function TopBar() {
           </div>
         </div>
 
-        <div className="ml-auto flex items-center gap-3">
-          <div className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 p-1">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
+          <div className="flex items-center gap-1 rounded-xl border border-border bg-muted/30 p-1">
             <Button
               size="sm"
               variant={impacted || recovered ? "outline" : "default"}
@@ -81,7 +81,7 @@ export function TopBar() {
               disabled={!live || busy || impacted || recovered}
               title="Dispara el impacto del incidente y arranca al agente"
             >
-              <Zap /> Impacto
+              <Zap /> <span className="hidden lg:inline">Impacto</span>
             </Button>
             <Button
               size="sm"
@@ -90,7 +90,7 @@ export function TopBar() {
               disabled={!live || busy}
               title="Inyecta un giro en el escenario en curso"
             >
-              <Sparkles /> Twist
+              <Sparkles /> <span className="hidden lg:inline">Twist</span>
             </Button>
             <Separator orientation="vertical" className="mx-0.5 h-5 self-center" />
             <Button
@@ -101,7 +101,9 @@ export function TopBar() {
               title="Borra todos los aprendizajes guardados de ejecuciones anteriores. No reinicia el incidente actual."
             >
               <RefreshCcw className={cn(clearingLearnings && "animate-spin")} />
-              {clearingLearnings ? "Borrando…" : "Aprendizajes"}
+              <span className="hidden xl:inline">
+                {clearingLearnings ? "Borrando aprendizajes…" : "Borrar aprendizajes"}
+              </span>
             </Button>
             <Button
               size="sm"
@@ -110,16 +112,15 @@ export function TopBar() {
               disabled={!live || busy}
               title="Reinicia la demo al estado inicial"
             >
-              <RotateCcw /> Reiniciar
+              <RotateCcw /> <span className="hidden lg:inline">Reiniciar</span>
             </Button>
           </div>
 
-          <Separator orientation="vertical" className="h-6 self-center" />
-
-          <div className="hidden items-center gap-3 sm:flex">
+          <div className="hidden items-center gap-3 lg:flex">
+            <Separator orientation="vertical" className="h-6 self-center" />
             <span
               className={cn(
-                "flex items-center gap-1.5 rounded-full border px-2 py-1 text-[9px] font-semibold tracking-[0.12em] uppercase transition-colors",
+                "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-semibold tracking-[0.12em] transition-colors",
                 impacted
                   ? "border-status-up/45 bg-status-up/10 text-status-up"
                   : "border-border bg-muted/30 text-muted-foreground",
@@ -130,15 +131,17 @@ export function TopBar() {
                 <span className={cn("relative size-1.5 rounded-full", impacted ? "bg-status-up" : "bg-muted-foreground/60")} />
               </span>
               <Radio className="size-3" />
-              {impacted ? "En directo" : "En espera"}
+              {impacted ? "ACTIVIDAD EN DIRECTO" : "EN ESPERA"}
             </span>
             <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
               {now?.toLocaleTimeString("es-ES") ?? "--:--:--"}
             </p>
           </div>
 
-          <LanguageSwitcher />
-          <ThemeSwitcher />
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher />
+            <ThemeSwitcher />
+          </div>
         </div>
       </header>
       {learningResetMessage ? <p role="status" className="border-b border-border px-4 py-2 text-xs text-muted-foreground">{learningResetMessage}</p> : null}

@@ -36,6 +36,19 @@ const PHASE_LABEL = {
   recovered: "companies.migrated",
   offline: "companies.offline",
 } as const satisfies Record<string, MessageKey>;
+const COMPANY_GRID = "grid grid-cols-[minmax(0,1.6fr)_minmax(0,.9fr)_auto] gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,.9fr)_minmax(0,.8fr)_auto]";
+const ACTION_ROW: Record<CustomerAction, string> = {
+  online: "border-border bg-muted/20",
+  recovered: "border-[color-mix(in_srgb,var(--status-up)_35%,transparent)] bg-[color-mix(in_srgb,var(--status-up)_10%,transparent)]",
+  migrating: "border-[color-mix(in_srgb,var(--status-degraded)_40%,transparent)] bg-[color-mix(in_srgb,var(--status-degraded)_10%,transparent)]",
+  offline: "border-[color-mix(in_srgb,var(--status-down)_28%,transparent)] bg-[color-mix(in_srgb,var(--status-down)_7%,transparent)]",
+};
+const ACTION_ACCENT: Record<CustomerAction, string> = {
+  online: "var(--status-up)",
+  recovered: "var(--status-up)",
+  migrating: "var(--status-degraded)",
+  offline: "var(--status-down)",
+};
 const PHASE_ROW: Record<RecoveryPhase, string> = {
   recovered: "border-[color-mix(in_srgb,var(--status-up)_35%,transparent)] bg-[color-mix(in_srgb,var(--status-up)_10%,transparent)]",
   recovering: "border-[color-mix(in_srgb,var(--status-degraded)_40%,transparent)] bg-[color-mix(in_srgb,var(--status-degraded)_10%,transparent)]",
@@ -119,14 +132,15 @@ function MapPanel() {
 function Companies() {
   const { overview, activity } = useDashboard();
   const { t } = useI18n();
-  const { ref: scrollRef, className: scrollFadeClass } = useScrollFade();
+  const { ref: scrollRef, className: scrollFadeClass } = useScrollFade<HTMLUListElement>();
   if (!overview) return null;
   const customers = customerViewOrdered(overview, activity);
   const impacted = incidentImpacted(overview.incident);
   return (
-    <Panel className="min-h-0">
+    <Panel className="min-h-[260px] xl:min-h-0">
       <div className="px-4 pt-3">
         <Title
+          className="mb-2"
           meta={
             <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
               {t("companies.accounts", { count: customers.length })}
@@ -136,72 +150,62 @@ function Companies() {
           {impacted ? t("companies.title") : t("companies.titleIdle")}
         </Title>
       </div>
-      <div ref={scrollRef} className={cn(scrollFadeClass, "min-h-0 flex-1 overflow-auto px-2 pb-2")}>
-        <table className="w-full text-left text-[11px]">
-          <thead className="sticky top-0 z-10 bg-card text-[9px] tracking-[.12em] text-muted-foreground uppercase">
-            <tr>
-              <th className="px-2 pb-2 font-medium">{t("companies.company")}</th>
-              <th className="px-2 pb-2 font-medium">{t("companies.sector")}</th>
-              <th className="px-2 pb-2 font-medium">{t("companies.status")}</th>
-              <th className="px-2 pb-2 text-right font-medium">{t("companies.users")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <LayoutGroup>
-              <AnimatePresence initial={false}>
-                {customers.map((customer) => (
-                  <motion.tr
-                    key={customer.identifier}
-                    layout
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.4, layout: { duration: 0.35, ease: [0.23, 1, 0.32, 1] } }}
-                    className={cn(
-                      "border-t border-border border-l-2 border-l-transparent",
-                      customer.action === "recovered" && "border-l-[var(--status-up)] bg-[color-mix(in_srgb,var(--status-up)_9%,transparent)]",
-                      customer.action === "migrating" && "border-l-[var(--status-degraded)] bg-[color-mix(in_srgb,var(--status-degraded)_9%,transparent)]",
-                      customer.action === "offline" && "border-l-[var(--status-down)] bg-[color-mix(in_srgb,var(--status-down)_10%,transparent)]",
-                    )}
-                  >
-                    <td className="px-2 py-2">
-                      <div className="flex items-center gap-2">
-                        {customer.logo ? (
-                          <span
-                            className="size-5 shrink-0 rounded-sm bg-contain bg-center bg-no-repeat"
-                            style={{ backgroundImage: `url(${customer.logo})` }}
-                            aria-hidden
-                          />
-                        ) : (
-                          <span className="inline-flex size-5 items-center justify-center rounded-sm text-[9px] font-bold text-white" style={{ background: customer.accent }}>
-                            {customer.shortName[0]}
-                          </span>
-                        )}
-                        <div className="min-w-0">
-                          <p className="font-medium">{customer.name}</p>
-                          <p className="text-[10px] text-muted-foreground">{customer.city ?? customer.sector}</p>
-                          {customer.action === "online" || customer.action === "recovered" ? null : (
-                            <div className="mt-1 h-0.5 w-20 overflow-hidden rounded-full bg-muted">
-                              <motion.div
-                                className={cn("h-full", customer.action === "migrating" ? "bg-status-degraded" : "bg-status-down")}
-                                animate={{ width: `${customer.progress}%` }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-2 py-2 text-muted-foreground">{customer.sector}</td>
-                    <td className="px-2 py-2">
-                      <Status label={t(ACTION_LABEL[customer.action])} status={customerActionStatus(customer.action)} />
-                    </td>
-                    <td className="px-2 py-2 text-right tabular-nums">{customer.users.toLocaleString("es-ES")}</td>
-                  </motion.tr>
-                ))}
-              </AnimatePresence>
-            </LayoutGroup>
-          </tbody>
-        </table>
+      <div className={cn(COMPANY_GRID, "px-5.5 pb-1.5 text-[9px] tracking-[.12em] text-muted-foreground uppercase")}>
+        <span>{t("companies.company")}</span>
+        <span className="hidden sm:block">{t("companies.sector")}</span>
+        <span>{t("companies.status")}</span>
+        <span className="text-right">{t("companies.users")}</span>
       </div>
+      <ul ref={scrollRef} className={cn(scrollFadeClass, "flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 pb-3")}>
+        <LayoutGroup>
+          <AnimatePresence initial={false}>
+            {customers.map((customer) => (
+              <motion.li
+                key={customer.identifier}
+                layout
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4, layout: { duration: 0.35, ease: [0.23, 1, 0.32, 1] } }}
+                className={cn(
+                  COMPANY_GRID,
+                  "min-h-11 shrink-0 items-center rounded-lg border border-l-2 px-2.5 py-1.5 text-[11px]",
+                  ACTION_ROW[customer.action],
+                )}
+                style={{ borderLeftColor: ACTION_ACCENT[customer.action] }}
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  {customer.logo ? (
+                    <span
+                      className="size-5 shrink-0 rounded-md bg-contain bg-center bg-no-repeat"
+                      style={{ backgroundImage: `url(${customer.logo})` }}
+                      aria-hidden
+                    />
+                  ) : (
+                    <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-[9px] font-bold text-white" style={{ background: customer.accent }}>
+                      {customer.shortName[0]}
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{customer.name}</p>
+                    <p className="truncate text-[10px] text-muted-foreground">{customer.city ?? customer.sector}</p>
+                    {customer.action === "online" || customer.action === "recovered" ? null : (
+                      <div className="mt-1 h-0.5 w-20 overflow-hidden rounded-full bg-muted">
+                        <motion.div
+                          className={cn("h-full", customer.action === "migrating" ? "bg-status-degraded" : "bg-status-down")}
+                          animate={{ width: `${customer.progress}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <span className="hidden truncate text-muted-foreground sm:block">{customer.sector}</span>
+                <Status label={t(ACTION_LABEL[customer.action])} status={customerActionStatus(customer.action)} />
+                <span className="text-right tabular-nums">{customer.users.toLocaleString("es-ES")}</span>
+              </motion.li>
+            ))}
+          </AnimatePresence>
+        </LayoutGroup>
+      </ul>
     </Panel>
   );
 }
@@ -215,7 +219,7 @@ function Recovery() {
   const items = recoveryTimeline(overview, activity);
   const complete = recovery.total > 0 && recovery.completed === recovery.total;
   return (
-    <Panel className="min-h-0">
+    <Panel className="min-h-[260px] xl:min-h-0">
       <div className="px-4 pt-3">
         <Title
           className="mb-2"
@@ -313,12 +317,12 @@ export function LiveOperationsDashboard() {
     return <div className="flex flex-1 items-center justify-center"><CircleDashed className="size-6 animate-spin" /></div>;
   }
   return (
-    <div className="relative min-h-0 flex-1 overflow-hidden p-3">
+    <div className="relative min-h-0 flex-1 overflow-y-auto p-3 xl:overflow-hidden">
       <ActiveCallBanner />
-      <div className="grid h-full min-h-0 grid-cols-[minmax(0,1.45fr)_minmax(420px,.9fr)] gap-3">
-        <div className="grid min-h-0 grid-rows-[minmax(220px,1.2fr)_minmax(0,1fr)] gap-3">
+      <div className="grid min-h-0 gap-3 xl:h-full xl:grid-cols-[minmax(0,1.45fr)_minmax(380px,.9fr)]">
+        <div className="grid min-h-0 gap-3 xl:grid-rows-[minmax(220px,1.2fr)_minmax(0,1fr)]">
           <MapPanel />
-          <div className="grid min-h-0 grid-cols-[1.2fr_1fr] gap-3">
+          <div className="grid min-h-0 gap-3 lg:grid-cols-[1.2fr_1fr]">
             <Companies />
             <Recovery />
           </div>

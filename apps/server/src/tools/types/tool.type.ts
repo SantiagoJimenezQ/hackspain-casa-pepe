@@ -3,6 +3,7 @@ import {
 	ResourceState,
 	ServiceState,
 } from "@incidents/types/incident.type"
+import { ServiceStatusCheck } from "@recovery/types/recovery.type"
 import { ServiceHealthStatus } from "@scenarios/types/scenario.type"
 import {
 	TOOL_CALL_STATUSES,
@@ -72,6 +73,10 @@ export type ToolInvocation =
 				readonly emailId?: string
 			}
 	  }
+	| {
+			readonly name: "check_services_status"
+			readonly input: Record<string, never>
+	  }
 
 export interface EngineerAnswer {
 	readonly key: string
@@ -131,6 +136,14 @@ export type ToolOutput =
 			readonly kind: "inbound-emails"
 			readonly emails: ReadonlyArray<Record<string, unknown>>
 			readonly selected: Record<string, unknown> | null
+	  }
+	| {
+			readonly kind: "services-status"
+			readonly checks: ReadonlyArray<ServiceStatusCheck>
+			readonly healthyCount: number
+			readonly totalCount: number
+			readonly discrepancies: ReadonlyArray<string>
+			readonly mode: "simulated" | "http"
 	  }
 
 export interface ToolError {

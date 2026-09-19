@@ -12,6 +12,7 @@ import { ToolsController } from "@tools/controllers/tools.controller"
 import { StatusPublicationEntity } from "@tools/entities/status-publication.entity"
 import { ToolCallEntity } from "@tools/entities/tool-call.entity"
 import { AssignTaskTool } from "@tools/implementations/assign-task.tool"
+import { CheckServicesStatusTool } from "@tools/implementations/check-services-status.tool"
 import {
 	CommunicationToolsService,
 	PublishStatusUpdateTool,
@@ -73,9 +74,10 @@ import { HappyRobotSecretGuard } from "@webhooks/guards/inbound-secret.guard"
 		RequestApprovalTool,
 		ExecuteRecoveryTool,
 		VerifyRecoveryTool,
+		ReadIncomingEmailsTool,
+		CheckServicesStatusTool,
 		HappyRobotSecretGuard,
 		ToolTestsService,
-		ReadIncomingEmailsTool,
 		ToolRegistryService,
 		ToolsService,
 	],

@@ -868,6 +868,7 @@ export class AgentService {
 			case "contact_engineer":
 			case "assign_task":
 			case "request_approval":
+			case "check_services_status":
 				return invocation
 		}
 	}
@@ -1019,6 +1020,23 @@ export class AgentService {
 					output.verified,
 					output.detail,
 					messages,
+				)
+				return
+			case "services-status":
+				await this.plansService.updateStep(
+					plan.identifier,
+					step.identifier,
+					{
+						attempts: step.attempts,
+						resultSummary: messages.servicesChecked(
+							output.healthyCount,
+							output.totalCount,
+							output.discrepancies,
+						),
+						status: "completed",
+						statusReason: messages.informationGathered,
+						toolCallIdentifier: toolCall.identifier,
+					},
 				)
 				return
 			case "communication":

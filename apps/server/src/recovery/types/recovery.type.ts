@@ -83,6 +83,24 @@ export interface VerificationResult {
 	readonly mode: RecoveryMode
 }
 
+export interface ServiceStatusCheck {
+	readonly serviceIdentifier: string
+	readonly serviceName: string
+	readonly knownStatus: ServiceHealthStatus
+	readonly observedStatus: ServiceHealthStatus
+	readonly matches: boolean
+	readonly healthy: boolean
+	readonly detail: string
+}
+
+export interface ServicesStatusReport {
+	readonly mode: RecoveryMode
+	readonly checks: ReadonlyArray<ServiceStatusCheck>
+	readonly healthyCount: number
+	readonly totalCount: number
+	readonly discrepancies: ReadonlyArray<string>
+}
+
 export type DeliverRecoveryResult = (
 	actionIdentifier: string,
 	result: RecoveryResult,

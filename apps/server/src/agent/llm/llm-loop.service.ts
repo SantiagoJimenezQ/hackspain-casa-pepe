@@ -97,6 +97,11 @@ function definitions(): LlmToolDefinition[] {
 			empty,
 		),
 		tool(
+			"check_services_status",
+			"Check every service with an independent query and report discrepancies with the recorded state",
+			empty,
+		),
+		tool(
 			"propose_plan",
 			"Persist a new or revised plan after independent validation",
 			llmPlanSchema,
@@ -287,6 +292,7 @@ export class LlmLoopService {
 					case "get_incident_context":
 					case "get_service_health":
 					case "get_recovery_capacity":
+					case "check_services_status":
 						if (Object.keys(object).length)
 							throw new Error("This tool takes no arguments")
 						result = await actions.investigate({

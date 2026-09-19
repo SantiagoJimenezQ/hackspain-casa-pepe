@@ -45,7 +45,7 @@ const ACTIVITY_EVENTS = [
   "tool-call.started", "tool-call.completed", "tool-call.failed", "approval.requested",
   "approval.decided", "approval.superseded", "approval.expired", "task.assigned",
   "task.updated", "engineer-call.started", "engineer-call.completed",
-  "engineer-call.failed", "recovery.executed", "recovery.verified", "simulation.advanced",
+  "engineer-call.failed", "recovery.executed", "recovery.verified", "services.checked", "simulation.advanced",
   "agent.cycle-finished", "agent.limit-reached", "replay.started", "replay.finished",
 ] as const;
 

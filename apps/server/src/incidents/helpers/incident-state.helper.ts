@@ -167,11 +167,10 @@ export function nextRecoveryUnits(incident: {
 	readonly services: ReadonlyArray<ServiceState>
 }): number {
 	const remaining = incident.services.filter(
-		(service) =>
-			service.status !== "healthy" && service.status !== "recovering",
+		(service) => service.status === "down" || service.status === "degraded",
 	)
 	if (!remaining.length) {
-		return 1
+		return 0
 	}
 	return [...remaining].sort(
 		(left, right) =>
@@ -189,13 +188,24 @@ export function selectBackupResource(
 ): ResourceState {
 	const needed = nextRecoveryUnits(incident)
 	const ordered = incident.resources
-	const committed = ordered.find((resource) => resource.allocatedCapacity > 0)
-	if (committed) {
+	const committedIndex = ordered.findIndex(
+		(resource) => resource.allocatedCapacity > 0,
+	)
+	const committed = committedIndex >= 0 ? ordered[committedIndex] : undefined
+	const fits = (resource: ResourceState) => {
+		const remaining = remainingOf(resource)
+		return remaining >= needed && remaining > 0
+	}
+	if (committed && fits(committed)) {
 		return committed
 	}
-	const fitting = ordered.find((resource) => remainingOf(resource) >= needed)
+	const searchFrom = committedIndex >= 0 ? committedIndex + 1 : 0
+	const fitting = ordered.slice(searchFrom).find(fits)
 	if (fitting) {
 		return fitting
+	}
+	if (committed) {
+		return committed
 	}
 	return ordered.find((resource) => remainingOf(resource) > 0) ?? ordered[0]
 }

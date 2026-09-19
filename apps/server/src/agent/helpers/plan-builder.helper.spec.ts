@@ -443,6 +443,33 @@ describe("buildPlanDraft", () => {
 		)
 		expect(draft.capacity.plannedUnits).toBe(7)
 	})
+
+	it("fails over to Bahrain after Oman is full and the database is healthy", () => {
+		const incident = createImpactedIncident(4)
+		const recovered = {
+			...incident,
+			resources: incident.resources.map((resource, index) =>
+				index === 0 ? { ...resource, allocatedCapacity: 4 } : resource,
+			),
+			services: incident.services.map((service) =>
+				service.identifier === "orders-database"
+					? { ...service, status: "healthy" as const }
+					: service,
+			),
+		}
+		const draft = buildPlanDraft({
+			...createInput(4),
+			incident: recovered,
+		})
+
+		expect(draft.capacity.resourceIdentifier).toBe("backup-bahrain")
+		expect(decisionOf(draft, "orders-database").decision).toBe(
+			"already-healthy",
+		)
+		expect(decisionOf(draft, "route-assignment").decision).toBe(
+			"recover-now",
+		)
+	})
 })
 
 describe("buildEngineerCallDraft", () => {

@@ -20,7 +20,12 @@ all three identity fields must match exactly.
     "engineerPhone": "+34600000000",
     "engineerRole": "Configured on-call role",
     "purpose": "Request permission to notify affected clients and divert traffic to backup.",
-    "questions": []
+    "questions": [
+      {
+        "key": "traffic-failover-authorized",
+        "question": "Do you authorize diverting production traffic to the backup region?"
+      }
+    ]
   }
 }
 ```
@@ -31,7 +36,7 @@ all three identity fields must match exactly.
 | `engineerPhone` | nonempty string | Trusted configured destination in E.164 format. |
 | `engineerRole` | nonempty string | Trusted configured role. |
 | `purpose` | nonempty string | Why this plan needs a call; not a replacement for the hosted voice prompt. |
-| `questions` | array of `{key, question}` | Required field; use `[]` for the current ElevenLabs authorization flow. Other providers can support keyed technical questions. |
+| `questions` | array of `{key, question}` | Required, nonempty. Live ElevenLabs still needs at least one stable keyed permission question such as `traffic-failover-authorized`; the hosted agent asks its own combined permission prompt and does not return technical answers. Simulated and HappyRobot providers use keyed technical questions from the scenario briefing. |
 
 No extra input keys are accepted. Do not put credentials, `outage_time`, location,
 incident IDs, provider IDs, or invented contact details in this object. The server

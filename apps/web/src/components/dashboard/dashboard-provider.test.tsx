@@ -829,4 +829,46 @@ describe("live dashboard chrome", () => {
     expect(screen.getByRole("status", { name: /Llamando a Marta Ruiz/ })).toHaveTextContent(/\d{2}:\d{2}/);
     expect(screen.getByText("Ingeniera de plataforma")).toBeInTheDocument();
   });
+
+  it("docks pending approval actions at the bottom of the agent panel", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (isOverview(url)) {
+        return new Response(
+          JSON.stringify({
+            ...snapshot,
+            pendingApprovals: [
+              {
+                identifier: "apr_1",
+                serviceIdentifier: "events-stream",
+                actionSummary: "Llamar al ingeniero de turno",
+                reason: "La recuperación necesita autorización del operador.",
+                consequences: [],
+                capacityUnits: 1,
+                status: "pending",
+                requestedAt: "2026-09-19T10:00:08.000Z",
+                expiresAt: "2026-09-19T10:10:08.000Z",
+              },
+            ],
+            agent: { ...snapshot.agent, pendingApprovals: 1 },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    });
+
+    renderWithProviders(<LiveOperationsDashboard />);
+
+    const approve = await screen.findByRole("button", { name: "Aprobar" });
+    const reject = screen.getByRole("button", { name: "Rechazar" });
+    const debug = screen.getByRole("button", { name: "Copiar chat (debug)" });
+    const prompt = screen.getByRole("alert");
+    expect(screen.getByText("Llamar al ingeniero de turno")).toBeInTheDocument();
+    expect(screen.getByText("La recuperación necesita autorización del operador.")).toBeInTheDocument();
+    expect(prompt).toHaveClass("rounded-[6px]");
+    expect(approve).toHaveClass("bg-white");
+    expect(debug.compareDocumentPosition(approve) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(reject.compareDocumentPosition(approve) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

@@ -1,6 +1,9 @@
 import { nearbyRegions } from "@incidents/helpers/geography.helper"
 import { selectBackupResource } from "@incidents/helpers/incident-state.helper"
-import { createImpactedIncident } from "@root/testing/incident.fixture"
+import {
+	createImpactedIncident,
+	createLastDegradedIncident,
+} from "@root/testing/incident.fixture"
 import { METEORITE_SCENARIO } from "@scenarios/constants/meteorite-scenario.constant"
 import { METEORITE_SCENARIO_ES } from "@scenarios/constants/meteorite-scenario.es.constant"
 
@@ -32,14 +35,21 @@ describe("meteorite gulf geography", () => {
 		expect(selected.region).toBe("me-south-1")
 	})
 
-	it("keeps the region that already has allocated recovery work", () => {
+	it("keeps the committed region while it can still cover the next recovery", () => {
 		const incident = createImpactedIncident(1)
-		const bahrain = incident.resources.find(
-			(resource) => resource.identifier === "backup-bahrain",
-		)
-		if (!bahrain) {
-			throw new Error("Expected Bahrain backup capacity")
-		}
+		const selected = selectBackupResource({
+			...incident,
+			resources: incident.resources.map((resource) =>
+				resource.identifier === "backup-bahrain"
+					? { ...resource, allocatedCapacity: 3 }
+					: resource,
+			),
+		})
+		expect(selected.identifier).toBe("backup-bahrain")
+	})
+
+	it("fails over from a full committed region to the next region that fits", () => {
+		const incident = createImpactedIncident(1)
 		const selected = selectBackupResource({
 			...incident,
 			resources: incident.resources.map((resource) =>
@@ -48,6 +58,29 @@ describe("meteorite gulf geography", () => {
 					: resource,
 			),
 		})
+		expect(selected.identifier).toBe("backup-riyadh")
+	})
+
+	it("selects Bahrain when Oman is fully allocated", () => {
+		const incident = createImpactedIncident(4)
+		const selected = selectBackupResource({
+			...incident,
+			resources: incident.resources.map((resource, index) =>
+				index === 0 ? { ...resource, allocatedCapacity: 4 } : resource,
+			),
+			services: incident.services.map((service) =>
+				service.identifier === "orders-database"
+					? { ...service, status: "healthy" }
+					: service,
+			),
+		})
 		expect(selected.identifier).toBe("backup-bahrain")
+	})
+
+	it("selects Bahrain for the last degraded leftover when Oman is full", () => {
+		const selected = selectBackupResource(createLastDegradedIncident())
+		expect(selected.identifier).toBe("backup-bahrain")
+		expect(selected.region).toBe("me-south-1")
+		expect(selected.totalCapacity - selected.allocatedCapacity).toBe(4)
 	})
 })

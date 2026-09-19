@@ -31,6 +31,7 @@ import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { EngineersService } from "@engineers/services/engineers.service"
 import { IncomingCallsService } from "@engineers/services/incoming-calls.service"
+import { IncidentEntity } from "@incidents/entities/incident.entity"
 import { toIncidentSnapshot } from "@incidents/helpers/incident-state.helper"
 import { IncidentsService } from "@incidents/services/incidents.service"
 import { RunsService } from "@incidents/services/runs.service"
@@ -214,10 +215,11 @@ export class AgentService {
 
 	@Interval(AGENT_TICK_INTERVAL_MILLISECONDS)
 	async tick(): Promise<void> {
-		const active = await this.runsService.findActiveEntity()
-		if (!active) {
-			return
-		}
+		const activeRuns = await this.runsService.listActiveEntities()
+		await Promise.all(activeRuns.map((active) => this.tickRun(active)))
+	}
+
+	private async tickRun(active: IncidentEntity): Promise<void> {
 		if (
 			active.runKind === "replay" ||
 			active.status === "normal" ||

@@ -10,6 +10,38 @@ export class CasaPepeClientError extends Error {
   }
 }
 
+const RUN_STORAGE_KEY = "casa-pepe.runIdentifier";
+
+/** Each browser session follows its own run so several people can drive independent demos. */
+let currentRunIdentifier = "";
+
+function readStoredRun(): string {
+  if (currentRunIdentifier) return currentRunIdentifier;
+  try {
+    currentRunIdentifier = window.localStorage.getItem(RUN_STORAGE_KEY) ?? "";
+  } catch {
+    currentRunIdentifier = "";
+  }
+  return currentRunIdentifier;
+}
+
+function rememberRun(runIdentifier: string) {
+  currentRunIdentifier = runIdentifier;
+  try {
+    if (runIdentifier) window.localStorage.setItem(RUN_STORAGE_KEY, runIdentifier);
+    else window.localStorage.removeItem(RUN_STORAGE_KEY);
+  } catch {
+    // Storage is a convenience; the in-memory value still scopes this session.
+  }
+}
+
+function withRun(path: string): string {
+  const runIdentifier = readStoredRun();
+  if (!runIdentifier) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}runIdentifier=${encodeURIComponent(runIdentifier)}`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -26,20 +58,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   );
 }
 
+type RunScoped = { runIdentifier?: string };
+
+async function startRun(path: string, body?: string): Promise<RunScoped> {
+  const snapshot = await request<RunScoped>(path, { method: "POST", body });
+  if (snapshot.runIdentifier) rememberRun(snapshot.runIdentifier);
+  return snapshot;
+}
+
 export const casaPepeClient = {
-  overview: () => request<Overview>("/api/casa-pepe/overview"),
+  currentRunIdentifier: () => readStoredRun(),
+  forgetRun: () => rememberRun(""),
+  overview: () => request<Overview>(withRun("/api/casa-pepe/overview")),
   insights: () => request<LearningInsight[]>("/api/casa-pepe/learning/insights"),
-  report: () => request<RunReport>("/api/casa-pepe/learning/reports/current"),
+  report: () => request<RunReport>(withRun("/api/casa-pepe/learning/reports/current")),
   start: () =>
-    request("/api/casa-pepe/demo/start", {
-      method: "POST",
-      body: JSON.stringify({ scenarioIdentifier: "meteorite-me-south-1-es" }),
-    }),
-  impact: () => request("/api/casa-pepe/demo/impact", { method: "POST" }),
-  twist: () => request("/api/casa-pepe/demo/twist", { method: "POST" }),
-  reset: () => request("/api/casa-pepe/demo/reset", { method: "POST" }),
+    startRun(
+      "/api/casa-pepe/demo/start",
+      JSON.stringify({ scenarioIdentifier: "meteorite-me-south-1-es" }),
+    ),
+  impact: () => request(withRun("/api/casa-pepe/demo/impact"), { method: "POST" }),
+  twist: () => request(withRun("/api/casa-pepe/demo/twist"), { method: "POST" }),
+  reset: () => startRun(withRun("/api/casa-pepe/demo/reset")),
   runCycle: () =>
-    request("/api/casa-pepe/agent/cycle", {
+    request(withRun("/api/casa-pepe/agent/cycle"), {
       method: "POST",
       body: JSON.stringify({ operatorName: "Operador Casa Pepe" }),
     }),

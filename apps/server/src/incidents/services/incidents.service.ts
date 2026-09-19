@@ -73,7 +73,6 @@ export class IncidentsService {
 			scenario,
 			simulation,
 		)
-		await this.deactivateCurrentRun("A new run was started")
 		const entity = await insertEntity(
 			this.repository,
 			this.buildBaselineEntity(runtimeScenario, "live", "", simulation),
@@ -116,7 +115,6 @@ export class IncidentsService {
 			scenario,
 			replayCapacityState,
 		)
-		await this.deactivateCurrentRun("A replay was started")
 		const entity = await insertEntity(
 			this.repository,
 			this.buildBaselineEntity(
@@ -129,12 +127,18 @@ export class IncidentsService {
 		return toIncidentSnapshot(entity)
 	}
 
-	async reset(): Promise<IncidentSnapshot> {
-		const current = await this.runsService.findActiveEntity()
+	async reset(runIdentifier?: string): Promise<IncidentSnapshot> {
+		const current = runIdentifier
+			? await this.runsService.getEntityByRunIdentifier(runIdentifier)
+			: await this.runsService.findActiveEntity()
 		const scenarioIdentifier = current
 			? current.scenarioIdentifier
 			: this.scenariosService.list()[0].identifier
 		if (current) {
+			await this.deactivateRun(
+				current,
+				"The operator reset the scenario; this run ends here",
+			)
 			await this.activityService.record({
 				correlation: {},
 				incidentIdentifier: current.identifier,
@@ -154,8 +158,10 @@ export class IncidentsService {
 		return this.startRun(scenarioIdentifier)
 	}
 
-	async getActiveRunIdentifier(): Promise<string> {
-		return (await this.runsService.getActiveEntity()).runIdentifier
+	async getActiveRunIdentifier(
+		requestedRunIdentifier?: string,
+	): Promise<string> {
+		return this.runsService.resolveRunIdentifier(requestedRunIdentifier)
 	}
 
 	async setSimulationPaused(
@@ -293,9 +299,19 @@ export class IncidentsService {
 
 	@Interval(1000)
 	async advanceAutomaticSimulation(): Promise<void> {
-		const entity = await this.runsService.findActiveEntity()
+		const entities = await this.runsService.listActiveEntities()
+		await Promise.all(
+			entities.map((entity) =>
+				this.advanceAutomaticSimulationFor(entity),
+			),
+		)
+	}
+
+	private async advanceAutomaticSimulationFor(
+		entity: IncidentEntity,
+	): Promise<void> {
 		if (
-			!entity?.simulation ||
+			!entity.simulation ||
 			entity.simulation.mode !== "randomized" ||
 			entity.simulation.paused ||
 			entity.status === "normal" ||
@@ -373,8 +389,12 @@ export class IncidentsService {
 		return snapshot
 	}
 
-	async applyScenarioTwist(): Promise<IncidentSnapshot> {
-		const entity = await this.runsService.getActiveEntity()
+	async applyScenarioTwist(
+		runIdentifier?: string,
+	): Promise<IncidentSnapshot> {
+		const entity = runIdentifier
+			? await this.runsService.getEntityByRunIdentifier(runIdentifier)
+			: await this.runsService.getActiveEntity()
 		const scenario = this.scenariosService.getByIdentifier(
 			entity.scenarioIdentifier,
 		)
@@ -385,6 +405,7 @@ export class IncidentsService {
 				type: "capacity-limited",
 			},
 			"Demo controls",
+			entity.runIdentifier,
 		)
 	}
 
@@ -771,9 +792,11 @@ export class IncidentsService {
 		})
 	}
 
-	private async deactivateCurrentRun(reason: string): Promise<void> {
-		const current = await this.runsService.findActiveEntity()
-		if (!current) {
+	private async deactivateRun(
+		current: IncidentEntity,
+		reason: string,
+	): Promise<void> {
+		if (!current.active) {
 			return
 		}
 		current.active = false

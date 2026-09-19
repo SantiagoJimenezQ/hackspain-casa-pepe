@@ -11,6 +11,7 @@ const CONFIGURATION: LlmConfiguration = {
 	maximumOutputTokens: 128,
 	maximumTurns: 24,
 	model: "test-model",
+	reasoningEffort: "",
 	timeoutMilliseconds: 5000,
 }
 

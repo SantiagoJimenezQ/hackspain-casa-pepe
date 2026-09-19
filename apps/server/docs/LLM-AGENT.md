@@ -6,7 +6,7 @@ The production decision loop always uses an LLM. It selects investigations, crea
 
 Configure the server's ignored `.env.local` using `.env.example`. Supply the provider's base URL, model identifier and API key. The adapter targets the chat-completions protocol with function calling; Helmcode compatibility must be checked against its documentation and a live smoke test. Do not assume a similarly named API supports the same protocol.
 
-Required variables are `LLM_BASE_URL` (the API prefix before `/chat/completions`), `LLM_MODEL`, and `LLM_API_KEY`. Bounds are `LLM_TIMEOUT_MILLISECONDS`, `LLM_MAXIMUM_TURNS`, and `LLM_MAXIMUM_OUTPUT_TOKENS`. The adapter sends bearer authentication, requests a single function call, and rejects redirects or oversized responses.
+Required variables are `LLM_BASE_URL` (the API prefix before `/chat/completions`), `LLM_MODEL`, and `LLM_API_KEY`. Bounds are `LLM_TIMEOUT_MILLISECONDS`, `LLM_MAXIMUM_TURNS`, and `LLM_MAXIMUM_OUTPUT_TOKENS`. `LLM_REASONING_EFFORT` is optional and is forwarded as `reasoning_effort`; `none` disables hidden reasoning on models that support it, which makes each decision much faster. The adapter sends bearer authentication, requests a single function call, and rejects redirects or oversized responses.
 
 The model must support function tools and enough output tokens for a complete recovery plan. Credentials remain in server configuration and are never passed as model context or included in activity. Model requests have timeouts and bounded turns/output. Missing configuration produces a visible failure when the first incident cycle requests a decision; ordinary API reads remain available.
 

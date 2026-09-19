@@ -88,6 +88,7 @@ export class LlmClientService {
 			maximumOutputTokens: configured.maximumOutputTokens,
 			maximumTurns: configured.maximumTurns,
 			model,
+			reasoningEffort: configured.reasoningEffort,
 			timeoutMilliseconds: configured.timeoutMilliseconds,
 		}
 	}
@@ -102,6 +103,9 @@ export class LlmClientService {
 			max_tokens: configuration.maximumOutputTokens,
 			messages,
 			model: configuration.model,
+			...(configuration.reasoningEffort === ""
+				? {}
+				: { reasoning_effort: configuration.reasoningEffort }),
 			tools,
 			...(tools.length > 0
 				? { parallel_tool_calls: false, tool_choice: "required" }

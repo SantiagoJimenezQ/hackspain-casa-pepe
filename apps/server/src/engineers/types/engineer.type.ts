@@ -61,8 +61,6 @@ export interface EngineerCallRecord {
 	readonly providerCallSid?: string
 	readonly incidentContext: EngineerCallIncidentContext
 	readonly result: EngineerCallResult | null
-	/** Permissions the contact granted out loud, available before the call finishes. */
-	readonly liveAuthorizations?: EngineerCallAuthorizations | null
 	readonly failureReason: string
 	readonly startedAt: string
 	readonly finishedAt: string

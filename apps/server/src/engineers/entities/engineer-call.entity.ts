@@ -9,10 +9,7 @@ import {
 	EngineerQuestion,
 } from "@engineers/types/engineer.type"
 import { Column, Entity, Index, PrimaryColumn } from "typeorm"
-import {
-	EngineerCallAuthorizations,
-	EngineerCallIncidentContext,
-} from "../../../../../packages/contracts/outbound-calls"
+import { EngineerCallIncidentContext } from "../../../../../packages/contracts/outbound-calls"
 
 @Entity({ name: "engineer_calls" })
 export class EngineerCallEntity {
@@ -61,10 +58,6 @@ export class EngineerCallEntity {
 
 	@Column({ nullable: true, type: "jsonb" })
 	result: EngineerCallResult | null
-
-	/** Permissions reported while the call was still open, before the provider analysis lands. */
-	@Column({ nullable: true, type: "jsonb" })
-	liveAuthorizations: EngineerCallAuthorizations | null
 
 	@Column({ type: "text" })
 	failureReason: string

@@ -24,20 +24,6 @@ export interface EngineerCallAuthorizations {
 }
 export type OutboundCallAuthorizations = EngineerCallAuthorizations
 
-/**
- * Permissions the voice agent reports the moment the contact grants them, while the call is
- * still open. Post-call extraction only lands when the conversation ends, which leaves the
- * planner waiting for evidence the contact already gave out loud. Like every integration
- * report this is a claim, never a plan approval.
- */
-export interface LiveAuthorizationReport {
-  readonly callIdentifier: string
-  readonly notifyAllClients: boolean
-  readonly trafficFailoverAuthorized: boolean
-  /** What the contact actually said, so an operator can audit the claim. */
-  readonly rationale: string
-}
-
 /** Provider identifiers returned by a call start request. */
 export interface OutboundCallReferences {
   /** Conversation or workflow identifier returned by the provider. */

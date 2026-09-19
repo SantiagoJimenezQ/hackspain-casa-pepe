@@ -138,3 +138,8 @@ regressions cover rewritten completed calls, running recoveries, and empty,
 partial and unknown simulated question answers. These code fixes are local on
 `codex/fix-recovery-plan-dispatch`; the deployed run was not reset, advanced,
 reconfigured or redeployed during diagnosis.
+
+Before opening the follow-up PR, main's new nonempty-question validation was
+merged. Commander and caller guidance now require a keyed question for new
+plans while distinguishing simulated technical answers from live ElevenLabs
+permissions. Already completed empty-question calls remain immutable history.

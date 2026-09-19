@@ -37,6 +37,7 @@ export class ContactEngineerTool implements Tool<ContactEngineerInvocation> {
 		const incidentContext = {
 			incidentDescription: incident.narrative || scenario.narrative,
 			location: incident.region || scenario.region,
+			outageStartedAt: incident.impactedAt || undefined,
 			servicesDown: incident.services
 				.filter((service) => service.status !== "healthy")
 				.map((service) => service.name),

@@ -1,8 +1,7 @@
 /**
- * Vercel's Node backend detector prefers a root-level server entrypoint over
- * src/main.ts. The Nest CLI build rewrites the TypeScript path aliases in
- * dist/, while Vercel's direct TypeScript compiler does not support tsconfig
- * `paths` mappings.
+ * Vercel's src/main.js entrypoint loads this wrapper. The Nest CLI output
+ * preserves decorator metadata and resolves TypeScript path aliases, so the
+ * deployed process must start dist/bootstrap.js rather than transpile sources.
  */
 const fs = require("node:fs")
 const path = require("node:path")
@@ -41,4 +40,4 @@ for (const packageName of Object.keys(dependencies)) {
 // TypeORM is loaded dynamically by Nest Terminus, so keep it as an explicit
 // entrypoint dependency for Vercel's file tracer as well.
 require("typeorm")
-require("./dist/main.js")
+require("./dist/bootstrap.js")

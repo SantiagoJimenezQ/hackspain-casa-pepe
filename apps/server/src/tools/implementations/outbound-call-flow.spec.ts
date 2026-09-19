@@ -67,6 +67,7 @@ describe("outbound engineer call flow", () => {
 				incidentContext: {
 					incidentDescription: incident.narrative,
 					location: incident.region,
+					outageStartedAt: incident.impactedAt,
 					servicesDown: incident.services
 						.filter((service) => service.status !== "healthy")
 						.map((service) => service.name),

@@ -28,7 +28,17 @@ The supplied `elevenlabs/GUIA-AGENTE.md`, `agent.json`, and `llamada.json` were 
 
 ## Runtime behavior
 
-The adapter sends `contact_name`, `location`, `incident_description`, and `services_down` as `conversation_initiation_client_data.dynamic_variables`. Incident context comes from the persisted run. The incident description is limited to two sentences to keep the opening concise.
+The adapter sends `contact_name`, `location`, `outage_time`, `incident_description`, and `services_down` as `conversation_initiation_client_data.dynamic_variables`. Incident context comes from the persisted run. The incident description is limited to two sentences to keep the opening concise.
+
+The hosted prompt now omits all location names and region codes. Direct callers
+can supply `outage_time` in the same dynamic variables object, for example
+`"outage_time": "14:30, hora de Madrid"`. This must be the actual incident start
+time, not the call time. The hosted default is empty; if absent, the agent omits
+the time rather than inventing one. The server sends the persisted incident's
+`impactedAt` through `outageStartedAt`, formatted as `HH:mm UTC` in `outage_time`.
+Legacy calls, standalone checks and invalid timestamps send an empty value;
+the call start time is never substituted. This prompt update was saved and read back through the API;
+its spoken behavior has not yet been tested in a call.
 
 `providerReference` stores ElevenLabs' `conversation_id`; `providerCallSid` stores Twilio's `callSid`. Pending call records live in the database. The server polls conversation details until analysis is ready or the configured call timeout is reached; no publicly reachable ElevenLabs callback endpoint is required. Keep the NestJS process running for scheduled polling. A request-only/serverless deployment needs a persistent worker or an equivalent scheduler.
 
@@ -37,9 +47,74 @@ Post-call results retain the transcript, summary, and structured authorization e
 - `authorizations.notifyAllClients`: `{ value: boolean | null, rationale: string }`
 - `authorizations.trafficFailoverAuthorized`: `{ value: boolean | null, rationale: string }`
 
-Only literal booleans count as answers; missing, malformed, or textual values remain `null`. These permissions do not confirm backup capacity or deployment readiness, and do not replace an operator's approval of a specific recovery plan. The colleague's hosted agent asks these two permission questions, not the existing scenario's technical questions. Technical facts may therefore remain unconfirmed after a successful call.
+Only literal booleans count as answers; missing, malformed, or textual values remain `null`. These permissions do not confirm backup capacity or deployment readiness, and do not replace an operator's approval of a specific recovery plan. The hosted agent requests these two permissions in one combined question, rather than asking the scenario's technical questions. Technical facts may therefore remain unconfirmed after a successful call.
 
-The hosted prompt's promise to email a report does not send one. This integration does not add an email webhook to ElevenLabs. Casa Pepe's separate `send_incident_email` tool still requires its own provider configuration and execution.
+The hosted prompt was updated through the ElevenLabs API on 2026-09-19 to use an opening of at most 35 words and one combined permission question. See the [saved prompt](ELEVENLABS-AGENT-PROMPT.md). The hangup rule and both extraction descriptions were updated and verified by reading the agent back. A clear yes/no to the complete combined question applies to both permissions; partial answers remain separate and ambiguous or missing answers remain null. Voice and model settings were preserved. A subsequent live call verified the shorter opening and combined permission extraction, with the remaining issues recorded below.
+
+The revised prompt removes the promise to email a report. This integration does not add an email webhook to ElevenLabs. Casa Pepe's separate `send_incident_email` tool still requires its own provider configuration and execution.
+
+## Direct-provider rehearsal findings (2026-09-19)
+
+Two real calls were placed with `curl` directly against ElevenLabs, using the
+production Vercel agent, outbound line and test recipient, and the local
+ElevenLabs API key. Casa Pepe's API, database, LLM and incident workflow were
+not involved. The first payload explicitly described a drill. Recipient details,
+credentials and the raw transcript are intentionally excluded from this record.
+
+- Agent and phone-number discovery both returned HTTP 200. The outbound POST
+  returned HTTP 200 with `success: true`, `conversation_id` and `callSid`.
+- Conversation GETs observed `initiated`, `in-progress`, then `done`. The final
+  response included analysis and a transcript; no public callback was needed.
+- The connected call lasted 38 seconds and ended with
+  `metadata.termination_reason: "Call ended by remote party"`.
+- Both `analysis.data_collection_results.notify_all_clients.value` and
+  `traffic_failover_authorized.value` were `null`. The analysis explained that
+  the respective questions had not been asked. A generic affirmative utterance
+  in an interrupted exchange did not establish either permission.
+- `analysis.call_successful` was `"success"` despite both unanswered questions.
+  Call completion and authorization collection must remain separate. The adapter
+  already preserves this distinction; a sanitized regression test covers it.
+- The transcript showed repeated introductions following interruptions and an
+  email promise. The hosted agent has an `end_call` tool but no email tool.
+  This run did not send an email through Casa Pepe.
+
+The second call used the Spanish scenario's actual incident context without
+simulation wording: a meteorite takes AWS Dubái (`me-central-1`) offline,
+affecting Gulf Relay's orders database, route assignment, package tracking and
+event stream, with roughly 4,000 deliveries blocked per hour. The four dynamic
+variables were accepted without changing the hosted agent.
+
+- The outbound POST returned HTTP 200 and both provider identifiers.
+- Polling observed `in-progress`, `processing` (analysis still `null`), and
+  `done` with the final transcript and analysis.
+- The call lasted 55 seconds. Both authorization values were literal `true`,
+  each with a rationale tied to an affirmative answer to its specific question.
+- The agent delivered the closing phrase and invoked `end_call`;
+  `metadata.termination_reason` was `"end_call tool was called."`.
+- The transcript still showed an introduction restart after interruptions and
+  the unsupported promise to send an email. No Casa Pepe email or recovery
+  action was executed by this direct-provider test.
+
+Follow-up: the hosted prompt now asks one combined question, instructs the agent
+to resume after interruptions and removes the email promise, as described above.
+These prompt changes were made after both calls; the subsequent rehearsal is recorded below.
+Showing unanswered permissions explicitly wherever a completed call is shown
+remains product work. The second call validates a complete two-answer conversation and
+agent-triggered hangup at the provider level. Do not automatically redial to
+collect missing answers.
+
+The verified provider endpoints were:
+
+```text
+GET  https://api.elevenlabs.io/v1/convai/agents
+GET  https://api.elevenlabs.io/v1/convai/phone-numbers
+POST https://api.elevenlabs.io/v1/convai/twilio/outbound-call
+GET  https://api.elevenlabs.io/v1/convai/conversations/<conversation_id>
+```
+
+Use `xi-api-key` authentication and the dynamic variables documented above.
+The successful direct request validates provider connectivity and the request
+shape, not the deployed Casa Pepe integration end to end.
 
 ## Standalone API test
 
@@ -84,3 +159,22 @@ Look for:
 - `tool_test_provider_failure`: test identifier, tool/provider/mode and the adapter failure reason or caught exception. This also covers standalone email and HappyRobot failures.
 
 Credentials, authorization/cookie fields, configured secret values, recipient details and conversation content are redacted; diagnostic depth and text length are bounded. Request headers and call payloads are not logged. API responses remain generic. A timeout can occur after the provider accepted a call, so check the conversation ID in ElevenLabs or the call SID in Twilio before retrying. These logs become available after deploying this change; they cannot recover details discarded by earlier deployments.
+
+## Short-prompt live verification (2026-09-19)
+
+A direct curl retry with the same recipient and incident reached `done` after
+30 seconds, compared with 55 seconds for the earlier completed call (about 45%
+shorter in this single comparison). Both permissions were returned as literal
+`true`, with rationales citing explicit authorization of both actions. The agent
+closed with the expected phrase and invoked `end_call`. There was no email
+promise or repeated introduction.
+
+The agent delivered the combined permission question in its opening, but then
+asked for confirmation after the first affirmative response was transcribed with
+extra unclear words. The recipient explicitly authorized both actions. This
+validates the combined extraction and hangup, but not a strict one-question flow:
+the clarification was longer than intended. The agent also read `me-central-1`
+despite the prompt instruction to omit technical region codes. The subsequent
+prompt update replaces location with `outage_time` and forbids all location
+references. That final wording still needs a live voice rehearsal; the long
+clarification remains a conversation-quality issue.

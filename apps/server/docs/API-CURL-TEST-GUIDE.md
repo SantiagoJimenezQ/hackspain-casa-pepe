@@ -4,6 +4,14 @@ Run the numbered walkthrough in order, in the same **Bash** session. It tests au
 
 Requirements: a running backend with its database configured, `curl` 7.76+ (`--fail-with-body`), and `jq`. See [backend setup](../README.md) and the [API reference](API.md).
 
+The mandatory walkthrough is also covered by the in-process HTTP contract suite at [`src/api-curl-guide.spec.ts`](../src/api-curl-guide.spec.ts). It uses in-memory repositories and simulated adapters, so CI can validate the same API behavior without a deployment, Postgres, `curl`, or `jq`:
+
+```bash
+pnpm --filter @casa-pepe/server test
+```
+
+The curl walkthrough remains useful as a deployment smoke test; the automated suite is the deterministic CI check.
+
 Use a dedicated test deployment/database: starting a run replaces the active run for every consumer, and clearing learning deletes all saved insights. For repeatable results, configure the **server** with `HAPPYROBOT_MODE=simulated`, `RECOVERY_MODE=simulated`, and `INCIDENT_EMAIL_MODE=simulated`. Existing outbound webhook subscriptions still receive events. Do not run another demo or operator session concurrently.
 
 ## 1. Configure the client

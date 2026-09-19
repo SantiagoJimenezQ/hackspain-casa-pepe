@@ -14,10 +14,12 @@ describe("ActivityStreamController", () => {
 		const emitter = new EventEmitter2()
 		const controller = new ActivityStreamController(
 			{ list } as unknown as ActivityService,
-			{ resolveRunIdentifier: jest.fn().mockResolvedValue("run-1") } as unknown as RunsService,
+			{
+				resolveRunIdentifier: jest.fn().mockResolvedValue("run-1"),
+			} as unknown as RunsService,
 			emitter,
 		)
-		return { controller, list, emitter }
+		return { controller, emitter, list }
 	}
 
 	it("completes an idle stream before 300 seconds and removes its listener", async () => {
@@ -33,15 +35,24 @@ describe("ActivityStreamController", () => {
 		expect(emitter.listenerCount(DOMAIN_EVENTS.ACTIVITY_RECORDED)).toBe(0)
 	})
 
-	it.each([["42", 42], ["invalid", 7], ["-1", 7], [undefined, 7]])(
+	it.each([
+		["42", 42],
+		["invalid", 7],
+		["-1", 7],
+		[undefined, 7],
+	])(
 		"resumes using Last-Event-ID %s or the original query",
 		async (lastEventId, expected) => {
 			const { controller, list } = setup()
 			const query = new ListActivityDTO()
 			query.afterSequence = 7
-			const subscription = controller.stream(query, lastEventId).subscribe()
+			const subscription = controller
+				.stream(query, lastEventId)
+				.subscribe()
 			await jest.advanceTimersByTimeAsync(0)
-			expect(list).toHaveBeenCalledWith(expect.objectContaining({ afterSequence: expected }))
+			expect(list).toHaveBeenCalledWith(
+				expect.objectContaining({ afterSequence: expected }),
+			)
 			subscription.unsubscribe()
 			expect(jest.getTimerCount()).toBe(0)
 		},

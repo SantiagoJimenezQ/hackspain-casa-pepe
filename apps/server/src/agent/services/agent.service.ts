@@ -10,7 +10,9 @@ import {
 	stepIdentifierFor,
 } from "@agent/helpers/plan-builder.helper"
 import { isPlanSettled } from "@agent/helpers/plan-completion.helper"
+import { saveAndStart } from "@agent/llm/combined-plan"
 import {
+	LlmLoopActions,
 	LlmLoopService,
 	LlmLoopState,
 	stateFingerprint,
@@ -47,6 +49,7 @@ import {
 	IncidentSnapshot,
 } from "@incidents/types/incident.type"
 import { LearningService } from "@learning/services/learning.service"
+import { LearningInsightRecord } from "@learning/types/learning.type"
 import { Injectable, Logger } from "@nestjs/common"
 import { OnEvent } from "@nestjs/event-emitter"
 import { Interval } from "@nestjs/schedule"
@@ -462,7 +465,7 @@ export class AgentService {
 		})
 		await this.callEngineerImmediately(incident, messages)
 
-		const outcome = await this.llmLoop.run({
+		const actions: LlmLoopActions = {
 			execute: async (identifier, expected) => {
 				const fresh = await this.observeForLlm(runIdentifier, trigger)
 				if (
@@ -534,7 +537,15 @@ export class AgentService {
 					draft,
 				)
 			},
-		})
+		}
+		actions.saveAndExecute = (draft, identifier, expected) =>
+			saveAndStart(draft, identifier, expected, {
+				execute: actions.execute,
+				latest: () => this.plansService.findLatestPlan(runIdentifier),
+				observe: actions.observe,
+				save: actions.save,
+			})
+		const outcome = await this.llmLoop.run(actions)
 		const finalPlan = await this.plansService.findLatestPlan(runIdentifier)
 		if (!(await this.runsService.getByRunIdentifier(runIdentifier)).active)
 			return { kind: "skipped", reason: "The run is no longer active" }
@@ -621,44 +632,58 @@ export class AgentService {
 		runIdentifier: string,
 		trigger: AgentTrigger,
 	): Promise<LlmLoopState> {
-		const incident =
-			await this.runsService.getByRunIdentifier(runIdentifier)
-		const previous = await this.plansService.findLatestPlan(runIdentifier)
+		const [
+			incident,
+			previous,
+			approvals,
+			incomingCalls,
+			calls,
+			toolCalls,
+			tasks,
+		] = await Promise.all([
+			this.runsService.getByRunIdentifier(runIdentifier),
+			this.plansService.findLatestPlan(runIdentifier),
+			this.approvalsService.list(runIdentifier),
+			this.incomingCalls.list(runIdentifier),
+			this.engineersService.list(runIdentifier),
+			this.toolsService.list(runIdentifier),
+			this.tasksService.list(runIdentifier),
+		])
+		const learning = await this.learningService.list(
+			this.scenarioOf(incident).family,
+		)
 		const input = await this.buildLlmInput(
 			incident,
 			previous,
 			describeTrigger(trigger, this.messagesFor(incident)),
 			this.messagesFor(incident),
+			approvals,
+			learning,
 		)
-		const [approvals, incomingCalls, calls, toolCalls, learning, tasks] =
-			await Promise.all([
-				this.approvalsService.list(runIdentifier),
-				this.incomingCalls.list(runIdentifier),
-				this.engineersService.list(runIdentifier),
-				this.toolsService.list(runIdentifier),
-				this.learningService.list(this.scenarioOf(incident).family),
-				this.tasksService.list(runIdentifier),
-			])
-		return {
-			blocked: incomingCalls.some((call) => call.status === "pending"),
-			evidence: {
-				approvals,
-				calls,
-				engineerCall: {
-					mode: this.engineersService.mode,
-					provider: this.engineersService.provider,
-					technicalQuestionsSupported:
-						this.engineersService.mode === "simulated" ||
-						this.engineersService.provider === "happyrobot",
+		return JSON.parse(
+			JSON.stringify({
+				blocked: incomingCalls.some(
+					(call) => call.status === "pending",
+				),
+				evidence: {
+					approvals,
+					calls,
+					engineerCall: {
+						mode: this.engineersService.mode,
+						provider: this.engineersService.provider,
+						technicalQuestionsSupported:
+							this.engineersService.mode === "simulated" ||
+							this.engineersService.provider === "happyrobot",
+					},
+					incomingCalls,
+					learning,
+					recovery: { mode: this.recoveryService.mode },
+					tasks,
+					toolCalls: toolCalls.slice(-30),
 				},
-				incomingCalls,
-				learning,
-				recovery: { mode: this.recoveryService.mode },
-				tasks,
-				toolCalls: toolCalls.slice(-30),
-			},
-			input,
-		}
+				input,
+			}),
+		) as LlmLoopState
 	}
 
 	private async buildLlmInput(
@@ -666,11 +691,12 @@ export class AgentService {
 		previous: PlanRecord | null,
 		triggeredBy: string,
 		messages: AgentMessages,
+		approvals: ReadonlyArray<ApprovalRecord>,
+		learning: ReadonlyArray<LearningInsightRecord>,
 	): Promise<PlanBuildInput> {
 		const scenario = this.scenarioOf(incident)
-		const rejectedApprovals = await this.approvalsService.list(
-			incident.runIdentifier,
-			"rejected",
+		const rejectedApprovals = approvals.filter(
+			(approval) => approval.status === "rejected",
 		)
 		const rejectedServices: ReadonlyArray<ServiceConstraint> =
 			rejectedApprovals.map((approval) => ({
@@ -698,7 +724,7 @@ export class AgentService {
 			: []
 		const capacityAssumption = await this.resolveCapacityAssumption(
 			incident,
-			scenario,
+			learning,
 		)
 		const input: PlanBuildInput = {
 			briefing: scenario.engineerBriefing,
@@ -826,16 +852,21 @@ export class AgentService {
 
 	private async resolveCapacityAssumption(
 		incident: IncidentSnapshot,
-		scenario: ScenarioDefinition,
+		learning: ReadonlyArray<LearningInsightRecord>,
 	): Promise<CapacityAssumption | null> {
 		for (const resource of incident.resources) {
 			if (resource.confirmed) {
 				continue
 			}
-			const insight = await this.learningService.findCapacityInsight(
-				scenario.family,
-				resource.identifier,
+			const record = learning.find(
+				(item) =>
+					item.kind === "capacity-overstated" &&
+					item.subject === resource.identifier,
 			)
+			const insight =
+				record?.data.kind === "capacity-overstated"
+					? { ...record.data, observations: record.observations }
+					: null
 			if (!insight) {
 				continue
 			}

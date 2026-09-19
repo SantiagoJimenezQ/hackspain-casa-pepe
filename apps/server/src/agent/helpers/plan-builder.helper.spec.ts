@@ -315,7 +315,18 @@ describe("buildPlanDraft", () => {
 	})
 
 	it("executes services one at a time in priority order and after the engineer call", () => {
-		const draft = buildPlanDraft(createInput(12))
+		const input = createInput(12)
+		const draft = buildPlanDraft({
+			...input,
+			incident: {
+				...input.incident,
+				services: input.incident.services.map((service) => ({
+					...service,
+					recoveryRequiresApproval:
+						service.identifier === "orders-database",
+				})),
+			},
+		})
 		const databaseExecute = stepOf(
 			draft.steps,
 			stepIdentifierFor("orders-database", "execute"),

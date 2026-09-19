@@ -147,6 +147,12 @@ export class EnvironmentVariables {
 	@Min(1)
 	AGENT_MAXIMUM_CYCLES_PER_RUN: number = 60
 
+	@IsIn(["true", "false"])
+	AGENT_COMBINED_PLAN_ACTION_ENABLED: string = "false"
+
+	@IsIn(["true", "false"])
+	AGENT_COMPACT_PLAN_ENABLED: string = "false"
+
 	@Type(() => Number)
 	@IsInt()
 	@Min(1)

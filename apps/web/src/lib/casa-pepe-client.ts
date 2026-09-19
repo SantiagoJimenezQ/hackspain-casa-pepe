@@ -1,4 +1,4 @@
-import type { LearningInsight, LlmHistoryPage, Overview, RunReport } from "@/lib/casa-pepe-types";
+import type { ActivityRecord, LearningInsight, LlmHistoryPage, Overview, RunReport } from "@/lib/casa-pepe-types";
 
 export class CasaPepeClientError extends Error {
   constructor(
@@ -67,6 +67,11 @@ async function startRun(path: string, body?: string): Promise<RunScoped> {
 }
 
 export const casaPepeClient = {
+  decisionHistory: (run: string, before?: number, signal?: AbortSignal) => {
+    const query = new URLSearchParams({ runIdentifier: run, limit: "100" });
+    if (before !== undefined) query.set("beforeSequence", String(before));
+    return request<{ items: ActivityRecord[]; nextBeforeSequence: number | null }>(`/api/casa-pepe/activity/llm?${query}`, { signal });
+  },
   currentRunIdentifier: () => readStoredRun(),
   forgetRun: () => rememberRun(""),
   overview: () => request<Overview>(withRun("/api/casa-pepe/overview")),
@@ -80,6 +85,7 @@ export const casaPepeClient = {
     return request<LlmHistoryPage>(`/api/casa-pepe/activity/llm${suffix}`);
   },
   insights: () => request<LearningInsight[]>("/api/casa-pepe/learning/insights"),
+  resetLearnings: () => request<{ removed: number }>("/api/casa-pepe/learning/insights", { method: "DELETE" }),
   report: () => request<RunReport>(withRun("/api/casa-pepe/learning/reports/current")),
   start: () =>
     startRun(

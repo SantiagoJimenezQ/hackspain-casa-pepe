@@ -86,3 +86,26 @@ describe("validateEnvironmentVariables", () => {
 		})
 	})
 })
+
+it("validates independently switchable speed flags, off by default", () => {
+	const defaults = createApplicationConfiguration(
+		validateEnvironmentVariables(VALID),
+	)
+	expect(defaults.agent.combinedPlanActionEnabled).toBe(false)
+	expect(defaults.agent.compactPlanEnabled).toBe(false)
+	const enabled = createApplicationConfiguration(
+		validateEnvironmentVariables({
+			...VALID,
+			AGENT_COMBINED_PLAN_ACTION_ENABLED: "true",
+			AGENT_COMPACT_PLAN_ENABLED: "true",
+		}),
+	)
+	expect(enabled.agent.combinedPlanActionEnabled).toBe(true)
+	expect(enabled.agent.compactPlanEnabled).toBe(true)
+	expect(() =>
+		validateEnvironmentVariables({
+			...VALID,
+			AGENT_COMBINED_PLAN_ACTION_ENABLED: "yes",
+		}),
+	).toThrow()
+})

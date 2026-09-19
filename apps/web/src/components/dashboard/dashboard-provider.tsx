@@ -11,12 +11,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { mergeDecisionEvents } from "@/lib/agent-decisions";
 import { CasaPepeClientError, casaPepeClient } from "@/lib/casa-pepe-client";
 import { isLlmActivityType } from "@/lib/agent-trace";
 import type { ActivityRecord, LearningInsight, Overview, RunReport } from "@/lib/casa-pepe-types";
 
 type DashboardStatus = "loading" | "active" | "error";
-type DemoAction = "start" | "impact" | "twist" | "reset" | "cycle" | null;
+type DemoAction = "start" | "impact" | "twist" | "reset" | "reset-learnings" | "cycle" | null;
 
 type DashboardContextValue = {
   status: DashboardStatus;
@@ -24,6 +25,11 @@ type DashboardContextValue = {
   insights: LearningInsight[];
   report: RunReport | null;
   activity: ActivityRecord[];
+  decisionEvents: ActivityRecord[];
+  historyLoading: boolean;
+  historyError: string | null;
+  hasOlderDecisions: boolean;
+  loadOlderDecisions: () => Promise<void>;
   error: string | null;
   busyAction: DemoAction;
   retry: () => Promise<void>;
@@ -31,6 +37,8 @@ type DashboardContextValue = {
   triggerImpact: () => Promise<void>;
   triggerTwist: () => Promise<void>;
   resetDemo: () => Promise<void>;
+  resetLearnings: () => Promise<void>;
+  learningResetMessage: string | null;
   runAgentCycle: () => Promise<void>;
   decideApproval: (identifier: string, decision: "approve" | "reject", comment: string) => Promise<void>;
 };
@@ -44,7 +52,7 @@ const ACTIVITY_EVENTS = [
   "incident.event-applied", "incident.status-changed", "incident.run-reset",
   "service.health-changed", "resource.capacity-changed", "fact.recorded",
   "plan.created", "plan.revised", "plan-step.updated", "decision.recorded",
-  "tool-call.started", "tool-call.completed", "tool-call.failed", "approval.requested",
+  "tool-call.started", "tool-call.dispatched", "tool-call.completed", "tool-call.failed", "approval.requested",
   "approval.decided", "approval.superseded", "approval.expired", "task.assigned",
   "task.updated", "engineer-call.started", "engineer-call.completed",
   "engineer-call.failed", "recovery.executed", "recovery.verified", "services.checked", "simulation.advanced",
@@ -99,8 +107,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<DashboardStatus>("loading");
   const [overview, setOverview] = useState<Overview | null>(null);
   const [insights, setInsights] = useState<LearningInsight[]>([]);
+  const [learningResetMessage, setLearningResetMessage] = useState<string | null>(null);
+  const learningGeneration = useRef(0);
   const [report, setReport] = useState<RunReport | null>(null);
   const [activity, setActivity] = useState<ActivityRecord[]>([]);
+  const [historyEvents, setHistoryEvents] = useState<ActivityRecord[]>([]);
+  const [decisionEvents, setDecisionEvents] = useState<ActivityRecord[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyCursor, setHistoryCursor] = useState<number | null | undefined>(undefined);
+  const historyRequest = useRef<AbortController | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<DemoAction>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -110,56 +126,66 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const ensuringRun = useRef(false);
   const learningLoaded = useRef(false);
 
-  const loadLlmHistory = useCallback(async (runIdentifier: string, generation: number) => {
-    try {
-      let beforeSequence: number | undefined;
-      const pages: ActivityRecord[] = [];
-      for (let page = 0; page < 8; page += 1) {
-        const result = await casaPepeClient.llmHistory({
-          beforeSequence,
-          limit: 100,
-          runIdentifier,
-        });
-        if (!Array.isArray(result.items)) break;
-        pages.push(...result.items);
-        if (result.nextBeforeSequence == null) break;
-        beforeSequence = result.nextBeforeSequence;
-      }
-      if (generation !== startGeneration.current) return;
-      if (latestRunIdentifier.current !== runIdentifier) return;
-      startTransition(() => {
-        setActivity((current) => mergeActivityList(current, pages));
-      });
-    } catch {
-      // Live SSE still renders; older turns are additive history.
-    }
-  }, []);
-
   const applyOverview = useCallback((next: Overview) => {
     const nextSequence = Math.max(0, ...next.recentActivity.map((item) => item.sequence));
     const runChanged = latestRunIdentifier.current !== next.incident.runIdentifier;
+    if (runChanged) {
+      historyRequest.current?.abort();
+      historyRequest.current = null;
+      setHistoryCursor(undefined);
+      setHistoryEvents([]);
+      setHistoryError(null);
+    }
     latestRunIdentifier.current = next.incident.runIdentifier;
     latestSequence.current = runChanged
       ? nextSequence
       : Math.max(latestSequence.current, nextSequence);
     startTransition(() => {
       setOverview(next);
+      setDecisionEvents((current) => mergeDecisionEvents(runChanged ? [] : current, next.recentActivity, next.incident.runIdentifier, 500));
       setActivity((current) => runChanged ? next.recentActivity : mergeActivityList(current, next.recentActivity));
       setError(null);
       setStatus("active");
     });
-    if (runChanged && next.incident.runIdentifier) {
-      void loadLlmHistory(next.incident.runIdentifier, startGeneration.current);
+  }, []);
+
+  const loadOlderDecisions = useCallback(async () => {
+    const run = latestRunIdentifier.current;
+    if (!run || historyRequest.current) return;
+    const controller = new AbortController();
+    historyRequest.current = controller;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const page = await casaPepeClient.decisionHistory(run, historyCursor ?? undefined, controller.signal);
+      if (controller.signal.aborted || latestRunIdentifier.current !== run) return;
+      if (!Array.isArray(page.items) || !(page.nextBeforeSequence === null || Number.isSafeInteger(page.nextBeforeSequence))) throw new Error("Invalid history response");
+      setHistoryEvents((current) => mergeDecisionEvents(current, page.items, run));
+      setHistoryCursor(page.nextBeforeSequence);
+    } catch {
+      if (!controller.signal.aborted && latestRunIdentifier.current === run) setHistoryError("No se pudo cargar el historial. / Could not load history.");
+    } finally {
+      if (historyRequest.current === controller) {
+        historyRequest.current = null;
+        setHistoryLoading(false);
+      }
     }
-  }, [loadLlmHistory]);
+  }, [historyCursor]);
+
+  useEffect(() => {
+    if (overview?.incident.runIdentifier && historyCursor === undefined && !historyError) void loadOlderDecisions();
+  }, [overview?.incident.runIdentifier, historyCursor, historyError, loadOlderDecisions]);
+  useEffect(() => () => historyRequest.current?.abort(), []);
 
   const loadLearning = useCallback(async () => {
     if (learningLoaded.current) return;
     learningLoaded.current = true;
+    const generation = learningGeneration.current;
     const [insightsResult, reportResult] = await Promise.allSettled([
       casaPepeClient.insights(),
       casaPepeClient.report(),
     ]);
+    if (generation !== learningGeneration.current) return;
     startTransition(() => {
       if (insightsResult.status === "fulfilled") setInsights(insightsResult.value);
       if (reportResult.status === "fulfilled") setReport(reportResult.value);
@@ -234,7 +260,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     const receive = (message: MessageEvent<string>) => {
       try {
         const event = JSON.parse(message.data) as ActivityRecord;
+        if (latestRunIdentifier.current !== runIdentifier || (event.runIdentifier && event.runIdentifier !== runIdentifier)) return;
         latestSequence.current = Math.max(latestSequence.current, event.sequence);
+        setDecisionEvents((current) => mergeDecisionEvents(current, [event], runIdentifier, 500));
         startTransition(() => setActivity((current) => mergeActivity(current, event)));
         if (event.type !== "agent.llm-output") scheduleRefresh();
       } catch {
@@ -292,6 +320,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     learningLoaded.current = false;
     await execute("reset", casaPepeClient.reset);
   }, [execute]);
+  const resetLearnings = useCallback(() => execute("reset-learnings", async () => {
+    setLearningResetMessage(null);
+    const { removed } = await casaPepeClient.resetLearnings();
+    learningGeneration.current += 1;
+    learningLoaded.current = false;
+    setInsights([]);
+    setReport((current) => current ? { ...current, lessons: [] } : null);
+    setLearningResetMessage(`${removed} aprendizajes borrados. Reinicia la demo para empezar sin memoria previa.`);
+    await loadLearning();
+  }), [execute, loadLearning]);
   const runAgentCycle = useCallback(() => execute("cycle", casaPepeClient.runCycle), [execute]);
   const decideApproval = useCallback(
     (identifier: string, decision: "approve" | "reject", comment: string) =>
@@ -301,10 +339,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     () => ({
+      decisionEvents: mergeDecisionEvents(decisionEvents, historyEvents, overview?.incident.runIdentifier ?? ""), historyLoading, historyError, hasOlderDecisions: historyCursor !== null, loadOlderDecisions,
       status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact,
-      triggerTwist, resetDemo, runAgentCycle, decideApproval,
+      triggerTwist, resetDemo, resetLearnings, learningResetMessage, runAgentCycle, decideApproval,
     }),
-    [status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact, triggerTwist, resetDemo, runAgentCycle, decideApproval],
+    [historyEvents, decisionEvents, historyLoading, historyError, historyCursor, loadOlderDecisions, status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact, triggerTwist, resetDemo, resetLearnings, learningResetMessage, runAgentCycle, decideApproval],
   );
 
   return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>;

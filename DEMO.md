@@ -80,7 +80,7 @@ El agente prioriza por lo **crítico** que es cada servicio y **no por lo import
 ## 7. EL PROBLEMA
 
 - **Golfo:** 150 M$ perdonados en 1 mes · +10.000 M$ en daños (estimación de analistas) · 60 servicios caídos · 1 región entera fuera
-- **Google:** regiones en Doha, Dammam y Tel Aviv, en la misma zona de guerra · 0 caídas reportadas… de momento
+- **Google:** regiones en Doha, Dammam, en la misma zona de guerra · 0 caídas reportadas… de momento
 - **AWS:** +100.000 M$ al año · cada 1 % en riesgo = +1.000 M$ (cálculo propio)
 
 > **No necesita que le digamos qué hacer. Necesita que le digamos lo que no sabe**

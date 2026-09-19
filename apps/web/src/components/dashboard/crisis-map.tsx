@@ -5,22 +5,27 @@ import { animate, motion, useMotionValue, useMotionValueEvent } from "motion/rea
 import type { Overview } from "@/lib/casa-pepe-types";
 import {
   type Camera,
+  type MapView,
+  agentSettled,
   arcPath,
   cameraForView,
+  cameraNeedsSnap,
   cameraSvgTransform,
+  cameraTransitionForView,
   failoverArcVisible,
   failoverTarget,
   fitWorldProjection,
+  linkFill,
+  linkFillDuration,
   mapViewForTools,
   projectPoint,
   spherePath,
   toolNamesOf,
   worldPath,
 } from "@/lib/crisis-map";
-import { customerView, topologyView, type VisualStatus } from "@/lib/live-dashboard";
+import { customerView, topologyView, type CustomerAction, type VisualStatus } from "@/lib/live-dashboard";
 
 const COLORS: Record<VisualStatus, string> = { up: "#3ee08f", degraded: "#f5a524", down: "#f04444" };
-const CAMERA_TRANSITION = { duration: 0.85, ease: [0.22, 1, 0.36, 1] as const };
 
 function useElementSize() {
   const ref = useRef<HTMLDivElement>(null);
@@ -34,7 +39,9 @@ function useElementSize() {
       if (!entry) return;
       cancelAnimationFrame(frame.current);
       frame.current = requestAnimationFrame(() => {
-        setSize({ height: entry.contentRect.height, width: entry.contentRect.width });
+        const width = Math.round(entry.contentRect.width);
+        const height = Math.round(entry.contentRect.height);
+        setSize((previous) => previous.width === width && previous.height === height ? previous : { height, width });
       });
     });
     observer.observe(element);
@@ -47,11 +54,13 @@ function useElementSize() {
   return { ref, size };
 }
 
-function useCameraTransform(camera: Camera) {
+function useCameraTransform(camera: Camera, view: MapView) {
   const groupRef = useRef<SVGGElement>(null);
   const x = useMotionValue(camera.x);
   const y = useMotionValue(camera.y);
   const k = useMotionValue(camera.k);
+  const primed = useRef(false);
+  const previousView = useRef<MapView | null>(null);
   const [markerScale, setMarkerScale] = useState(() => (camera.k > 0 ? 1 / camera.k : 1));
   useMotionValueEvent(k, "change", (value) => {
     setMarkerScale(value > 0 ? 1 / value : 1);
@@ -62,16 +71,31 @@ function useCameraTransform(camera: Camera) {
     };
     const unsubs = [x, y, k].map((value) => value.on("change", apply));
     apply();
+    const next = { x: camera.x, y: camera.y, k: camera.k };
+    const current = { x: x.get(), y: y.get(), k: k.get() };
+    if (!primed.current || cameraNeedsSnap(current, next)) {
+      x.set(next.x);
+      y.set(next.y);
+      k.set(next.k);
+      primed.current = true;
+      previousView.current = view;
+      apply();
+      return () => {
+        for (const unsub of unsubs) unsub();
+      };
+    }
+    const transition = cameraTransitionForView(view, previousView.current);
+    previousView.current = view;
     const animations = [
-      animate(x, camera.x, CAMERA_TRANSITION),
-      animate(y, camera.y, CAMERA_TRANSITION),
-      animate(k, camera.k, CAMERA_TRANSITION),
+      animate(x, next.x, transition),
+      animate(y, next.y, transition),
+      animate(k, next.k, transition),
     ];
     return () => {
       for (const unsub of unsubs) unsub();
       for (const animation of animations) animation.stop();
     };
-  }, [camera.k, camera.x, camera.y, k, x, y]);
+  }, [camera.k, camera.x, camera.y, k, view, x, y]);
   return { groupRef, markerScale };
 }
 
@@ -94,6 +118,67 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, { failed: bool
 
 function MarkerLayer({ scale, children }: { scale: number; children: ReactNode }) {
   return <g transform={`scale(${scale})`}>{children}</g>;
+}
+
+function NetworkLink({
+  path,
+  action,
+  progress,
+}: {
+  path: string;
+  action: CustomerAction;
+  progress: number;
+}) {
+  const fill = linkFill(action, progress);
+  const restored = action === "online" || action === "recovered";
+  const base = restored ? COLORS.up : COLORS.down;
+  return (
+    <g>
+      <path
+        d={path}
+        fill="none"
+        stroke={base}
+        strokeWidth={5.5}
+        strokeLinecap="round"
+        opacity={restored ? 0.14 : 0.2}
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d={path}
+        fill="none"
+        stroke={base}
+        strokeWidth={1.4}
+        strokeLinecap="round"
+        className={restored ? undefined : "network-offline"}
+        vectorEffect="non-scaling-stroke"
+      />
+      {!restored && fill > 0.01 ? (
+        <motion.path
+          d={path}
+          fill="none"
+          stroke={COLORS.up}
+          strokeWidth={2.2}
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: fill }}
+          transition={{ duration: linkFillDuration(action), ease: [0.22, 1, 0.36, 1] }}
+        />
+      ) : null}
+      {restored ? (
+        <path
+          d={path}
+          fill="none"
+          stroke={COLORS.up}
+          strokeWidth={1.55}
+          strokeLinecap="round"
+          className="network-packet"
+          opacity={0.9}
+          vectorEffect="non-scaling-stroke"
+        />
+      ) : null}
+    </g>
+  );
 }
 
 function CrisisMapCanvas({ overview }: { overview: Overview }) {
@@ -120,41 +205,48 @@ function CrisisMapScene({
   const nodes = topologyView(overview);
   const primary = nodes.find((node) => node.role === "primary");
   const impacted = primary?.status === "down" || Boolean(overview.incident.impactedAt);
+  const settled = agentSettled(overview);
   const tools = toolNamesOf(overview.toolCalls);
-  const view = mapViewForTools(impacted, tools);
+  const view = mapViewForTools(impacted, tools, settled);
   const camera = cameraForView(view, projection, width, height, nodes);
-  const { groupRef, markerScale } = useCameraTransform(camera);
+  const { groupRef, markerScale } = useCameraTransform(camera, view);
   const backup = failoverTarget(overview);
   const origin = primary ? projectPoint(projection, primary.longitude, primary.latitude) : null;
   const target = backup ? projectPoint(projection, backup.longitude, backup.latitude) : null;
-  const showArc = Boolean(origin && target && failoverArcVisible(tools));
   const theater = view !== "world";
+  const showArc = Boolean(origin && target && theater && failoverArcVisible(tools));
   const customers = customerView(overview.incident).filter(
     (customer) => customer.latitude !== undefined && customer.longitude !== undefined,
   );
+  const crisis = impacted && !settled;
 
   return (
     <svg width={width} height={height} className="absolute inset-0" role="img" aria-label="Mapa mundial de la crisis de Dubái">
-      <defs>
-        <linearGradient id="failover-link" x1={origin?.[0]} y1={origin?.[1]} x2={target?.[0]} y2={target?.[1]} gradientUnits="userSpaceOnUse">
-          <stop stopColor="#f04444" />
-          <stop offset="1" stopColor="#f5a524" />
-        </linearGradient>
-      </defs>
       <g ref={groupRef}>
           <path d={sphere} fill="var(--map-inset)" />
           <path d={land} fill="var(--map-land)" stroke="var(--map-stroke)" strokeWidth={0.9} vectorEffect="non-scaling-stroke" />
+          {origin ? customers.map((customer) => {
+            const point = projectPoint(projection, customer.longitude ?? 0, customer.latitude ?? 0);
+            return (
+              <NetworkLink
+                key={customer.identifier}
+                path={arcPath(origin, point)}
+                action={customer.action}
+                progress={customer.progress}
+              />
+            );
+          }) : null}
           {showArc && origin && target ? (
             <motion.path
               d={arcPath(origin, target)}
               fill="none"
-              stroke="url(#failover-link)"
-              strokeWidth={2.4}
+              stroke={settled ? COLORS.up : COLORS.down}
+              strokeWidth={2.2}
               strokeLinecap="round"
-              strokeDasharray="5 5"
+              strokeDasharray="5 7"
               vectorEffect="non-scaling-stroke"
               initial={{ pathLength: 0, opacity: 0.25 }}
-              animate={{ pathLength: 1, opacity: 1 }}
+              animate={{ pathLength: 1, opacity: 0.85 }}
               transition={{ duration: 1.1, ease: "easeOut" }}
             />
           ) : null}
@@ -165,7 +257,7 @@ function CrisisMapScene({
             return (
               <g key={node.identifier} transform={`translate(${x} ${y})`}>
                 <MarkerLayer scale={markerScale}>
-                  {isPrimary && impacted ? (
+                  {isPrimary && crisis ? (
                     <motion.circle
                       key={overview.incident.impactedAt || "impact"}
                       r="18"
@@ -177,6 +269,12 @@ function CrisisMapScene({
                       transition={{ duration: 1.2, ease: "easeOut" }}
                       style={{ transformOrigin: "center", transformBox: "fill-box" }}
                     />
+                  ) : null}
+                  {isPrimary && !crisis ? (
+                    <>
+                      <circle r="26" fill="none" stroke={COLORS.up} opacity=".1" />
+                      <circle r="18" fill="none" stroke={COLORS.up} opacity=".16" />
+                    </>
                   ) : null}
                   <circle
                     r={status === "down" ? 16 : 9}
@@ -192,7 +290,7 @@ function CrisisMapScene({
                       <text x="12" y="16" fill="var(--muted-foreground)" fontSize="9">{node.region}</text>
                     </>
                   ) : null}
-                  {isPrimary && impacted ? (
+                  {isPrimary && crisis ? (
                     <g transform="translate(12 -28)">
                       <rect width="118" height="22" rx="4" fill="var(--map-callout)" stroke="color-mix(in srgb, #f04444 45%, var(--border))" />
                       <text x="8" y="14" fill="#f04444" fontSize="8" fontWeight="700" letterSpacing="0.16em">IMPACTO</text>
@@ -204,12 +302,20 @@ function CrisisMapScene({
           })}
           {customers.map((customer) => {
             const [x, y] = projectPoint(projection, customer.longitude ?? 0, customer.latitude ?? 0);
+            const pulsing = customer.action === "offline" || customer.action === "migrating";
             return (
               <g key={customer.identifier} transform={`translate(${x} ${y})`}>
                 <MarkerLayer scale={markerScale}>
-                  <image href={customer.logo} x="-10" y="-10" width="20" height="20" />
+                  <circle
+                    r="14"
+                    fill={COLORS[customer.status]}
+                    opacity=".2"
+                    className={pulsing ? "pulse-ring" : undefined}
+                  />
+                  <circle r="11" fill="var(--map-node-fill)" stroke={COLORS[customer.status]} strokeWidth="1.6" />
+                  <image href={customer.logo} x="-8" y="-8" width="16" height="16" />
                   {theater ? (
-                    <text x="12" y="4" fill="var(--foreground)" fontSize="10">{customer.shortName}</text>
+                    <text x="14" y="4" fill="var(--foreground)" fontSize="10">{customer.shortName}</text>
                   ) : null}
                 </MarkerLayer>
               </g>

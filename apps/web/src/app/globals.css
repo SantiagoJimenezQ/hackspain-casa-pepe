@@ -181,6 +181,30 @@
   animation: pulse-ring 2.4s ease-out infinite;
 }
 
+@keyframes network-packet {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+
+.network-packet {
+  stroke-dasharray: 4 16;
+  animation: network-packet 2.6s linear infinite;
+}
+
+@keyframes network-offline-pulse {
+  0%, 100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.network-offline {
+  animation: network-offline-pulse 1.7s ease-in-out infinite;
+}
+
 .scroll-fade[data-fade-start][data-fade-end] {
   mask-image: linear-gradient(to bottom, transparent, black 14px, black calc(100% - 18px), transparent);
 }

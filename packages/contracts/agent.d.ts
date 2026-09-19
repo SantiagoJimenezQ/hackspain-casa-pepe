@@ -55,30 +55,4 @@ export interface LlmPublicTurn {
   readonly disposition: 'pending' | 'accepted' | 'rejected' | 'stale' | 'incomplete'
   readonly dispositionReason?: string
   readonly redacted: boolean
-  readonly actionResult?: CombinedPlanActionResult
-}
-
-/** One terminal sample per commander model request; never includes prompts or credentials. */
-export interface DecisionTiming {
-  readonly cycleIdentifier: string
-  readonly outputIdentifier: string
-  readonly turn: number
-  readonly outcome: string
-  readonly startedAt: string
-  readonly elapsedMilliseconds: number
-  readonly modelMilliseconds: number
-  readonly loopObservationMilliseconds: number
-  readonly loopObservationCount: number
-  readonly actionMilliseconds: number
-}
-
-/** Result of the guarded combined action. Acceptance is not external completion. */
-export interface CombinedPlanActionResult {
-  readonly planIdentifier: string
-  readonly planVersion: number
-  readonly selectedStepIdentifier: string
-  readonly dispatchStatus: 'awaiting-approval' | 'dispatched' | 'blocked' | 'failed'
-  readonly approvalIdentifier?: string
-  readonly toolCallIdentifier?: string
-  readonly reason?: string
 }

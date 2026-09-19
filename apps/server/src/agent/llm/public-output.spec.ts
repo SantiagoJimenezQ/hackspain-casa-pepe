@@ -112,37 +112,3 @@ describe("public output boundary", () => {
 		expect(JSON.stringify(calls)).not.toContain("+34600000000")
 	})
 })
-
-it("C12 redacts nested combined plan arguments without altering executable input", async () => {
-	const { definitions } = await import("./llm-loop.service")
-	const { draft } = (
-		await import("@root/testing/speed.fixture")
-	).speedFixture()
-	const canary = "synthetic-combined-canary"
-	const original = {
-		firstStepIdentifier: draft.steps[0].identifier,
-		plan: {
-			...draft,
-			summary: `Restore safely ${canary}`,
-			unknownField: canary,
-		},
-	}
-	const output = new PublicOutput({ apiKey: canary })
-	const projected = output.calls(
-		[
-			{
-				function: {
-					arguments: JSON.stringify(original),
-					name: "propose_plan_and_execute",
-				},
-				id: "combined",
-				type: "function",
-			},
-		],
-		definitions(true),
-	)
-	expect(JSON.stringify(projected)).not.toContain(canary)
-	expect(JSON.stringify(projected)).not.toContain("+34600000000")
-	expect(original.plan.summary).toContain(canary)
-	expect(projected[0].name).toBe("propose_plan_and_execute")
-})

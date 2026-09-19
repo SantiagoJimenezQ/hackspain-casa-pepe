@@ -97,22 +97,6 @@ export class ToolsService {
 		)
 
 		const result = await this.runWithTimeout(saved, request)
-		if (
-			result.status !== "failed" &&
-			[
-				"call_engineer",
-				"contact_engineer",
-				"execute_recovery",
-				"send_incident_email",
-				"publish_status_update",
-			].includes(saved.name)
-		) {
-			await this.recordActivity(
-				saved,
-				"tool-call.dispatched",
-				`${saved.name}: adapter accepted the action`,
-			)
-		}
 		switch (result.status) {
 			case "succeeded":
 				return {
@@ -387,11 +371,7 @@ export class ToolsService {
 
 	private async recordActivity(
 		entity: ToolCallEntity,
-		type:
-			| "tool-call.started"
-			| "tool-call.dispatched"
-			| "tool-call.completed"
-			| "tool-call.failed",
+		type: "tool-call.started" | "tool-call.completed" | "tool-call.failed",
 		summary: string,
 	): Promise<void> {
 		await this.activityService.record({

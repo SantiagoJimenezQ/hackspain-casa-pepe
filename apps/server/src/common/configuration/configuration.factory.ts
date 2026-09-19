@@ -135,9 +135,6 @@ export function createApplicationConfiguration(
 			approvalTimeoutMilliseconds:
 				variables.AGENT_APPROVAL_TIMEOUT_MILLISECONDS,
 			callTimeoutMilliseconds: variables.AGENT_CALL_TIMEOUT_MILLISECONDS,
-			combinedPlanActionEnabled:
-				variables.AGENT_COMBINED_PLAN_ACTION_ENABLED === "true",
-			compactPlanEnabled: variables.AGENT_COMPACT_PLAN_ENABLED === "true",
 			maximumCyclesPerRun: variables.AGENT_MAXIMUM_CYCLES_PER_RUN,
 			maximumStepAttempts: variables.AGENT_MAXIMUM_STEP_ATTEMPTS,
 			maximumStepsPerCycle: variables.AGENT_MAXIMUM_STEPS_PER_CYCLE,

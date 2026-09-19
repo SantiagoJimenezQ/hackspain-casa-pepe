@@ -10,11 +10,6 @@ export interface LlmLoopState {
 }
 
 export interface LlmLoopActions {
-	saveAndExecute?(
-		draft: PlanDraft,
-		identifier: string,
-		expected: LlmLoopState,
-	): Promise<unknown>
 	observe(): Promise<LlmLoopState>
 	save(draft: PlanDraft, expected: LlmLoopState): Promise<PlanRecord>
 	execute(stepIdentifier: string, expected: LlmLoopState): Promise<unknown>

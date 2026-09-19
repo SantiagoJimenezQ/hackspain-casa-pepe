@@ -1,5 +1,4 @@
 export const ACTIVITY_EVENT_TYPES = [
-	"agent.decision-timing",
 	"agent.llm-output",
 	"agent.llm-decision",
 	"agent.llm-failed",
@@ -19,7 +18,6 @@ export const ACTIVITY_EVENT_TYPES = [
 	"plan-step.updated",
 	"decision.recorded",
 	"tool-call.started",
-	"tool-call.dispatched",
 	"tool-call.completed",
 	"tool-call.failed",
 	"approval.requested",

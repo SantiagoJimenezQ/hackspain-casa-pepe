@@ -17,7 +17,6 @@ function StatusIcon({ tone }: { tone: DecisionTreeNode['tone'] }) {
 
 export default function DecisionTreeView({ onClose }: { onClose: () => void }) {
   const { overview } = useDashboard();
-  const { locale, t } = useI18n();
   if (!overview) return null;
   // A reset remounts history, selection, and playback together.
   return <RunTree key={overview.incident.runIdentifier} run={overview.incident.runIdentifier} start={overview.incident.startedAt} title={overview.incident.title} onClose={onClose} />;
@@ -25,6 +24,7 @@ export default function DecisionTreeView({ onClose }: { onClose: () => void }) {
 
 function RunTree({ run, start, title, onClose }: { run: string; start: string; title: string; onClose: () => void }) {
   const { activity, overview } = useDashboard();
+  const { locale, t } = useI18n();
   const [history, setHistory] = useState<ActivityRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

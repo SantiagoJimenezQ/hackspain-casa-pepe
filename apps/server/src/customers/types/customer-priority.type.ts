@@ -1,4 +1,7 @@
-import { CUSTOMER_STATUSES } from "@customers/constants/customer-priority.constant"
+import {
+	CUSTOMER_PRIORITY_MODES,
+	CUSTOMER_STATUSES,
+} from "@customers/constants/customer-priority.constant"
 import { RecoveryActionStatus } from "@recovery/types/recovery.type"
 import {
 	BusinessImpactLevel,
@@ -53,6 +56,7 @@ export interface CustomerPriority {
 	readonly capacityUnitsToRecover: number
 	readonly nextAction: string
 	readonly reason: string
+	readonly justification: string
 	readonly services: ReadonlyArray<CustomerServiceStatus>
 }
 
@@ -61,7 +65,14 @@ export interface CustomerPriorityCriterion {
 	readonly description: string
 }
 
+export type CustomerPriorityMode = (typeof CUSTOMER_PRIORITY_MODES)[number]
+
+export type CustomerPrioritySource = CustomerPriorityMode
+
 export interface CustomerPriorityReport {
+	readonly source: CustomerPrioritySource
+	readonly model: string
+	readonly fallbackReason: string
 	readonly runIdentifier: string
 	readonly incidentIdentifier: string
 	readonly generatedAt: string

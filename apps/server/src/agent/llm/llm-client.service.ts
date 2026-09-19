@@ -1,4 +1,5 @@
 import {
+	LlmCompletionOverrides,
 	LlmMessage,
 	LlmToolCall,
 	LlmToolDefinition,
@@ -31,8 +32,12 @@ export class LlmClientService {
 	async complete(
 		messages: LlmMessage[],
 		tools: LlmToolDefinition[],
+		overrides: LlmCompletionOverrides = {},
 	): Promise<{ message: LlmMessage; usage: unknown; model: string }> {
-		const configuration = this.providerConfiguration()
+		const configuration = {
+			...this.providerConfiguration(),
+			...overrides,
+		}
 		const responseData = await this.request(configuration, messages, tools)
 		return parseCompletionResponse(
 			responseData,
@@ -85,6 +90,8 @@ export class LlmClientService {
 		return {
 			apiKey,
 			baseURL,
+			fastModel: configured.fastModel.trim(),
+			fastTimeoutMilliseconds: configured.fastTimeoutMilliseconds,
 			maximumOutputTokens: configured.maximumOutputTokens,
 			maximumTurns: configured.maximumTurns,
 			model,

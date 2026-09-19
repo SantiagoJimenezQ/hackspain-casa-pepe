@@ -84,6 +84,8 @@ export interface LlmConfiguration {
 	readonly maximumTurns: number
 	readonly maximumOutputTokens: number
 	readonly reasoningEffort: LlmReasoningEffort
+	readonly fastModel: string
+	readonly fastTimeoutMilliseconds: number
 }
 
 export interface EmailConfiguration {

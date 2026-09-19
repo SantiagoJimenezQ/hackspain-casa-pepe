@@ -126,6 +126,8 @@ export function createApplicationConfiguration(
 		llm: {
 			apiKey: variables.LLM_API_KEY,
 			baseURL: variables.LLM_BASE_URL,
+			fastModel: variables.LLM_FAST_MODEL,
+			fastTimeoutMilliseconds: variables.LLM_FAST_TIMEOUT_MILLISECONDS,
 			maximumOutputTokens: variables.LLM_MAXIMUM_OUTPUT_TOKENS,
 			maximumTurns: variables.LLM_MAXIMUM_TURNS,
 			model: variables.LLM_MODEL,

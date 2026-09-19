@@ -16,6 +16,13 @@ export interface LlmMessage {
 	tool_call_id?: string
 }
 
+export interface LlmCompletionOverrides {
+	readonly model?: string
+	readonly timeoutMilliseconds?: number
+	readonly reasoningEffort?: import("@common/types/configuration.type").LlmReasoningEffort
+	readonly maximumOutputTokens?: number
+}
+
 export interface LlmToolDefinition {
 	type: "function"
 	function: {

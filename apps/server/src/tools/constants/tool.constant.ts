@@ -12,6 +12,7 @@ export const TOOL_NAMES = [
 	"request_approval",
 	"execute_recovery",
 	"verify_recovery",
+	"read_incoming_emails",
 	"check_services_status",
 ] as const
 

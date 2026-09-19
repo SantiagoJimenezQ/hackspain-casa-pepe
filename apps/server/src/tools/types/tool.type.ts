@@ -72,6 +72,8 @@ export type ToolInvocation =
 				readonly limit?: number
 				readonly emailId?: string
 			}
+	  }
+	| {
 			readonly name: "check_services_status"
 			readonly input: Record<string, never>
 	  }
@@ -134,6 +136,8 @@ export type ToolOutput =
 			readonly kind: "inbound-emails"
 			readonly emails: ReadonlyArray<Record<string, unknown>>
 			readonly selected: Record<string, unknown> | null
+	  }
+	| {
 			readonly kind: "services-status"
 			readonly checks: ReadonlyArray<ServiceStatusCheck>
 			readonly healthyCount: number

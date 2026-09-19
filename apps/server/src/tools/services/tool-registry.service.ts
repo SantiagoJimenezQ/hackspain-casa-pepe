@@ -52,6 +52,8 @@ export class ToolRegistryService {
 		requestApproval: RequestApprovalTool,
 		executeRecovery: ExecuteRecoveryTool,
 		verifyRecovery: VerifyRecoveryTool,
+		readIncomingEmails: ReadIncomingEmailsTool,
+		checkServicesStatus: CheckServicesStatusTool,
 		private readonly engineersService: EngineersService,
 		private readonly recoveryService: RecoveryService,
 	) {
@@ -69,7 +71,8 @@ export class ToolRegistryService {
 			requestApproval,
 			executeRecovery,
 			verifyRecovery,
-			CheckServicesStatusTool,
+			readIncomingEmails,
+			checkServicesStatus,
 		]
 		this.tools = new Map(registered.map((tool) => [tool.name, tool]))
 	}

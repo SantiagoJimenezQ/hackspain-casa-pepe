@@ -74,6 +74,7 @@ import { HappyRobotSecretGuard } from "@webhooks/guards/inbound-secret.guard"
 		RequestApprovalTool,
 		ExecuteRecoveryTool,
 		VerifyRecoveryTool,
+		ReadIncomingEmailsTool,
 		CheckServicesStatusTool,
 		ToolRegistryService,
 		ToolsService,

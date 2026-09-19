@@ -44,6 +44,8 @@ export const LOG_MESSAGES = {
 		CALL_AUTHORIZATION_IGNORED:
 			"Live authorization ignored because the call already finished",
 		CALL_AUTHORIZED: "Engineer call reported live authorizations",
+		CALL_FALLBACK_TO_SIMULATED:
+			"Live engineer call rejected by the provider, dispatching a simulated call instead",
 		CALL_FINISHED: "Engineer call finished",
 		CALL_RESULT_ALREADY_SETTLED:
 			"Engineer call result ignored because the call already has one",

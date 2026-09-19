@@ -171,6 +171,8 @@ export function createApplicationConfiguration(
 			webhookSecret: variables.RESEND_WEBHOOK_SECRET,
 		},
 		engineerCall: {
+			fallbackToSimulated:
+				variables.ENGINEER_CALL_FALLBACK_TO_SIMULATED === "true",
 			mode: (variables.ENGINEER_CALL_MODE ??
 				variables.HAPPYROBOT_MODE) as EngineerCallMode,
 			provider: variables.ENGINEER_CALL_PROVIDER as EngineerCallProvider,

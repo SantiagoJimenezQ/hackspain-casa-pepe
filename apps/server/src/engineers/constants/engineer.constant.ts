@@ -16,6 +16,8 @@ export const ENGINEER_CALL_ENTITY_NAME = "Engineer call"
 
 export const ENGINEER_CALL_ADAPTER = "ENGINEER_CALL_ADAPTER"
 
+export const ENGINEER_CALL_FALLBACK_ADAPTER = "ENGINEER_CALL_FALLBACK_ADAPTER"
+
 export const HAPPYROBOT_INTEGRATION_NAME = "HappyRobot"
 
 export const HAPPYROBOT_CALLBACK_PATH = "api/webhooks/happyrobot"

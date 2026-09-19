@@ -44,6 +44,7 @@ describe("validateEnvironmentVariables", () => {
 		const configuration = createApplicationConfiguration(variables)
 
 		expect(configuration.engineerCall).toEqual({
+			fallbackToSimulated: true,
 			mode: "live",
 			provider: "elevenlabs",
 		})
@@ -61,6 +62,7 @@ describe("validateEnvironmentVariables", () => {
 			HAPPYROBOT_MODE: "live",
 		})
 		expect(createApplicationConfiguration(variables).engineerCall).toEqual({
+			fallbackToSimulated: true,
 			mode: "live",
 			provider: "happyrobot",
 		})
@@ -81,6 +83,7 @@ describe("validateEnvironmentVariables", () => {
 		)
 
 		expect(configuration.engineerCall).toEqual({
+			fallbackToSimulated: true,
 			mode: "live",
 			provider: "elevenlabs",
 		})

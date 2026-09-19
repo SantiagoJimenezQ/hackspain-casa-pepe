@@ -39,7 +39,11 @@ function configuration(overrides: Record<string, unknown> = {}) {
 		elevenLabs: {
 			pollIntervalMilliseconds: 1,
 		},
-		engineerCall: { mode: "live", provider: "elevenlabs" },
+		engineerCall: {
+			fallbackToSimulated: false,
+			mode: "live",
+			provider: "elevenlabs",
+		},
 		runtime: { publicBaseURL: "https://example.test" },
 		...overrides,
 	} as never
@@ -67,7 +71,7 @@ function command(): StartEngineerCallCommand {
 	}
 }
 
-function setup() {
+function setup(configurationOverrides: Record<string, unknown> = {}) {
 	const repository = new InMemoryRepository<EngineerCallEntity>()
 	const activity = { record: jest.fn().mockResolvedValue(undefined) }
 	const runs = { isRunActive: jest.fn().mockResolvedValue(true) }
@@ -83,15 +87,31 @@ function setup() {
 			providerReference: "conversation_test",
 		}),
 	}
+	const fallbackAdapter: EngineerCallAdapter = {
+		mode: "simulated",
+		start: jest.fn().mockResolvedValue({
+			kind: "accepted",
+			providerReference: "simulated:test",
+		}),
+	}
 	const service = new EngineersService(
 		repository as never,
 		adapter,
+		fallbackAdapter,
 		activity as never,
 		runs as never,
-		configuration(),
+		configuration(configurationOverrides),
 		events as never,
 	)
-	return { activity, adapter, events, repository, runs, service }
+	return {
+		activity,
+		adapter,
+		events,
+		fallbackAdapter,
+		repository,
+		runs,
+		service,
+	}
 }
 
 describe("EngineersService outbound call runtime", () => {
@@ -110,6 +130,7 @@ describe("EngineersService outbound call runtime", () => {
 		const restarted = new EngineersService(
 			first.repository as never,
 			first.adapter,
+			first.fallbackAdapter,
 			first.activity as never,
 			first.runs as never,
 			configuration(),
@@ -256,5 +277,39 @@ describe("EngineersService live permissions", () => {
 				callIdentifier: started.identifier,
 			}),
 		).rejects.toThrow()
+	})
+
+	it("keeps the response moving by simulating a call the provider refused", async () => {
+		const state = setup({
+			engineerCall: {
+				fallbackToSimulated: true,
+				mode: "live",
+				provider: "elevenlabs",
+			},
+		})
+		state.adapter.start = jest.fn().mockResolvedValue({
+			kind: "failed",
+			reason: "HTTP 401 error: account is not active",
+		})
+
+		const started = await state.service.startCall(command())
+
+		expect(started.status).toBe("in-progress")
+		expect(started.mode).toBe("simulated")
+		expect(started.providerReference).toBe("simulated:test")
+		expect(state.fallbackAdapter.start).toHaveBeenCalledTimes(1)
+	})
+
+	it("fails the call when the deployment forbids the simulated fallback", async () => {
+		const state = setup()
+		state.adapter.start = jest.fn().mockResolvedValue({
+			kind: "failed",
+			reason: "HTTP 401 error: account is not active",
+		})
+
+		const started = await state.service.startCall(command())
+
+		expect(started.status).toBe("failed")
+		expect(state.fallbackAdapter.start).not.toHaveBeenCalled()
 	})
 })

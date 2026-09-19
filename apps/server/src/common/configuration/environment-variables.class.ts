@@ -83,6 +83,9 @@ export class EnvironmentVariables {
 	@IsIn(["elevenlabs", "happyrobot"])
 	ENGINEER_CALL_PROVIDER: string = "happyrobot"
 
+	@IsIn(["true", "false"])
+	ENGINEER_CALL_FALLBACK_TO_SIMULATED: string = "true"
+
 	@IsIn(["simulated", "live"])
 	HAPPYROBOT_MODE: string = "simulated"
 

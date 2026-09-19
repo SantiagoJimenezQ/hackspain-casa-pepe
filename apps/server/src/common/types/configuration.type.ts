@@ -51,6 +51,8 @@ export interface ElevenLabsConfiguration {
 export interface EngineerCallConfiguration {
 	readonly mode: EngineerCallMode
 	readonly provider: EngineerCallProvider
+	/** Keeps the run alive by dispatching a simulated call when the live provider rejects it. */
+	readonly fallbackToSimulated: boolean
 }
 
 export interface RecoveryConfiguration {

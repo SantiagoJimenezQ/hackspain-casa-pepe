@@ -3,7 +3,10 @@ import { ConfigurationService } from "@common/services/configuration.service"
 import { ElevenLabsEngineerCallAdapter } from "@engineers/adapters/elevenlabs-engineer-call.adapter"
 import { HappyRobotEngineerCallAdapter } from "@engineers/adapters/happyrobot-engineer-call.adapter"
 import { SimulatedEngineerCallAdapter } from "@engineers/adapters/simulated-engineer-call.adapter"
-import { ENGINEER_CALL_ADAPTER } from "@engineers/constants/engineer.constant"
+import {
+	ENGINEER_CALL_ADAPTER,
+	ENGINEER_CALL_FALLBACK_ADAPTER,
+} from "@engineers/constants/engineer.constant"
 import { EngineersController } from "@engineers/controllers/engineers.controller"
 import { IncomingCallsController } from "@engineers/controllers/incoming-calls.controller"
 import { EngineerCallEntity } from "@engineers/entities/engineer-call.entity"
@@ -23,6 +26,7 @@ import { TypeOrmModule } from "@nestjs/typeorm"
 		EngineersService,
 		IncomingCallsService,
 		ENGINEER_CALL_ADAPTER,
+		ENGINEER_CALL_FALLBACK_ADAPTER,
 		ElevenLabsEngineerCallAdapter,
 	],
 	imports: [
@@ -62,6 +66,13 @@ import { TypeOrmModule } from "@nestjs/typeorm"
 				}
 				throw new Error("Unsupported engineer call provider")
 			},
+		},
+		{
+			inject: [SimulatedEngineerCallAdapter],
+			provide: ENGINEER_CALL_FALLBACK_ADAPTER,
+			useFactory: (
+				simulated: SimulatedEngineerCallAdapter,
+			): EngineerCallAdapter => simulated,
 		},
 		EngineersService,
 	],

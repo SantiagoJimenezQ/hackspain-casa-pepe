@@ -23,10 +23,7 @@ import {
 	subagentToolDefinitions,
 } from "@agent/llm/subagent-tools"
 import { LlmLoopActions, LlmLoopState } from "@agent/types/llm-loop.type"
-import {
-	SubagentOutcome,
-	SubagentRequest,
-} from "@agent/types/subagent.type"
+import { SubagentOutcome, SubagentRequest } from "@agent/types/subagent.type"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
 import { Injectable, Logger } from "@nestjs/common"
 import { ToolInvocation } from "@tools/types/tool.type"

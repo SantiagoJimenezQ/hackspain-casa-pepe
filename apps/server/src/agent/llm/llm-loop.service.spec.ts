@@ -300,9 +300,7 @@ describe("LlmLoopService", () => {
 		const actions = createActions(() => state)
 		client.complete
 			.mockResolvedValueOnce(
-				completion([
-					toolCall("delegate_investigation", { input: {} }),
-				]),
+				completion([toolCall("delegate_investigation", { input: {} })]),
 			)
 			.mockImplementationOnce(async () => {
 				state = {
@@ -629,7 +627,8 @@ describe("LlmLoopService", () => {
 						toolCall("report_result", {
 							details: ["Orders database is down"],
 							pending: ["Backup capacity is still unconfirmed"],
-							summary: "One service is down; capacity unconfirmed.",
+							summary:
+								"One service is down; capacity unconfirmed.",
 						}),
 					],
 					"Reporting the findings.",

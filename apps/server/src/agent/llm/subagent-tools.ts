@@ -123,9 +123,7 @@ export function isSubagentReadTool(kind: SubagentKind, name: string): boolean {
 	}
 }
 
-export function subagentStepScope(
-	kind: SubagentKind,
-): ReadonlyArray<string> {
+export function subagentStepScope(kind: SubagentKind): ReadonlyArray<string> {
 	return SUBAGENT_STEP_SCOPES[kind]
 }
 
@@ -150,7 +148,9 @@ function boundedList(value: unknown, path: string): ReadonlyArray<string> {
 		)
 	return value.map((entry, index) => {
 		if (!isText(entry))
-			throw new SubagentArgumentsError(`${path}[${index}] must be a string`)
+			throw new SubagentArgumentsError(
+				`${path}[${index}] must be a string`,
+			)
 		return entry.slice(0, SUBAGENT_ENTRY_CHARACTER_LIMIT)
 	})
 }

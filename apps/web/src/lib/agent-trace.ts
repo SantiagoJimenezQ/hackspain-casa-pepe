@@ -1,3 +1,4 @@
+import { buildDecisions, type Decision } from "@/lib/agent-decisions";
 import type {
   ActivityRecord,
   Incident,
@@ -32,7 +33,8 @@ export type CurrentWork =
   | { kind: "tool"; tool: ToolCall; title: string; state: ElementsToolState }
   | { kind: "approval"; title: string; reason: string }
   | { kind: "thinking"; title: string }
-  | { kind: "idle"; title: string };
+  | { kind: "idle"; title: string }
+  | { kind: "paused"; title: string };
 
 export type DecidedApproval = {
   identifier: string;
@@ -45,6 +47,7 @@ export type DecidedApproval = {
 export type ReasoningStatus = "streaming" | "complete";
 
 export type TranscriptItem =
+  | { kind: "decision"; decision: Decision }
   | { kind: "tool"; tool: ToolCall }
   | { kind: "task"; id: string; title: string; status: string; children: TranscriptItem[] }
   | { kind: "approval"; approval: DecidedApproval }
@@ -351,7 +354,9 @@ export function currentWork(overview: Overview, activity: ReadonlyArray<Activity
   if (overview.agent.cycleInProgress || agentStillDeciding(events)) {
     return { kind: "thinking", title: liveThinkingLabel(events) };
   }
-  return { kind: "idle", title: "En espera" };
+  const outcome = overview.agent.lastCycleOutcome;
+  if (outcome?.kind === "failed" || outcome?.kind === "limit-reached") return { kind: "paused", title: outcome.reason || "Autonomous decisions paused" };
+  return { kind: "idle", title: outcome?.reason || outcome?.waitingFor?.join(" · ") || "En espera" };
 }
 
 export function isPlaceholderSummary(text: string) {
@@ -738,6 +743,7 @@ function itemKindOrder(item: TranscriptItem): number {
 
 function itemTime(item: TranscriptItem): number {
   if (item.kind === "tool") return toolTime(item.tool);
+  if (item.kind === "decision") return Date.parse(item.decision.occurredAt) || 0;
   if (item.kind === "approval") return Date.parse(item.approval.occurredAt) || 0;
   if (item.kind === "task") {
     const times = item.children.map(itemTime).filter((value) => value > 0);
@@ -747,13 +753,14 @@ function itemTime(item: TranscriptItem): number {
   return Date.parse(item.occurredAt) || 0;
 }
 
-export function buildTranscript(overview: Overview, activity: ReadonlyArray<ActivityRecord> = []): TranscriptItem[] {
+export function buildTranscript(overview: Overview, activity: ReadonlyArray<ActivityRecord> = [], decisionEvents?: ReadonlyArray<ActivityRecord>): TranscriptItem[] {
   const events = [...overview.recentActivity, ...activity];
   const tools = mergedToolCalls(overview, events);
   const nested = nestTools(tools);
   const remainders = decidedApprovals(events).map((approval): TranscriptItem => ({ kind: "approval", approval }));
   const thoughts = reasoningTurns(events);
-  const items = [...nested, ...remainders, ...thoughts].toSorted((left, right) => {
+  const decisions = buildDecisions([...events, ...(decisionEvents ?? [])], overview.incident.runIdentifier).map((decision): TranscriptItem => ({ kind: "decision", decision }));
+  const items = [...nested, ...remainders, ...(decisionEvents ? decisions : thoughts)].toSorted((left, right) => {
     const delta = itemTime(left) - itemTime(right);
     if (delta !== 0) return delta;
     const kindDelta = itemKindOrder(left) - itemKindOrder(right);
@@ -762,7 +769,7 @@ export function buildTranscript(overview: Overview, activity: ReadonlyArray<Acti
   });
   const work = currentWork(overview, activity);
   const hasLiveTurn = thoughts.some((item) => item.status === "streaming" || item.disposition === "pending");
-  if (work.kind === "thinking" && !hasLiveTurn) {
+  if (work.kind === "thinking" && !hasLiveTurn && !(decisionEvents && decisions.some(item => item.kind === "decision" && ["draft", "pending"].includes(item.decision.disposition)))) {
     items.push({
       kind: "thinking",
       id: LIVE_REASONING_ID,
@@ -776,6 +783,7 @@ export function buildTranscript(overview: Overview, activity: ReadonlyArray<Acti
 }
 
 function transcriptId(item: TranscriptItem) {
+  if (item.kind === "decision") return item.decision.id;
   if (item.kind === "tool") return item.tool.identifier;
   if (item.kind === "task") return item.id;
   if (item.kind === "approval") return item.approval.identifier;

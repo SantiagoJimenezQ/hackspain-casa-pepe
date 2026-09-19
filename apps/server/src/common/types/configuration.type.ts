@@ -69,6 +69,8 @@ export interface DemoConfiguration {
 
 export interface AgentConfiguration {
 	readonly requireOperatorApproval: boolean
+	readonly combinedPlanActionEnabled?: boolean
+	readonly compactPlanEnabled?: boolean
 	readonly maximumCyclesPerRun: number
 	readonly maximumStepsPerCycle: number
 	readonly maximumStepAttempts: number

@@ -13,7 +13,7 @@ describe("LLM activity history proxy", () => {
     await GET(new Request("http://localhost/api/casa-pepe/activity/llm?runIdentifier=run_1&limit=50&beforeSequence=12"));
 
     expect(proxyJSON).toHaveBeenCalledWith(
-      "/activity/llm?runIdentifier=run_1&limit=50&beforeSequence=12",
+      "/activity/llm?runIdentifier=run_1&limit=50&beforeSequence=12", expect.objectContaining({signal: expect.any(AbortSignal)}),
     );
   });
 });

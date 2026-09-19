@@ -1,9 +1,10 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { TopBar } from "@/components/dashboard/top-bar";
 import { LiveOperationsDashboard } from "@/components/dashboard/live-operations-dashboard";
 import { renderWithProviders } from "@/test/render";
+import { MockEventSource } from "@/test/setup";
 
 function Probe() {
   const { status, error, startDemo, busyAction } = useDashboard();
@@ -120,17 +121,6 @@ const idleSnapshot = {
   },
 };
 
-class MockEventSource {
-  url: string;
-  onerror: ((event?: Event) => void) | null = null;
-  constructor(url: string) {
-    this.url = url;
-  }
-  addEventListener() {}
-  removeEventListener() {}
-  close() {}
-}
-
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
   onerror: (() => void) | null = null;
@@ -145,12 +135,9 @@ class FakeEventSource {
 }
 
 describe("live dashboard provider", () => {
-  beforeEach(() => {
-    vi.stubGlobal("EventSource", MockEventSource);
-  });
   afterEach(() => {
     FakeEventSource.instances = [];
-    vi.unstubAllGlobals();
+    vi.stubGlobal("EventSource", MockEventSource);
     vi.restoreAllMocks();
   });
 
@@ -244,11 +231,8 @@ describe("live dashboard provider", () => {
 });
 
 describe("live dashboard chrome", () => {
-  beforeEach(() => {
-    vi.stubGlobal("EventSource", MockEventSource);
-  });
   afterEach(() => {
-    vi.unstubAllGlobals();
+    vi.stubGlobal("EventSource", MockEventSource);
     vi.restoreAllMocks();
   });
 

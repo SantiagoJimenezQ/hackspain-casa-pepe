@@ -11,6 +11,7 @@ export type PlanStepStatus =
   | "postponed";
 
 export type ActivityRecord = {
+  runIdentifier?: string;
   identifier: string;
   sequence: number;
   occurredAt: string;

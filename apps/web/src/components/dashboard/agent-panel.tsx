@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import dynamic from "next/dynamic";
+import { GitBranch } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ToolUIPart } from "ai";
 import { ArrowDown, Check, CheckCircle2, CheckCircleIcon, ChevronDownIcon, CircleIcon, Copy, Loader2, XCircle, XCircleIcon } from "lucide-react";
@@ -44,6 +46,8 @@ import {
 import { formatChatDebugDump } from "@/lib/agent-chat-debug";
 import type { LlmPublicToolCall, ToolCall } from "@/lib/casa-pepe-types";
 import type { VisualStatus } from "@/lib/live-dashboard";
+
+const DecisionTreeView = dynamic(() => import("./decision-tree-view"), { ssr: false });
 
 const COLORS: Record<VisualStatus, string> = { up: "#3ee08f", degraded: "#f5a524", down: "#f04444" };
 
@@ -274,6 +278,7 @@ function transcriptKey(item: TranscriptItem) {
 export function AgentPanel() {
   const { overview, activity, busyAction, decideApproval } = useDashboard();
   const { t } = useI18n();
+  const [treeOpen, setTreeOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -337,6 +342,7 @@ export function AgentPanel() {
             {work.title}
           </span>
         </span>
+        <button type="button" title="Árbol de decisiones" aria-label="Abrir árbol de decisiones" onClick={() => setTreeOpen(true)} className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-status-up"><GitBranch className="size-4" /></button>
         <Button
           type="button"
           variant="ghost"
@@ -350,6 +356,7 @@ export function AgentPanel() {
           DEBUG
         </Button>
       </div>
+      {treeOpen ? <DecisionTreeView onClose={() => setTreeOpen(false)} /> : null}
       {overview.pendingApprovals.length ? (
         <div className="space-y-3 px-4 pb-3">
           {overview.pendingApprovals.map((approval) => (

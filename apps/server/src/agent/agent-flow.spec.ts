@@ -255,7 +255,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		)
 		const finalPlan = await waitFor(async () => {
 			const plan = await plansService.findLatestPlan(runIdentifier)
-			return plan?.version >= 3 &&
+			return plan?.version >= 4 &&
 				plan.steps.every((step) => step.status === "completed")
 				? plan
 				: null
@@ -301,7 +301,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		).toBe(12)
 
 		const report = await runReportService.build(runIdentifier)
-		expect(report.planVersions).toHaveLength(3)
+		expect(report.planVersions).toHaveLength(4)
 		expect(
 			report.planVersions[0].summary.startsWith("Se está llamando"),
 		).toBe(true)

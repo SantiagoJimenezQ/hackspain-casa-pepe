@@ -497,7 +497,7 @@ describe("API curl walkthrough contract", () => {
 			`/api/plans/current?runIdentifier=${runIdentifier}`,
 			(body) =>
 				body.kind === "plan" &&
-				body.plan.version >= 3 &&
+				body.plan.version >= 4 &&
 				body.plan.status === "active" &&
 				body.plan.steps.every((step) => step.status === "completed") &&
 				body.plan.steps.some(
@@ -550,7 +550,7 @@ describe("API curl walkthrough contract", () => {
 			`/api/learning/reports/${runIdentifier}`,
 		)
 		expect(report.status).toBe(200)
-		expect(report.body.planVersions).toHaveLength(3)
+		expect(report.body.planVersions).toHaveLength(4)
 		expect(report.body.approvals.map((item) => item.status).sort()).toEqual(
 			["approved", "superseded"],
 		)
@@ -564,7 +564,7 @@ describe("API curl walkthrough contract", () => {
 			`/api/plans?runIdentifier=${runIdentifier}`,
 		)
 		expect(plans.status).toBe(200)
-		expect(plans.body).toHaveLength(3)
+		expect(plans.body).toHaveLength(4)
 
 		const activity = await request<Page<ActivityRecord>>(
 			baseURL,

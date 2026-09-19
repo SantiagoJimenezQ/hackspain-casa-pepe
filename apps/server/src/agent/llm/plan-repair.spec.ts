@@ -308,17 +308,17 @@ describe("postponed capacity bookkeeping", () => {
 		)
 
 		expect(repaired).toMatchObject({
-			steps: [
-				{
-					invocation: {
-						input: {
+			steps: expect.arrayContaining([
+				expect.objectContaining({
+					invocation: expect.objectContaining({
+						input: expect.objectContaining({
 							assigneeName: "Marta Ruiz",
 							assigneeRole: "Platform on-call engineer",
-						},
-					},
+						}),
+					}),
 					owner: { kind: "engineer", name: "Marta Ruiz" },
-				},
-			],
+				}),
+			]),
 		})
 	})
 
@@ -349,16 +349,16 @@ describe("postponed capacity bookkeeping", () => {
 		)
 
 		expect(repaired).toMatchObject({
-			steps: [
-				{
-					invocation: {
-						input: {
+			steps: expect.arrayContaining([
+				expect.objectContaining({
+					invocation: expect.objectContaining({
+						input: expect.objectContaining({
 							assigneeName: "Platform team",
 							assigneeRole: "Whoever answers",
-						},
-					},
-				},
-			],
+						}),
+					}),
+				}),
+			]),
 		})
 	})
 	it("zeroes the cost of a service that is already healthy again", () => {

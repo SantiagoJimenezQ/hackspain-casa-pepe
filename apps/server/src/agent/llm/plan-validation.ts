@@ -1948,9 +1948,15 @@ function isTrustedStep(
 			(candidate) =>
 				candidate.identifier === step.identifier &&
 				CARRIED_STATUSES.has(candidate.status) &&
-				structurallyEqual(candidate, step),
+				structurallyEqual(withoutOrder(candidate), withoutOrder(step)),
 		),
 	)
+}
+
+/** `sequenceSteps` owns `order` after merge, so a carried step stays trusted when only that number changes. */
+function withoutOrder(step: PlanStep): unknown {
+	const { order: _order, ...rest } = step
+	return rest
 }
 
 function parseActor(value: unknown, path: string): Actor {

@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_CAMERA_K,
+  MIN_ARC_RISE,
+  agentSettled,
   arcPath,
   cameraForView,
+  cameraNeedsSnap,
   cameraSvgTransform,
+  cameraTransitionForView,
   failoverArcVisible,
   failoverTarget,
   fitWorldProjection,
+  linkFill,
   mapViewForTools,
   projectPoint,
   projectToScreen,
@@ -42,6 +47,23 @@ describe("crisis map camera and projection", () => {
     expect(mapViewForTools(true, ["get_recovery_capacity", "get_incident_context"])).toBe("nearby");
   });
 
+  it("returns to the world camera once the agent has settled", () => {
+    expect(mapViewForTools(true, ["get_recovery_capacity", "execute_recovery"], true)).toBe("world");
+    const overview = {
+      incident: { status: "partially-recovered" },
+      plan: { kind: "plan", plan: { status: "completed" } },
+      agent: { cycleInProgress: false, runningToolCalls: 0 },
+    } as unknown as Overview;
+    expect(agentSettled(overview)).toBe(true);
+    expect(agentSettled({ ...overview, agent: { cycleInProgress: true, runningToolCalls: 0 } } as unknown as Overview)).toBe(false);
+    expect(cameraTransitionForView("world", "nearby").duration).toBeGreaterThan(cameraTransitionForView("impact", "world").duration);
+  });
+
+  it("snaps tiny camera deltas instead of restarting the fly", () => {
+    expect(cameraNeedsSnap({ x: 0, y: 0, k: 1 }, { x: 0.4, y: -0.2, k: 1.01 })).toBe(true);
+    expect(cameraNeedsSnap({ x: 0, y: 0, k: 1 }, { x: 80, y: 12, k: 3 })).toBe(false);
+  });
+
   it("draws the failover arc toward the active backup region", () => {
     expect(failoverArcVisible(["get_incident_context"])).toBe(false);
     expect(failoverArcVisible(["execute_recovery"])).toBe(true);
@@ -66,6 +88,9 @@ describe("crisis map camera and projection", () => {
     const world = cameraForView("world", projection, 860, 440, nodes);
     expect(nearby.k).toBeGreaterThan(world.k);
     expect(arcPath(dubai, muscat)).toContain("Q");
+    const short = arcPath([0, 0], [8, 2]);
+    expect(short).toContain("Q");
+    expect(short).toContain(String(-MIN_ARC_RISE));
   });
 
   it.each([
@@ -108,5 +133,13 @@ describe("crisis map camera and projection", () => {
     const camera = { x: 10, y: 20, k: 2 };
     expect(cameraSvgTransform(camera)).toBe("translate(10 20) scale(2)");
     expect(projectToScreen(camera, [5, 6])).toEqual([20, 32]);
+  });
+
+  it("fills network links from the hub toward the company", () => {
+    expect(linkFill("online", 0)).toBe(1);
+    expect(linkFill("offline", 0)).toBe(0);
+    expect(linkFill("offline", 50)).toBe(0.5);
+    expect(linkFill("migrating", 0)).toBeGreaterThan(0.8);
+    expect(linkFill("recovered", 40)).toBe(1);
   });
 });

@@ -334,8 +334,16 @@ function dynamicVariables(
 			context.incidentDescription || purpose,
 		),
 		location: context.location,
+		outage_time: formatOutageTime(context.outageStartedAt),
 		services_down: context.servicesDown.join(", "),
 	}
+}
+
+function formatOutageTime(timestamp: string | undefined): string {
+	if (!timestamp || !/(?:Z|[+-]\d{2}:\d{2})$/i.test(timestamp)) return ""
+	const date = new Date(timestamp)
+	if (Number.isNaN(date.getTime())) return ""
+	return `${date.toISOString().slice(11, 16)} UTC`
 }
 
 function buildResult(

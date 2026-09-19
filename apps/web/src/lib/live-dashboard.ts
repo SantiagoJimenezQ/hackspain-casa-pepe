@@ -2,10 +2,11 @@ import { recoveryStartTimes } from "@/lib/agent-trace";
 import type { ActivityRecord, Incident, Overview, ServiceHealth } from "@/lib/casa-pepe-types";
 
 export type VisualStatus = "up" | "degraded" | "down";
+export type CustomerAction = "online" | "offline" | "migrating" | "recovered";
 const visualStatus = (status: ServiceHealth): VisualStatus => status === "healthy" ? "up" : status === "recovering" ? "degraded" : status;
 
-const UP_VALUES = new Set(["healthy", "completed", "approved", "recovered", "recuperado", "up", "verified", "succeeded"]);
-const DOWN_VALUES = new Set(["down", "failed", "rejected", "cancelled"]);
+const UP_VALUES = new Set(["healthy", "completed", "approved", "recovered", "recuperado", "migrado", "migrated", "online", "operativo", "operational", "up", "verified", "succeeded"]);
+const DOWN_VALUES = new Set(["down", "failed", "rejected", "cancelled", "offline", "sin conexión", "sin conexion"]);
 
 export function statusOf(value: string): VisualStatus {
   const normalized = value.toLowerCase();
@@ -14,15 +15,33 @@ export function statusOf(value: string): VisualStatus {
   return "degraded";
 }
 
+export function incidentImpacted(incident: Pick<Incident, "impactedAt" | "status">): boolean {
+  if (incident.impactedAt) return true;
+  const status = incident.status;
+  return Boolean(status) && status !== "normal" && status !== "reset";
+}
+
+export function customerActionStatus(action: CustomerAction): VisualStatus {
+  if (action === "online" || action === "recovered") return "up";
+  if (action === "migrating") return "degraded";
+  return "down";
+}
+
 export function customerView(incident: Incident) {
+  const impacted = incidentImpacted(incident);
   return (incident.customers ?? []).map((customer) => {
     const services = (incident.services ?? []).filter((service) => customer.serviceIdentifiers.includes(service.identifier));
     const healthy = services.filter((service) => service.status === "healthy").length;
     const active = services.some((service) => service.status === "recovering");
     const progress = services.length ? Math.round((healthy / services.length) * 100) : 0;
-    const status: VisualStatus = services.some((service) => service.status === "down") ? "down" : services.some((service) => service.status !== "healthy") ? "degraded" : "up";
-    const action = progress === 100 ? "recovered" as const : active || progress > 0 ? "migrating" as const : "queued" as const;
-    return { ...customer, progress, status, action };
+    const action: CustomerAction = !impacted && progress === 100
+      ? "online"
+      : progress === 100
+        ? "recovered"
+        : active
+          ? "migrating"
+          : "offline";
+    return { ...customer, progress, status: customerActionStatus(action), action };
   });
 }
 

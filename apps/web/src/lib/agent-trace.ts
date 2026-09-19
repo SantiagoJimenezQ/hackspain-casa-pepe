@@ -7,7 +7,7 @@ export type ElementsToolState =
   | "output-available"
   | "output-error";
 
-export type RecoveryPhase = "recovering" | "recovered" | "queued";
+export type RecoveryPhase = "recovering" | "recovered" | "offline";
 
 export type RecoveryTimelineItem = {
   identifier: string;
@@ -413,6 +413,7 @@ export function recoveryStartTimes(
 }
 
 export function recoveryTimeline(overview: Overview, activity: ReadonlyArray<ActivityRecord> = []): RecoveryTimelineItem[] {
+  if (!overview.incident.impactedAt) return [];
   const tools = mergedToolCalls(overview, activity);
   const recoveryTools = tools.filter((tool) => tool.name === "execute_recovery" || tool.name === "verify_recovery");
   return overview.incident.services.map((service) => {
@@ -423,8 +424,8 @@ export function recoveryTimeline(overview: Overview, activity: ReadonlyArray<Act
       ? "recovered"
       : running || service.status === "recovering"
         ? "recovering"
-        : "queued";
-    const status: VisualStatus = phase === "recovered" ? "up" : phase === "recovering" ? "degraded" : service.status === "down" ? "down" : "degraded";
+        : "offline";
+    const status: VisualStatus = phase === "recovered" ? "up" : phase === "recovering" ? "degraded" : "down";
     return {
       identifier: service.identifier,
       name: service.name,

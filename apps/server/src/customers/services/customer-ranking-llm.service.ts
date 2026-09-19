@@ -213,6 +213,7 @@ export class CustomerRankingLlmService {
 				...baseline,
 				fallbackReason: reason,
 				model: chosenModel,
+				source: "deterministic" as const,
 			}
 			// Remember the failure briefly so the UI keeps answering fast instead of waiting on every poll.
 			this.cache.set(baseline.runIdentifier, {

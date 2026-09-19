@@ -130,9 +130,15 @@ describe("agent trace", () => {
     ]);
     expect(items.map((item) => item.phase)).toEqual([
       "recovering",
-      "queued",
+      "offline",
       "recovered",
     ]);
+  });
+
+  it("hides the recovery timeline until impact", () => {
+    const overview = overviewWith([]);
+    overview.incident.impactedAt = "";
+    expect(recoveryTimeline(overview)).toEqual([]);
   });
 
   it("formats the crisis clock from impact time", () => {

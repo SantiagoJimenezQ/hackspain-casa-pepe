@@ -85,7 +85,7 @@ the time rather than inventing one. The server sends the persisted incident's
 `impactedAt` through `outageStartedAt`, formatted as `HH:mm UTC` in `outage_time`.
 Legacy calls, standalone checks and invalid timestamps send an empty value;
 the call start time is never substituted. This prompt update was saved and read back through the API;
-its spoken behavior has not yet been tested in a call.
+a subsequent direct-provider call verified the time was spoken and the region omitted (see the contract linked below).
 
 `providerReference` stores ElevenLabs' `conversation_id`; `providerCallSid` stores Twilio's `callSid`. Pending call records live in the database. The server polls conversation details until analysis is ready or the configured call timeout is reached; no publicly reachable ElevenLabs callback endpoint is required. Keep the NestJS process running for scheduled polling. A request-only/serverless deployment needs a persistent worker or an equivalent scheduler.
 
@@ -223,5 +223,10 @@ validates the combined extraction and hangup, but not a strict one-question flow
 the clarification was longer than intended. The agent also read `me-central-1`
 despite the prompt instruction to omit technical region codes. The subsequent
 prompt update replaces location with `outage_time` and forbids all location
-references. That final wording still needs a live voice rehearsal; the long
-clarification remains a conversation-quality issue.
+references. A subsequent direct-provider call with `outage_time: "14:30 UTC"` completed
+in 18 seconds, omitted the region, asked one combined question, captured both
+permissions as `true`, and invoked `end_call`. It did not require clarification.
+The longer clarification observed in this earlier call remains relevant when
+responses are ambiguous.
+
+Agent input, asynchronous results and next-action rules: [call_engineer contract](CALL-ENGINEER-CONTRACT.md).

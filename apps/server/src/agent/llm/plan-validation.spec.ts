@@ -1,4 +1,5 @@
 import { AGENT_ACTOR_NAME } from "@agent/constants/agent.constant"
+import { repairLlmPlanDraft } from "@agent/llm/plan-repair"
 import { validateLlmPlan } from "@agent/llm/plan-validation"
 import { PlanBuildInput, PlanDraft } from "@agent/types/agent.type"
 import { PlanRecord, PlanStep } from "@plans/types/plan.type"
@@ -409,5 +410,58 @@ describe("LLM plan boundary", () => {
 				input,
 			),
 		).toThrow(/recipient/)
+	})
+})
+
+describe("repair followed by validation", () => {
+	it("accepts a consistent postpone decision after fixing only its derived total", () => {
+		const { input, draft } = fixture()
+		const proposed = {
+			...draft,
+			capacity: {
+				...draft.capacity,
+				plannedUnits: 0,
+				postponedUnits: 999,
+				remainingUnits: 12,
+			},
+			priorities: draft.priorities.map((priority) => ({
+				...priority,
+				decision: "postpone",
+			})),
+			steps: [],
+		}
+		expect(() => validateLlmPlan(proposed, input)).toThrow(
+			"plan.capacity.postponedUnits",
+		)
+		const result = validateLlmPlan(
+			repairLlmPlanDraft(proposed, input),
+			input,
+		)
+		expect(result.capacity.postponedUnits).toBe(4)
+		expect(result.priorities[0].decision).toBe("postpone")
+	})
+	it("still rejects invalid priority costs and over-capacity recovery plans", () => {
+		const { input, draft } = fixture()
+		const invalidCost = {
+			...draft,
+			priorities: draft.priorities.map((priority) => ({
+				...priority,
+				capacityUnits: 999,
+			})),
+		}
+		expect(() =>
+			validateLlmPlan(repairLlmPlanDraft(invalidCost, input), input),
+		).toThrow("must match the incident service recovery cost")
+		const unsafe = {
+			...draft,
+			capacity: {
+				...draft.capacity,
+				assumedCapacity: 2,
+				remainingUnits: -2,
+			},
+		}
+		expect(() =>
+			validateLlmPlan(repairLlmPlanDraft(unsafe, input), input),
+		).toThrow()
 	})
 })

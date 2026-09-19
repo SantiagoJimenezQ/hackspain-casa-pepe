@@ -1,7 +1,8 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
-import { Activity, CheckCircle2, Radio, RefreshCcw, Sparkles, Zap } from "lucide-react";
+import { CheckCircle2, Radio, RefreshCcw, Sparkles, Zap } from "lucide-react";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { ThemeSwitcher } from "@/components/dashboard/theme-switcher";
 import { Button } from "@/components/ui/button";
@@ -24,19 +25,19 @@ export function TopBar() {
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border bg-background/75 px-4 backdrop-blur">
       <div className="flex items-center gap-2.5">
-        <span className="flex size-7 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
-          <Activity className="size-4" />
+        <span className="relative flex size-7 shrink-0 overflow-hidden rounded-md bg-muted ring-1 ring-primary/30">
+          <Image
+            src="/agents/pepe.webp"
+            alt="Pepe"
+            width={192}
+            height={172}
+            className="size-full object-cover"
+          />
         </span>
         <div>
           <p className="text-[14px] font-semibold tracking-tight text-foreground">Casa Pepe</p>
           <p className="font-mono text-[9px] tracking-[0.14em] text-muted-foreground uppercase">Incident coordination</p>
         </div>
-      </div>
-      <div className="ml-3 hidden min-w-0 flex-1 items-center gap-2 md:flex">
-        <span className={impacted ? "size-1.5 animate-pulse rounded-full bg-emerald-400" : "size-1.5 rounded-full bg-muted-foreground"} />
-        <span className="truncate text-[11px] text-muted-foreground">
-          {overview ? `${overview.incident.company} · ${overview.incident.region} → ${overview.incident.backupRegion}` : "En espera del impacto"}
-        </span>
       </div>
       <div className="ml-auto flex items-center gap-3">
         <div className="flex items-center gap-2">

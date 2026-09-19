@@ -1,0 +1,11 @@
+# Railway service definition for the Casa Pepe API.
+# Create the service from this repository root; Railway picks this file up automatically.
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/api/health"
+healthcheckTimeout = 120
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5

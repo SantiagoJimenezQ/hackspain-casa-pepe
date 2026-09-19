@@ -7,6 +7,7 @@ import {
 	stateFingerprint,
 } from "@agent/llm/llm-loop.service"
 import { validateLlmPlan } from "@agent/llm/plan-validation"
+import { SubagentRunnerService } from "@agent/llm/subagent-runner.service"
 import { PlanBuildInput, PlanDraft } from "@agent/types/agent.type"
 import { IncidentSnapshot } from "@incidents/types/incident.type"
 import { PlanRecord, PlanStep } from "@plans/types/plan.type"
@@ -127,12 +128,17 @@ function createHarness(maximumTurns = 3) {
 		list: jest.fn().mockResolvedValue({ items: [], total: 0 }),
 		record: jest.fn().mockResolvedValue(undefined),
 	}
+	const subagents = new SubagentRunnerService(
+		client as never,
+		activity as never,
+	)
 	const service = new LlmLoopService(
 		client as never,
 		configuration as never,
 		activity as never,
+		subagents,
 	)
-	return { activity, client, configuration, service }
+	return { activity, client, configuration, service, subagents }
 }
 
 function activityInputs(activity: { record: jest.Mock }) {
@@ -222,69 +228,13 @@ function createActivePlan(incident: IncidentSnapshot): PlanRecord {
 }
 
 describe("LlmLoopService", () => {
-	it("explains empty read arguments and recovers from a wrapped tool call without leaking values", async () => {
-		const { activity, client, service } = createHarness(3)
-		const state = createState()
-		const actions = createActions(() => state)
-		client.complete
-			.mockResolvedValueOnce(
-				completion([
-					toolCall("get_recovery_capacity", {
-						input: {
-							apiKey: "secret-value",
-							resourceIdentifier: "private-resource",
-						},
-					}),
-				]),
-			)
-			.mockResolvedValueOnce(
-				completion([toolCall("get_recovery_capacity", {})]),
-			)
-			.mockResolvedValueOnce(
-				completion([
-					toolCall("wait_for_input", {
-						reason: "Capacity inspected; awaiting confirmation",
-					}),
-				]),
-			)
-		expect((await service.run(actions)).kind).toBe("completed")
-		expect(actions.investigate).toHaveBeenCalledTimes(1)
-		expect(actions.investigate).toHaveBeenCalledWith({
-			input: {},
-			name: "get_recovery_capacity",
-		})
-		const [messages, definitions] = client.complete.mock.calls[0]
-		expect(messages[0].role).toBe("system")
-		expect(messages[0].content).toContain('not {"input":{}}')
-		const tool = definitions.find(
-			(item) => item.function.name === "get_recovery_capacity",
-		)
-		expect(tool.function.description).toContain("exactly {}")
-		expect(tool.function.parameters).toMatchObject({
-			additionalProperties: false,
-			properties: {},
-			required: [],
-		})
-		const feedback = JSON.parse(
-			client.complete.mock.calls[1][0].find(
-				(message) => message.role === "tool",
-			).content,
-		)
-		expect(feedback.correction).toContain("exactly {}")
-		expect(feedback.argumentDiagnostics.shape.fields[0].name).toBe("input")
-		const audit = JSON.stringify(activityInputs(activity))
-		expect(audit).not.toContain("secret-value")
-		expect(audit).not.toContain("private-resource")
-		expect(audit).toContain("[redacted-field]")
-	})
-
 	it("restores rejection and waiting context in a new loop instance without replaying raw exchanges", async () => {
 		const first = createHarness(2)
 		const state = createState()
 		first.client.complete
 			.mockResolvedValueOnce(
 				completion([
-					toolCall("get_recovery_capacity", {
+					toolCall("delegate_investigation", {
 						resourceIdentifier: "backup",
 					}),
 				]),
@@ -327,7 +277,7 @@ describe("LlmLoopService", () => {
 		expect(summary.recentEvents).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({
-					correction: expect.stringContaining("exactly {}"),
+					correction: expect.stringContaining('"objective"'),
 					type: "agent.llm-rejected",
 				}),
 				expect.objectContaining({
@@ -350,14 +300,18 @@ describe("LlmLoopService", () => {
 		const actions = createActions(() => state)
 		client.complete
 			.mockResolvedValueOnce(
-				completion([toolCall("get_recovery_capacity", { input: {} })]),
+				completion([toolCall("delegate_investigation", { input: {} })]),
 			)
 			.mockImplementationOnce(async () => {
 				state = {
 					...state,
 					evidence: { newReport: "Capacity dropped" },
 				}
-				return completion([toolCall("get_recovery_capacity", {})])
+				return completion([
+					toolCall("delegate_investigation", {
+						objective: "Confirm the remaining backup capacity",
+					}),
+				])
 			})
 			.mockResolvedValueOnce(
 				completion([
@@ -418,25 +372,29 @@ describe("LlmLoopService", () => {
 	it("does not echo malformed JSON or integration secrets into the audit trail", async () => {
 		const { activity, client, service } = createHarness(3)
 		const actions = createActions(() => createState())
-		actions.investigate.mockRejectedValue(
+		actions.execute.mockRejectedValue(
 			new Error("Bearer hidden-integration-token"),
 		)
 		client.complete
 			.mockResolvedValueOnce(
 				completion([
 					rawToolCall(
-						"get_recovery_capacity",
+						"delegate_investigation",
 						'{"secret":"hidden-json-token"',
 					),
 				]),
 			)
 			.mockResolvedValueOnce(
-				completion([toolCall("get_recovery_capacity", {})]),
+				completion([
+					toolCall("execute_step", {
+						stepIdentifier: "stp_orders-database_execute",
+					}),
+				]),
 			)
 			.mockResolvedValueOnce(
 				completion([
 					toolCall("wait_for_input", {
-						reason: "Investigate failure",
+						reason: "Dispatch failure",
 					}),
 				]),
 			)
@@ -609,7 +567,7 @@ describe("LlmLoopService", () => {
 		).toBe(true)
 	})
 
-	it("lets the model investigate before waiting and never exposes simulation-only fields", async () => {
+	it("delegates investigation to the specialist and never exposes simulation-only fields", async () => {
 		const baseIncident = createImpactedIncident(12)
 		const incident: IncidentSnapshot = {
 			...baseIncident,
@@ -648,8 +606,32 @@ describe("LlmLoopService", () => {
 		client.complete
 			.mockResolvedValueOnce(
 				completion(
+					[
+						toolCall("delegate_investigation", {
+							objective:
+								"Confirm which services are down before planning",
+						}),
+					],
+					"Asking the investigation specialist for service health.",
+				),
+			)
+			.mockResolvedValueOnce(
+				completion(
 					[toolCall("get_service_health", {})],
-					"I need current service health before planning.",
+					"Reading current service health.",
+				),
+			)
+			.mockResolvedValueOnce(
+				completion(
+					[
+						toolCall("report_result", {
+							details: ["Orders database is down"],
+							pending: ["Backup capacity is still unconfirmed"],
+							summary:
+								"One service is down; capacity unconfirmed.",
+						}),
+					],
+					"Reporting the findings.",
 				),
 			)
 			.mockResolvedValueOnce(
@@ -675,20 +657,67 @@ describe("LlmLoopService", () => {
 			input: {},
 			name: "get_service_health",
 		})
-		expect(client.complete).toHaveBeenCalledTimes(2)
-		expect(JSON.stringify(client.complete.mock.calls[0][0])).not.toContain(
-			HIDDEN_SIMULATION_ANSWER,
+		expect(client.complete).toHaveBeenCalledTimes(4)
+		for (const call of client.complete.mock.calls) {
+			expect(JSON.stringify(call[0])).not.toContain(
+				HIDDEN_SIMULATION_ANSWER,
+			)
+			expect(JSON.stringify(call[0])).not.toContain(
+				HIDDEN_SIMULATION_SCRIPT,
+			)
+		}
+		const commanderTools = client.complete.mock.calls[0][1].map(
+			(definition) => definition.function.name,
 		)
-		expect(JSON.stringify(client.complete.mock.calls[0][0])).not.toContain(
-			HIDDEN_SIMULATION_SCRIPT,
+		expect(commanderTools).toContain("delegate_investigation")
+		expect(commanderTools).not.toContain("get_service_health")
+		const specialistTools = client.complete.mock.calls[1][1].map(
+			(definition) => definition.function.name,
 		)
-		expect(JSON.stringify(client.complete.mock.calls[1][0])).not.toContain(
-			HIDDEN_SIMULATION_ANSWER,
+		expect(specialistTools).toContain("get_service_health")
+		expect(specialistTools).toEqual(
+			expect.not.arrayContaining(["propose_plan", "execute_step"]),
 		)
-		expect(JSON.stringify(client.complete.mock.calls[1][0])).not.toContain(
-			HIDDEN_SIMULATION_SCRIPT,
+		const records = activityInputs(activity)
+		expect(
+			records.some(
+				(record) => record.payload.subagent === "investigator",
+			),
+		).toBe(true)
+		const delegation = records.find(
+			(record) => record.payload.specialist === "investigator",
 		)
+		expect(delegation?.payload).toMatchObject({
+			executedSteps: 0,
+			specialist: "investigator",
+		})
+		// Commander turns emit pending and accepted records for the same output.
+		const commander = records.filter((record) => record.payload.disposition)
+		expect(commander.map((record) => record.payload.disposition)).toEqual([
+			"pending",
+			"accepted",
+			"pending",
+			"accepted",
+		])
+		for (const offset of [0, 2]) {
+			expect(commander[offset].payload.outputIdentifier).toEqual(
+				expect.any(String),
+			)
+			expect(commander[offset + 1].payload.outputIdentifier).toBe(
+				commander[offset].payload.outputIdentifier,
+			)
+		}
+		expect(
+			records.filter(
+				(record) => record.payload.subagent === "investigator",
+			),
+		).toHaveLength(2)
 		expect(activityInputs(activity).map((input) => input.type)).toEqual([
+			"agent.llm-decision",
+			"agent.llm-decision",
+			"agent.llm-decision",
+			"agent.llm-decision",
+			"agent.llm-decision",
 			"agent.llm-decision",
 			"agent.llm-decision",
 			"agent.cycle-finished",
@@ -818,8 +847,16 @@ describe("LlmLoopService", () => {
 		client.complete
 			.mockResolvedValueOnce(
 				completion([
-					toolCall("get_service_health", {}, "health-call"),
-					toolCall("get_recovery_capacity", {}, "capacity-call"),
+					toolCall(
+						"delegate_investigation",
+						{ objective: "Check service health" },
+						"health-call",
+					),
+					toolCall(
+						"delegate_communication",
+						{ objective: "Send the plan" },
+						"communication-call",
+					),
 				]),
 			)
 			.mockResolvedValueOnce(
@@ -844,7 +881,7 @@ describe("LlmLoopService", () => {
 		const { activity, client, configuration, service } = createHarness(3)
 		const actions = createActions(() => createState())
 		client.complete.mockResolvedValue(
-			completion([toolCall("get_recovery_capacity", {})]),
+			completion([toolCall("delegate_investigation", {})]),
 		)
 
 		const outcome = await service.run(actions as unknown as LlmLoopActions)
@@ -856,9 +893,8 @@ describe("LlmLoopService", () => {
 		expect(client.complete).toHaveBeenCalledTimes(
 			configuration.llm.maximumTurns,
 		)
-		expect(actions.investigate).toHaveBeenCalledTimes(
-			configuration.llm.maximumTurns,
-		)
+		expect(actions.investigate).not.toHaveBeenCalled()
+		expect(actions.execute).not.toHaveBeenCalled()
 		const inputs = activityInputs(activity)
 		expect(inputs[inputs.length - 1]).toMatchObject({
 			type: "agent.limit-reached",
@@ -946,7 +982,11 @@ describe("reset during a model request", () => {
 					status: "reset",
 				}),
 			)
-			return completion([toolCall("get_incident_context", {})])
+			return completion([
+				toolCall("delegate_investigation", {
+					objective: "Read the incident context",
+				}),
+			])
 		})
 		await expect(service.run(actions)).resolves.toMatchObject({
 			kind: "skipped",
@@ -955,6 +995,82 @@ describe("reset during a model request", () => {
 		expect(actions.investigate).not.toHaveBeenCalled()
 		expect(actions.execute).not.toHaveBeenCalled()
 		expect(actions.save).not.toHaveBeenCalled()
-		expect(activity.record).not.toHaveBeenCalled()
+		expect(activity.record).toHaveBeenCalledWith(
+			expect.objectContaining({
+				payload: expect.objectContaining({ disposition: "stale" }),
+				type: "agent.llm-stale",
+			}),
+		)
+	})
+})
+
+describe("complete public turn records", () => {
+	it("persists full text, original calls and accepted disposition under one ID", async () => {
+		const { client, service, activity } = createHarness(1)
+		const text = "Complete explanation. ".repeat(250)
+		client.complete.mockResolvedValue({
+			finishReason: "tool_calls",
+			message: {
+				content: text,
+				role: "assistant",
+				tool_calls: [
+					toolCall(
+						"wait_for_input",
+						{ reason: "Awaiting operator" },
+						"original-call",
+					),
+				],
+			},
+			model: "fixture-model",
+			usage: { total_tokens: 42 },
+		})
+		await service.run(createActions(() => createState()))
+		const turns = activityInputs(activity).filter(
+			(event) => event.type === "agent.llm-decision",
+		)
+		expect(turns.map((event) => event.payload.disposition)).toEqual([
+			"pending",
+			"accepted",
+		])
+		expect(turns[1].payload).toMatchObject({
+			finishReason: "tool_calls",
+			text,
+			toolCalls: [
+				{
+					arguments: { reason: "Awaiting operator" },
+					id: "original-call",
+					name: "wait_for_input",
+				},
+			],
+		})
+		expect(turns[0].payload.outputIdentifier).toBe(
+			turns[1].payload.outputIdentifier,
+		)
+	})
+	it("retains a rejected proposal with its correlated public arguments", async () => {
+		const { client, service, activity } = createHarness(1)
+		client.complete.mockResolvedValue({
+			message: {
+				content: "Try a step",
+				role: "assistant",
+				tool_calls: [
+					toolCall("execute_step", {
+						password: "private-value",
+						stepIdentifier: 99,
+					}),
+				],
+			},
+			model: "fixture-model",
+		})
+		await service.run(createActions(() => createState()))
+		const rejected = activityInputs(activity).find(
+			(event) => event.type === "agent.llm-rejected",
+		)
+		expect(rejected?.payload).toMatchObject({
+			disposition: "rejected",
+			outputIdentifier: expect.any(String),
+			text: "Try a step",
+		})
+		expect(JSON.stringify(rejected)).not.toContain("private-value")
 	})
 })

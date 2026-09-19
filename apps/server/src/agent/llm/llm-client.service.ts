@@ -38,11 +38,16 @@ export class LlmClientService {
 		tools: LlmToolDefinition[],
 		onText?: (text: string) => Promise<void>,
 		overrides: LlmCompletionOverrides = {},
-	): Promise<{ message: LlmMessage; usage: unknown; model: string }> {
-		const configuration = {
-			...this.providerConfiguration(),
-			...overrides,
-		}
+	): Promise<{
+		message: LlmMessage
+		usage: unknown
+		model: string
+		finishReason?: string | null
+	}> {
+		const configuration = mergeCompletionOverrides(
+			this.providerConfiguration(),
+			overrides,
+		)
 		const responseData = await this.request(
 			configuration,
 			messages,
@@ -68,11 +73,7 @@ export class LlmClientService {
 		}
 	}
 
-	private providerConfiguration(
-		onTextOrOverrides?:
-			| ((text: string) => Promise<void>)
-			| LlmCompletionOverrides,
-	): LlmConfiguration {
+	private providerConfiguration(): LlmConfiguration {
 		const configured = this.configuration.llm
 		if (!configured || typeof configured !== "object") {
 			throw new LlmClientError(
@@ -283,7 +284,12 @@ function mergeCompletionOverrides(
 function parseCompletionResponse(
 	value: unknown,
 	maximumOutputTokens: number,
-): { message: LlmMessage; usage: unknown; model: string } {
+): {
+	message: LlmMessage
+	usage: unknown
+	model: string
+	finishReason?: string | null
+} {
 	if (!isRecord(value)) throw malformedResponse()
 	if (typeof value.model !== "string" || !value.model.trim()) {
 		throw malformedResponse()
@@ -309,6 +315,10 @@ function parseCompletionResponse(
 		? validateUsage(value.usage, maximumOutputTokens)
 		: undefined
 	return {
+		finishReason:
+			typeof firstChoice.finish_reason === "string"
+				? firstChoice.finish_reason
+				: null,
 		message: parseAssistantMessage(firstChoice.message),
 		model: value.model,
 		usage,
@@ -393,11 +403,33 @@ function validateUsage(value: unknown, maximumOutputTokens: number): unknown {
 			"LLM provider response exceeded the configured output token limit",
 		)
 	}
-	const sanitized: Record<string, number> = {}
+	const sanitized: Record<string, unknown> = {}
 	for (const property of tokenMetrics) {
 		if (typeof value[property] === "number") {
 			sanitized[property] = value[property] as number
 		}
+	}
+	for (const [group, fields] of Object.entries({
+		completion_tokens_details: [
+			"reasoning_tokens",
+			"audio_tokens",
+			"accepted_prediction_tokens",
+			"rejected_prediction_tokens",
+		],
+		prompt_tokens_details: ["cached_tokens", "audio_tokens"],
+	})) {
+		if (!isRecord(value[group])) continue
+		const details: Record<string, number> = {}
+		for (const field of fields) {
+			const metric = value[group][field]
+			if (
+				typeof metric === "number" &&
+				Number.isSafeInteger(metric) &&
+				metric >= 0
+			)
+				details[field] = metric
+		}
+		if (Object.keys(details).length) sanitized[group] = details
 	}
 	return sanitized
 }

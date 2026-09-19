@@ -10,6 +10,9 @@ export const AGENT_TRIGGER_KINDS = [
 
 export const AGENT_TICK_INTERVAL_MILLISECONDS = 5000
 
+/** Step statuses the agent may still dispatch. */
+export const RUNNABLE_STEP_STATUSES = ["proposed", "approved"] as const
+
 export const DEPENDENT_SERVICE_SCORE_BONUS = 15
 
 export const AGENT_ACTOR_NAME = "Casa Pepe agent"

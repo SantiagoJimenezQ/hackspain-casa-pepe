@@ -1,4 +1,4 @@
-import type { LearningInsight, Overview, RunReport } from "@/lib/casa-pepe-types";
+import type { LearningInsight, LlmHistoryPage, Overview, RunReport } from "@/lib/casa-pepe-types";
 
 export class CasaPepeClientError extends Error {
   constructor(
@@ -70,6 +70,15 @@ export const casaPepeClient = {
   currentRunIdentifier: () => readStoredRun(),
   forgetRun: () => rememberRun(""),
   overview: () => request<Overview>(withRun("/api/casa-pepe/overview")),
+  llmHistory: (options?: { runIdentifier?: string; beforeSequence?: number; limit?: number }) => {
+    const params = new URLSearchParams();
+    const runIdentifier = options?.runIdentifier || readStoredRun();
+    if (runIdentifier) params.set("runIdentifier", runIdentifier);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.beforeSequence) params.set("beforeSequence", String(options.beforeSequence));
+    const suffix = params.size ? `?${params.toString()}` : "";
+    return request<LlmHistoryPage>(`/api/casa-pepe/activity/llm${suffix}`);
+  },
   insights: () => request<LearningInsight[]>("/api/casa-pepe/learning/insights"),
   report: () => request<RunReport>(withRun("/api/casa-pepe/learning/reports/current")),
   start: () =>

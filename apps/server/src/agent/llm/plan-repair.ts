@@ -59,7 +59,7 @@ export function repairLlmPlanDraft(
 	const postponedServices = new Set(
 		(Array.isArray(value.priorities) ? value.priorities : [])
 			.filter(isRecord)
-			.filter((priority) => priority.decision === "postponed")
+			.filter((priority) => priority.decision === "postpone")
 			.map((priority) => textOf(priority, "serviceIdentifier")),
 	)
 	const repairedSteps = value.steps.map((step) =>
@@ -91,7 +91,30 @@ export function repairLlmPlanDraft(
 		})
 		return { ...step, dependsOn }
 	})
-	return { ...value, steps }
+	// This total is bookkeeping, not a model decision. Leave invalid priority
+	// lists to the validator rather than guessing missing services or costs.
+	let capacity = value.capacity
+	if (isRecord(capacity) && Array.isArray(value.priorities)) {
+		const identifiers = new Set<string>()
+		let postponedUnits = 0
+		const valid = value.priorities.every((priority) => {
+			if (!isRecord(priority)) return false
+			const identifier = textOf(priority, "serviceIdentifier")
+			const service = servicesByIdentifier.get(identifier)
+			if (!service || identifiers.has(identifier)) return false
+			identifiers.add(identifier)
+			if (priority.decision === "postpone")
+				postponedUnits += service.recoveryCapacityUnits
+			return true
+		})
+		if (
+			valid &&
+			identifiers.size === servicesByIdentifier.size &&
+			Number.isFinite(postponedUnits)
+		)
+			capacity = { ...capacity, postponedUnits }
+	}
+	return { ...value, capacity, steps }
 }
 
 function repairStep(

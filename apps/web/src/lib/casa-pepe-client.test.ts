@@ -1,7 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { casaPepeClient } from "@/lib/casa-pepe-client";
 
 describe("Casa Pepe browser client", () => {
+  afterEach(() => {
+    casaPepeClient.forgetRun();
+    vi.restoreAllMocks();
+  });
   it("starts the fixed Spanish scenario without exposing backend details", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ runIdentifier: "run_1" }), { status: 200 }),
@@ -40,5 +44,24 @@ describe("Casa Pepe browser client", () => {
       status: 401,
       message: "Clave de API inválida",
     });
+  });
+
+  it("loads public LLM history through the frontend proxy with the stored run", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ runIdentifier: "run_1" }), { status: 200 }),
+    );
+
+    await casaPepeClient.start();
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ items: [], nextBeforeSequence: 12 }), { status: 200 }),
+    );
+
+    await casaPepeClient.llmHistory({ limit: 50, beforeSequence: 12 });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/casa-pepe/activity/llm?runIdentifier=run_1&limit=50&beforeSequence=12",
+      expect.objectContaining({ headers: expect.objectContaining({ "Content-Type": "application/json" }) }),
+    );
   });
 });

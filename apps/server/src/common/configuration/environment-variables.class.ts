@@ -1,8 +1,12 @@
 import {
 	ENVIRONMENTS,
+	LLM_PROVIDERS,
 	LLM_REASONING_EFFORTS,
 } from "@common/constants/application.constant"
-import { LlmReasoningEffort } from "@common/types/configuration.type"
+import {
+	LlmProvider,
+	LlmReasoningEffort,
+} from "@common/types/configuration.type"
 import { Type } from "class-transformer"
 import {
 	IsIn,
@@ -170,6 +174,40 @@ export class EnvironmentVariables {
 
 	// The LLM is the default decision provider. Empty provider fields keep local
 	// startup possible; the client reports the missing configuration when called.
+	/** Pick a preset: openai or deepseek. Empty uses the plain LLM_BASE_URL/API_KEY/MODEL below. */
+	@IsIn(LLM_PROVIDERS)
+	LLM_PROVIDER: LlmProvider = ""
+
+	@IsString()
+	LLM_OPENAI_BASE_URL: string = ""
+
+	@IsString()
+	LLM_OPENAI_API_KEY: string = ""
+
+	@IsString()
+	LLM_OPENAI_MODEL: string = ""
+
+	@IsString()
+	LLM_OPENAI_FAST_MODEL: string = ""
+
+	@IsIn(LLM_REASONING_EFFORTS)
+	LLM_OPENAI_REASONING_EFFORT: LlmReasoningEffort = ""
+
+	@IsString()
+	LLM_DEEPSEEK_BASE_URL: string = ""
+
+	@IsString()
+	LLM_DEEPSEEK_API_KEY: string = ""
+
+	@IsString()
+	LLM_DEEPSEEK_MODEL: string = ""
+
+	@IsString()
+	LLM_DEEPSEEK_FAST_MODEL: string = ""
+
+	@IsIn(LLM_REASONING_EFFORTS)
+	LLM_DEEPSEEK_REASONING_EFFORT: LlmReasoningEffort = ""
+
 	@IsString()
 	LLM_BASE_URL: string = ""
 

@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.next
+**/.env
+**/.env.*
+!**/.env.example
+.git
+demo
+apps/web
+**/*.spec.ts
+**/*.test.ts

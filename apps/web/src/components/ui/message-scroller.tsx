@@ -38,8 +38,12 @@ function MessageScroller({
 function MessageScrollerViewport({
   className,
   ref,
+  fade = true,
   ...props
-}: React.ComponentProps<typeof MessageScrollerPrimitive.Viewport>) {
+}: React.ComponentProps<typeof MessageScrollerPrimitive.Viewport> & {
+  /** A list of discrete rows reads as cut in half by the edge mask, so it can turn it off. */
+  fade?: boolean
+}) {
   const { ref: scrollFadeRef, className: scrollFadeClass } = useScrollFade()
 
   return (
@@ -51,7 +55,7 @@ function MessageScrollerViewport({
       }}
       data-slot="message-scroller-viewport"
       className={cn(
-        scrollFadeClass,
+        fade ? scrollFadeClass : "",
         "size-full min-h-0 min-w-0 scrollbar-thin scrollbar-gutter-stable overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent data-pending-scroll:invisible",
         className
       )}

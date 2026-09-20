@@ -187,6 +187,38 @@ describe("live dashboard provider", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Borrar aprendizajes" })).toBeEnabled());
   });
 
+  it("shows saved lessons, refreshes them, and distinguishes errors from empty memory", async () => {
+    let mode = "saved";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/activity/llm?")) return Response.json({ items: [], nextBeforeSequence: null });
+      if (url.includes("/overview")) return Response.json(idleSnapshot);
+      if (url.endsWith("/learning/insights")) {
+        if (mode === "error") return Response.json({ message: "Unavailable" }, { status: 503 });
+        return Response.json(mode === "empty" ? [] : [{ identifier: "lesson-1", kind: "capacity-overstated", subject: "backup-region", summary: "Only 7 of 12 units were available", observations: 3, updatedAt: "2026-09-20T10:00:00Z" }]);
+      }
+      return Response.json({ lessons: [] });
+    });
+    const { user } = renderWithProviders(<TopBar />);
+    await user.click(screen.getByRole("button", { name: "Aprendizajes" }));
+    expect(await screen.findByRole("dialog")).toHaveAccessibleName("Aprendizajes del agente");
+    expect(await screen.findByText("Only 7 of 12 units were available")).toBeVisible();
+    expect(screen.getByText("3 observaciones")).toBeVisible();
+    expect(screen.getByText("Capacidad sobreestimada")).toBeVisible();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Actualizar" })).toBeEnabled());
+    mode = "error";
+    await user.click(screen.getByRole("button", { name: "Actualizar" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudieron cargar los aprendizajes");
+    expect(screen.queryByText(/Todavía no hay aprendizajes/)).not.toBeInTheDocument();
+    expect(screen.getByText("Only 7 of 12 units were available")).toBeVisible();
+    mode = "empty";
+    await user.click(screen.getByRole("button", { name: "Actualizar" }));
+    expect(await screen.findByText(/Todavía no hay aprendizajes/)).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
   it("boots an idle run when the backend has no active scenario", async () => {
     let started = false;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {

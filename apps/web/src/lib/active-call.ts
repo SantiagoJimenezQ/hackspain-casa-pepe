@@ -3,6 +3,8 @@ import type { ActivityRecord, EngineerCall, Overview, ToolCall } from "@/lib/cas
 
 export const ACTIVE_CALL_DISMISS_MS = 2800;
 export const ACTIVE_CALL_TERMINAL_WINDOW_MS = 12_000;
+/** The browser clock can sit a little behind the server's, so a fresh end is never in the future. */
+export const ACTIVE_CALL_CLOCK_SKEW_MS = 5_000;
 
 export const CALL_TOOL_NAMES = new Set(["call_engineer", "contact_engineer"]);
 const LIVE_STATUSES = new Set(["dialing", "in-progress"]);
@@ -89,6 +91,10 @@ export function activeCallView(
   const terminalView = terminal ? toView(terminal) : null;
   if (terminalView) return terminalView;
 
+  // The tool only stands in for a call the server has not recorded yet. Once any call record
+  // exists it is the truth, and the tool -- which stays running for a while after the line drops
+  // -- must never put a finished call back on screen as if it were still ringing.
+  if (calls.length) return null;
   return toolFallback(overview?.toolCalls ?? []);
 }
 
@@ -133,7 +139,7 @@ function isRecentTerminal(call: EngineerCall, nowMs: number): boolean {
   const finished = new Date(call.finishedAt).getTime();
   if (!Number.isFinite(finished)) return false;
   const age = nowMs - finished;
-  return age >= 0 && age <= ACTIVE_CALL_TERMINAL_WINDOW_MS;
+  return age >= -ACTIVE_CALL_CLOCK_SKEW_MS && age <= ACTIVE_CALL_TERMINAL_WINDOW_MS;
 }
 
 function latestCall(calls: EngineerCall[]): EngineerCall | null {

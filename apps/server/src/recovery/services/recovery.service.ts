@@ -201,6 +201,12 @@ export class RecoveryService {
 			serviceIdentifier,
 			verified: verification.verified,
 		})
+		const verificationMessages =
+			await this.incidentsService.messagesForRun(runIdentifier)
+		const verifiedServiceName = await this.incidentsService.serviceNameOf(
+			runIdentifier,
+			serviceIdentifier,
+		)
 		await this.activityService.record({
 			correlation: {
 				recoveryActionIdentifier,
@@ -213,8 +219,15 @@ export class RecoveryService {
 			simulated: verification.mode === "simulated",
 			source: "tool",
 			summary: verification.verified
-				? `${serviceIdentifier} verified healthy through an independent check (${verification.mode})`
-				: `${serviceIdentifier} is ${verification.status} after the recovery: ${verification.detail}`,
+				? verificationMessages.recoveryVerified(
+						verifiedServiceName,
+						verification.mode,
+					)
+				: verificationMessages.recoveryNotVerified(
+						verifiedServiceName,
+						verification.status,
+						verification.detail,
+					),
 			title: "Recovery verified",
 			type: "recovery.verified",
 		})
@@ -322,7 +335,13 @@ export class RecoveryService {
 			runIdentifier: record.runIdentifier,
 			simulated: record.mode === "simulated",
 			source: "integration",
-			summary: `${record.actionDescription}: ${result.outcome}. ${result.detail}`,
+			summary: (
+				await this.incidentsService.messagesForRun(record.runIdentifier)
+			).recoveryExecuted(
+				record.actionDescription,
+				result.outcome,
+				result.detail,
+			),
 			title: "Recovery action executed",
 			type: "recovery.executed",
 		})

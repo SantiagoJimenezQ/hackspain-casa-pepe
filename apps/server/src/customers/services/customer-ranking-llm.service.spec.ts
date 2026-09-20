@@ -1,5 +1,8 @@
 import { CUSTOMER_RANKING_TOOL_NAME } from "@customers/constants/customer-priority.constant"
-import { prioritizeCustomers } from "@customers/helpers/customer-priority.helper"
+import {
+	prioritizeCustomers,
+	sectorRank,
+} from "@customers/helpers/customer-priority.helper"
 import { CustomerRankingLlmService } from "@customers/services/customer-ranking-llm.service"
 import { createImpactedIncident } from "@root/testing/incident.fixture"
 
@@ -66,12 +69,25 @@ describe("CustomerRankingLlmService", () => {
 
 		expect(first.source).toBe("llm")
 		expect(first.model).toBe("fast-model")
-		expect(first.customers.map((customer) => customer.identifier)).toEqual(
-			reversed.map((customer) => customer.identifier),
+		// The model may reorder freely inside a sector, never across sectors.
+		const tiers = first.customers.map((customer) =>
+			sectorRank(customer.sector),
 		)
-		expect(first.customers[0].rank).toBe(1)
+		expect(tiers).toEqual([...tiers].sort((left, right) => left - right))
+		const modelOrder = reversed.map((customer) => customer.identifier)
+		for (const tier of new Set(tiers)) {
+			const applied = first.customers
+				.filter((customer) => sectorRank(customer.sector) === tier)
+				.map((customer) => customer.identifier)
+			expect(applied).toEqual(
+				modelOrder.filter((identifier) => applied.includes(identifier)),
+			)
+		}
+		expect(first.customers.map((customer) => customer.rank)).toEqual(
+			first.customers.map((_, index) => index + 1),
+		)
 		expect(first.customers[0].justification).toBe(
-			`Reason for ${reversed[0].name}`,
+			`Reason for ${first.customers[0].name}`,
 		)
 		expect(complete).toHaveBeenCalledTimes(1)
 		expect(complete.mock.calls[0][3]).toMatchObject({

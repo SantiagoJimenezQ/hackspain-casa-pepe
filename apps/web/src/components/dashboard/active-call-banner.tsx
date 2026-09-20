@@ -68,11 +68,13 @@ export function ActiveCallBanner() {
   const elapsed = view ? callElapsed(view, now) : "00:00";
 
   return (
-    <DraggableOverlay className="right-5 top-5 z-40">
+    <DraggableOverlay className="right-2 top-2 z-30">
       <AnimatePresence>
         {view ? (
+          // One card at a time, so the key never changes: the card stays exactly where it was
+          // dragged and never replays its entrance when the call moves from ringing to ended.
           <CallCard
-            key={view.identifier}
+            key="active-call"
             view={view}
             title={title}
             subtitle={subtitle}
@@ -105,7 +107,7 @@ function CallCard({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -8, scale: 0.98 }}
       transition={{ type: "spring", stiffness: 420, damping: 30 }}
-      className="flex w-[min(360px,calc(100vw-2rem))] items-center gap-3 rounded-3xl bg-card/90 px-3 py-2.5 shadow-[0_18px_50px_-18px_rgba(0,0,0,0.45),inset_0_1px_0_color-mix(in_srgb,var(--foreground)_10%,transparent)] ring-1 ring-foreground/10 backdrop-blur-xl"
+      className="flex w-[min(340px,calc(100vw-2rem))] items-center gap-3 rounded-3xl bg-card/90 px-3 py-2.5 shadow-[0_18px_50px_-18px_rgba(0,0,0,0.45),inset_0_1px_0_color-mix(in_srgb,var(--foreground)_10%,transparent)] ring-1 ring-foreground/10 backdrop-blur-xl"
     >
       <span className="relative size-11 shrink-0">
         {live ? (

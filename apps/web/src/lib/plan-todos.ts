@@ -28,14 +28,23 @@ export function planTodoKind(status: PlanStepStatus): PlanTodoVisualKind {
   return "pending";
 }
 
-export function planTodos(plan: Pick<Plan, "steps">): PlanTodosView {
+/**
+ * A closed incident has no work left in flight, so a step the agent never got to close reads as
+ * done rather than as a spinner nobody will ever resolve. It only changes how the list is drawn;
+ * the recorded step keeps its own status.
+ */
+export function planTodos(plan: Pick<Plan, "steps">, settled = false): PlanTodosView {
   const items = [...plan.steps]
     .sort((left, right) => left.order - right.order)
-    .map((step) => ({
-      identifier: step.identifier,
-      title: step.title,
-      kind: planTodoKind(step.status),
-    }));
+    .map((step) => {
+      const kind = planTodoKind(step.status);
+      const stillOpen = kind === "running" || kind === "awaiting" || kind === "pending";
+      return {
+        identifier: step.identifier,
+        title: step.title,
+        kind: settled && stillOpen ? ("completed" as PlanTodoVisualKind) : kind,
+      };
+    });
   const completed = items.filter((item) => item.kind === "completed").length;
   const total = items.length;
   return {

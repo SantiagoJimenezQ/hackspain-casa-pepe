@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleDashed } from "lucide-react";
+import { CircleDashed, ListChecks } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { ActiveCallBanner } from "@/components/dashboard/active-call-banner";
 import { AgentPanel } from "@/components/dashboard/agent-panel";
@@ -104,10 +104,10 @@ function MapPanel() {
       <CrisisMap overview={overview} />
       <DraggableOverlay className="left-2 top-2 z-10">
         <div className="rounded-md border border-border/80 bg-card/90 px-3 py-2 shadow-sm backdrop-blur">
-          <p className="text-[10px] font-semibold tracking-[.16em] text-muted-foreground uppercase">Topología operativa</p>
+          <p className="text-[10px] font-semibold tracking-[.16em] text-muted-foreground uppercase">{t("map.topologyTitle")}</p>
           <p className="mt-1 text-[13px]">{headline}</p>
           <div className="mt-2 flex gap-3 text-[10px] text-muted-foreground">
-            <span>{unhealthy} servicios</span>
+            <span>{t("map.servicesCount", { count: unhealthy })}</span>
             <span>{overview.incident.region}</span>
             <span>→ {overview.incident.backupRegion}</span>
           </div>
@@ -123,6 +123,7 @@ function MapPanel() {
           {t("map.impactConfirmed")}
         </span>
       ) : null}
+      <ActiveCallBanner />
     </Panel>
   );
 }
@@ -280,8 +281,12 @@ function Recovery() {
           </AnimatePresence>
         </LayoutGroup>
         {items.length ? null : (
-          <li className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border px-3 text-[11px] text-muted-foreground">
-            {t("migration.waiting")}
+          <li className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/70 px-6 py-8 text-center">
+            <ListChecks className="size-7 text-muted-foreground/50" aria-hidden />
+            <p className="text-[12px] font-medium text-foreground/80">{t("empty.recovery.title")}</p>
+            <p className="max-w-[34ch] text-[11px] leading-4 text-muted-foreground">
+              {t("empty.recovery.hint", { count: recovery.total })}
+            </p>
           </li>
         )}
       </ol>
@@ -291,15 +296,16 @@ function Recovery() {
 
 export function LiveOperationsDashboard() {
   const { status, overview, error, retry, busyAction } = useDashboard();
+  const { t } = useI18n();
   if (status === "error" && !overview) {
     return (
       <div className="flex flex-1 items-center justify-center">
         <Panel className="max-w-xl p-8">
-          <p className="text-[11px] tracking-[.16em] text-primary uppercase">Casa Pepe · Centro de mando</p>
-          <h1 className="mt-3 text-3xl font-semibold">No se puede alcanzar al coordinador</h1>
-          <p className="mt-3 text-sm text-muted-foreground">{error ?? "No se pudo contactar con el backend de Casa Pepe."}</p>
+          <p className="text-[11px] tracking-[.16em] text-primary uppercase">{t("error.eyebrow")}</p>
+          <h1 className="mt-3 text-3xl font-semibold">{t("error.title")}</h1>
+          <p className="mt-3 text-sm text-muted-foreground">{error ?? t("error.body")}</p>
           <Button className="mt-6" onClick={() => void retry()} disabled={busyAction !== null}>
-            Reintentar
+            {t("error.retry")}
           </Button>
         </Panel>
       </div>
@@ -310,7 +316,6 @@ export function LiveOperationsDashboard() {
   }
   return (
     <div className="relative min-h-0 flex-1 overflow-y-auto p-3 xl:overflow-hidden">
-      <ActiveCallBanner />
       <div className="grid min-h-0 gap-3 xl:h-full xl:grid-cols-[minmax(0,1.45fr)_minmax(380px,.9fr)]">
         <div className="grid min-h-0 gap-3 xl:grid-rows-[minmax(220px,1.2fr)_minmax(0,1fr)]">
           <MapPanel />

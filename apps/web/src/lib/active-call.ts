@@ -1,10 +1,27 @@
 import { formatElapsed } from "@/lib/agent-trace";
-import type { ActivityRecord, EngineerCall, Overview, ToolCall } from "@/lib/casa-pepe-types";
+import type {
+  ActivityRecord,
+  CallAuthorizations,
+  EngineerCall,
+  Overview,
+  ToolCall,
+} from "@/lib/casa-pepe-types";
 
 export const ACTIVE_CALL_DISMISS_MS = 2800;
+/** How long "call ended" stays up before the permission verdict replaces it. */
+export const ACTIVE_CALL_AUTHORIZED_AFTER_MS = 1400;
+/** A call that granted permissions earns a longer goodbye: two messages must be read. */
+export const ACTIVE_CALL_AUTHORIZED_DISMISS_MS = 4200;
 export const ACTIVE_CALL_TERMINAL_WINDOW_MS = 12_000;
 /** The browser clock can sit a little behind the server's, so a fresh end is never in the future. */
 export const ACTIVE_CALL_CLOCK_SKEW_MS = 5_000;
+/**
+ * The dashboard refreshes on activity events, never on a timer, so a dropped stream leaves the
+ * card frozen on whatever it last saw, counting upwards forever. Real calls last seconds and
+ * the server times them out well before this, so a call still ringing after five minutes means
+ * the data is stale, not that somebody is still on the line.
+ */
+export const ACTIVE_CALL_STALE_MS = 300_000;
 
 export const CALL_TOOL_NAMES = new Set(["call_engineer", "contact_engineer"]);
 const LIVE_STATUSES = new Set(["dialing", "in-progress"]);
@@ -13,6 +30,7 @@ const OUTBOUND_CALL_EVENTS = new Set([
   "engineer-call.started",
   "engineer-call.completed",
   "engineer-call.failed",
+  "engineer-call.authorized",
 ]);
 
 export type ActiveCallPhase = "calling" | "ended" | "failed" | "no-answer";
@@ -25,6 +43,8 @@ export type ActiveCallView = {
   startedAt: string;
   finishedAt: string;
   live: boolean;
+  /** Someone on the call granted at least one permission. */
+  authorized: boolean;
 };
 
 export function callPhase(status: string): ActiveCallPhase | null {
@@ -78,7 +98,11 @@ export function activeCallView(
   }
 
   const calls = [...merged.values()];
-  const live = latestCall(calls.filter((call) => callPhase(call.status) === "calling"));
+  const live = latestCall(
+    calls.filter(
+      (call) => callPhase(call.status) === "calling" && !isStale(call, nowMs),
+    ),
+  );
   const liveView = live ? toView(live) : null;
   if (liveView) return liveView;
 
@@ -95,7 +119,7 @@ export function activeCallView(
   // exists it is the truth, and the tool -- which stays running for a while after the line drops
   // -- must never put a finished call back on screen as if it were still ringing.
   if (calls.length) return null;
-  return toolFallback(overview?.toolCalls ?? []);
+  return toolFallback(overview?.toolCalls ?? [], nowMs);
 }
 
 function toView(call: EngineerCall): ActiveCallView | null {
@@ -110,10 +134,14 @@ function toView(call: EngineerCall): ActiveCallView | null {
     startedAt: call.startedAt,
     finishedAt: call.finishedAt,
     live: phase === "calling",
+    authorized: hasAuthorization(call),
   };
 }
 
-function toolFallback(tools: ReadonlyArray<ToolCall>): ActiveCallView | null {
+function toolFallback(
+  tools: ReadonlyArray<ToolCall>,
+  nowMs: number,
+): ActiveCallView | null {
   const tool = [...tools]
     .reverse()
     .find(
@@ -124,6 +152,8 @@ function toolFallback(tools: ReadonlyArray<ToolCall>): ActiveCallView | null {
   if (!tool) return null;
   const name = stringField(tool.input.engineerName);
   if (!name) return null;
+  const started = new Date(tool.startedAt).getTime();
+  if (Number.isFinite(started) && nowMs - started > ACTIVE_CALL_STALE_MS) return null;
   return {
     identifier: tool.identifier,
     name,
@@ -132,7 +162,15 @@ function toolFallback(tools: ReadonlyArray<ToolCall>): ActiveCallView | null {
     startedAt: tool.startedAt,
     finishedAt: "",
     live: true,
+    authorized: false,
   };
+}
+
+/** A call that never reported an ending, long after any real call would have finished. */
+function isStale(call: EngineerCall, nowMs: number): boolean {
+  const started = new Date(call.startedAt).getTime();
+  if (!Number.isFinite(started)) return false;
+  return nowMs - started > ACTIVE_CALL_STALE_MS;
 }
 
 function isRecentTerminal(call: EngineerCall, nowMs: number): boolean {
@@ -186,7 +224,11 @@ function parseCallPayload(payload: ActivityRecord["payload"]): EngineerCall | nu
     mode,
     status,
     result: result
-      ? { summary: stringField(result.summary), transcript: stringField(result.transcript) }
+      ? {
+          summary: stringField(result.summary),
+          transcript: stringField(result.transcript),
+          authorizations: parseAuthorizations(result.authorizations),
+        }
       : null,
     failureReason: stringField(call.failureReason),
     startedAt: stringField(call.startedAt),
@@ -201,4 +243,33 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function stringField(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+
+/**
+ * True once anybody granted a permission on this call. The voice agent reports them while the
+ * line is still open, so this flips before the call is over.
+ */
+export function hasAuthorization(call: Pick<EngineerCall, "result">): boolean {
+  const granted = call.result?.authorizations;
+  if (!granted) return false;
+  return (
+    granted.notifyAllClients?.value === true ||
+    granted.trafficFailoverAuthorized?.value === true
+  );
+}
+
+function parseAuthorizations(value: unknown): CallAuthorizations | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  return {
+    notifyAllClients: parseVerdict(record.notifyAllClients),
+    trafficFailoverAuthorized: parseVerdict(record.trafficFailoverAuthorized),
+  };
+}
+
+function parseVerdict(value: unknown): { value: boolean | null } | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  return { value: typeof record.value === "boolean" ? record.value : null };
 }

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACTIVE_CALL_STALE_MS,
   ACTIVE_CALL_TERMINAL_WINDOW_MS,
   activeCallView,
+  hasAuthorization,
   callElapsed,
   callInitials,
   callPhase,
@@ -305,5 +307,207 @@ describe("active call view", () => {
       NOW,
     );
     expect(view).toMatchObject({ identifier: "call_1", phase: "ended", live: false });
+  });
+});
+
+
+describe("call permissions", () => {
+  it("reports no permission when the call carries no result", () => {
+    expect(hasAuthorization({ result: null })).toBe(false);
+  });
+
+  it("reports no permission when nobody reached a verdict", () => {
+    expect(
+      hasAuthorization({
+        result: {
+          summary: "",
+          transcript: "",
+          authorizations: {
+            notifyAllClients: { value: null },
+            trafficFailoverAuthorized: { value: null },
+          },
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("reports no permission when both were refused", () => {
+    expect(
+      hasAuthorization({
+        result: {
+          summary: "",
+          transcript: "",
+          authorizations: {
+            notifyAllClients: { value: false },
+            trafficFailoverAuthorized: { value: false },
+          },
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("reports a permission when one of the two was granted", () => {
+    expect(
+      hasAuthorization({
+        result: {
+          summary: "",
+          transcript: "",
+          authorizations: {
+            notifyAllClients: { value: true },
+            trafficFailoverAuthorized: { value: false },
+          },
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("flags the permission while the call is still running", () => {
+    const view = activeCallView(
+      {
+        engineerCalls: [
+          call({
+            identifier: "call_live",
+            status: "in-progress",
+            result: {
+              summary: "Reported while on the call",
+              transcript: "",
+              authorizations: {
+                notifyAllClients: { value: true },
+                trafficFailoverAuthorized: { value: true },
+              },
+            },
+          }),
+        ],
+        toolCalls: [],
+      },
+      [],
+      NOW,
+    );
+
+    expect(view?.phase).toBe("calling");
+    expect(view?.authorized).toBe(true);
+  });
+
+  it("keeps the permission visible once the call ends", () => {
+    const view = activeCallView(
+      {
+        engineerCalls: [
+          call({
+            identifier: "call_done",
+            status: "completed",
+            finishedAt: "2026-09-19T10:00:15.000Z",
+            result: {
+              summary: "Granted",
+              transcript: "",
+              authorizations: {
+                notifyAllClients: { value: true },
+                trafficFailoverAuthorized: { value: true },
+              },
+            },
+          }),
+        ],
+        toolCalls: [],
+      },
+      [],
+      NOW,
+    );
+
+    expect(view?.phase).toBe("ended");
+    expect(view?.authorized).toBe(true);
+  });
+
+  it("picks the permission up from the live activity event", () => {
+    const view = activeCallView(
+      { engineerCalls: [], toolCalls: [] },
+      [
+        activity(
+          "engineer-call.started",
+          { call: { identifier: "call_evt", engineer: { name: "Guillermo" }, status: "in-progress", startedAt: "2026-09-19T10:00:00.000Z" } },
+          1,
+        ),
+        activity(
+          "engineer-call.authorized",
+          {
+            call: {
+              identifier: "call_evt",
+              engineer: { name: "Guillermo" },
+              status: "in-progress",
+              startedAt: "2026-09-19T10:00:00.000Z",
+              result: {
+                authorizations: {
+                  notifyAllClients: { value: true },
+                  trafficFailoverAuthorized: { value: true },
+                },
+              },
+            },
+          },
+          2,
+        ),
+      ],
+      NOW,
+    );
+
+    expect(view?.identifier).toBe("call_evt");
+    expect(view?.authorized).toBe(true);
+  });
+});
+
+
+describe("a call that never reported an ending", () => {
+  it("stops showing it once the data is clearly stale", () => {
+    const startedAt = "2026-09-19T10:00:00.000Z";
+    const wayLater = Date.parse(startedAt) + ACTIVE_CALL_STALE_MS + 1_000;
+
+    const view = activeCallView(
+      {
+        engineerCalls: [call({ identifier: "call_stuck", status: "in-progress", startedAt })],
+        toolCalls: [],
+      },
+      [],
+      wayLater,
+    );
+
+    expect(view).toBeNull();
+  });
+
+  it("keeps showing it while the call could still be real", () => {
+    const startedAt = "2026-09-19T10:00:00.000Z";
+    const soonAfter = Date.parse(startedAt) + 30_000;
+
+    const view = activeCallView(
+      {
+        engineerCalls: [call({ identifier: "call_live", status: "in-progress", startedAt })],
+        toolCalls: [],
+      },
+      [],
+      soonAfter,
+    );
+
+    expect(view?.phase).toBe("calling");
+  });
+
+  it("stops showing a tool call that never finished either", () => {
+    const startedAt = "2026-09-19T10:00:00.000Z";
+    const wayLater = Date.parse(startedAt) + ACTIVE_CALL_STALE_MS + 1_000;
+
+    const view = activeCallView(
+      {
+        engineerCalls: [],
+        toolCalls: [
+          {
+            identifier: "tool_stuck",
+            name: "call_engineer",
+            status: "running",
+            startedAt,
+            finishedAt: "",
+            input: { engineerName: "Guillermo", engineerRole: "On-call" },
+          } as unknown as ToolCall,
+        ],
+      },
+      [],
+      wayLater,
+    );
+
+    expect(view).toBeNull();
   });
 });

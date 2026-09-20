@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Radio, RefreshCcw, RotateCcw, Sparkles, Zap } from "lucide-react";
+import { CheckCircle2, Radio, RefreshCcw, RotateCcw, Zap } from "lucide-react";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { LanguageSwitcher } from "@/components/dashboard/language-switcher";
 import { LearningPanel } from "@/components/dashboard/learning-panel";
+import { TwistButton } from "@/components/dashboard/twist-button";
 import { ThemeSwitcher } from "@/components/dashboard/theme-switcher";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -84,15 +85,7 @@ export function TopBar() {
             >
               <Zap /> <span className="hidden lg:inline">Impacto</span>
             </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => void triggerTwist()}
-              disabled={!live || busy}
-              title="Inyecta un giro en el escenario en curso"
-            >
-              <Sparkles /> <span className="hidden lg:inline">Twist</span>
-            </Button>
+            <TwistButton onTrigger={() => void triggerTwist()} disabled={!live || busy} />
             <LearningPanel />
             <Separator orientation="vertical" className="mx-0.5 h-5 self-center" />
             <Button

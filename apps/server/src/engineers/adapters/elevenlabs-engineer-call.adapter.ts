@@ -496,7 +496,10 @@ export function authorizationsDisagree(
 	if (!live) return false
 	return (
 		contradicts(analysed.notifyAllClients, live.notifyAllClients) ||
-		contradicts(analysed.trafficFailoverAuthorized, live.trafficFailoverAuthorized)
+		contradicts(
+			analysed.trafficFailoverAuthorized,
+			live.trafficFailoverAuthorized,
+		)
 	)
 }
 

@@ -63,7 +63,7 @@ latency, not proof that all of it was model computation.
    dispatch safety check, but include which state category changed in public
    diagnostics. The export alone cannot show whether these were meaningful new
    facts, asynchronous completion, or avoidable observation churn.
-7. **Align provider incident wording and debug privacy.** The call summary says
+7. **Align provider incident wording and debug privacy.** This historical review predates the switch to missile wording in new runs. The call summary says
    missile impact while the incident is a meteorite. Inspect the deployed voice
    prompt and actual transcript before assigning the cause. The export redacts
    some model arguments but exposes the phone in the expanded final plan; make

@@ -138,7 +138,7 @@ export interface AgentMessages {
 		outcome: string,
 		detail: string,
 	): string
-	/** Activity summary for the meteorite impact the harness injected. */
+	/** Activity summary for the missile impact the harness injected. */
 	harnessImpact: string
 	/** Activity summary for the harness limiting the backup capacity. */
 	harnessCapacityLimited(units: number, reason: string): string

@@ -125,6 +125,8 @@ credentials and the raw transcript are intentionally excluded from this record.
   email promise. The hosted agent has an `end_call` tool but no email tool.
   This run did not send an email through Casa Pepe.
 
+Historical rehearsal note: this call predates the switch to missile wording; new runs use the updated scenario narrative.
+
 The second call used the Spanish scenario's actual incident context without
 simulation wording: a meteorite takes AWS Dubái (`me-central-1`) offline,
 affecting Gulf Relay's orders database, route assignment, package tracking and

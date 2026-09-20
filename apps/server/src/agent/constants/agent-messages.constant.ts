@@ -129,7 +129,7 @@ const ENGLISH: AgentMessages = {
 		`Finish partial recovery of ${serviceIdentifier}`,
 	harnessCapacityLimited: (units, reason) =>
 		`Backup capacity limited to ${units} units: ${reason}`,
-	harnessImpact: "Meteorite impact: the primary region is offline",
+	harnessImpact: "Missile impact: the primary region is offline",
 	healthyNoAction: "Healthy, no action needed",
 	historicalCapacityAssumption: (reportedUnits, assumedUnits, unit, runs) =>
 		`The dashboard reports ${reportedUnits} ${unit} but in ${runs} previous ${runs === 1 ? "run" : "runs"} only ${assumedUnits} were really available. Planning with ${assumedUnits} until the capacity is confirmed`,
@@ -332,7 +332,7 @@ const SPANISH: AgentMessages = {
 	harnessCapacityLimited: (units, reason) =>
 		`La capacidad de respaldo baja a ${units} unidades: ${reason}`,
 	harnessImpact:
-		"Impacto de meteorito: la región principal está fuera de servicio",
+		"Impacto de misil: la región principal está fuera de servicio",
 	healthyNoAction: "Sano, no requiere acción",
 	historicalCapacityAssumption: (reportedUnits, assumedUnits, unit, runs) =>
 		`El panel indica ${reportedUnits} ${unit}, pero en ${runs} ${runs === 1 ? "ejecución anterior" : "ejecuciones anteriores"} solo había ${assumedUnits} disponibles. Se planifica con ${assumedUnits} hasta confirmar la capacidad`,

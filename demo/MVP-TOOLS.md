@@ -52,7 +52,7 @@ Provide the same nonempty `RECOVERY_ENVIRONMENT_API_KEY` to both processes throu
 node demo/recovery-environment/server.mjs
 ```
 
-Configure the API with `RECOVERY_MODE=http` and `RECOVERY_ENVIRONMENT_URL=http://127.0.0.1:4100`. The target binds only to loopback, keeps at most 100 runs, and loses its state on restart. Use the manual meteorite scenario for this target: resource requirements match that scenario. Randomized scenarios can change requirements and should use simulated recovery.
+Configure the API with `RECOVERY_MODE=http` and `RECOVERY_ENVIRONMENT_URL=http://127.0.0.1:4100`. The target binds only to loopback, keeps at most 100 runs, and loses its state on restart. Use the manual missile scenario for this target: resource requirements match that scenario. Randomized scenarios can change requirements and should use simulated recovery.
 
 The target supports:
 

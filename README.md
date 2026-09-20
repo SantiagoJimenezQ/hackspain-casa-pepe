@@ -6,7 +6,7 @@ Casa Pepe is an incident coordination prototype built for HackSpain 2026. It mod
 
 ## The scenario
 
-A meteorite takes down the AWS region serving a delivery company. Route assignment stops, package tracking becomes unavailable, and several services need recovery.
+A fictional missile takes down the AWS region serving a delivery company. Route assignment stops, package tracking becomes unavailable, and several services need recovery.
 
 The initial plan assumes enough backup capacity to restore everything. Then new information arrives: there is less capacity than expected.
 

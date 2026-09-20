@@ -81,7 +81,7 @@ Optional body `{ "scenarioIdentifier": "meteorite-eu-west-1" }` (or `meteorite-e
 
 ### `POST /demo/impact`
 
-Applies the meteorite: services become `down` or `degraded`, the initial facts are loaded and the incident becomes `detected`. The agent starts its first cycle: plan v1, engineer call and task assignment. Events: `incident.impact-detected`, `incident.event-applied`, `incident.status-changed`, `plan.created`, `decision.recorded`, …
+Applies the missile: services become `down` or `degraded`, the initial facts are loaded and the incident becomes `detected`. The agent starts its first cycle: plan v1, engineer call and task assignment. Events: `incident.impact-detected`, `incident.event-applied`, `incident.status-changed`, `plan.created`, `decision.recorded`, …
 
 ### `POST /demo/twist`
 
@@ -660,7 +660,7 @@ Header `x-recovery-signature: <RECOVERY_WEBHOOK_SECRET>`.
 | Type | Source | When |
 |---|---|---|
 | `incident.run-started` | harness | New run |
-| `incident.impact-detected` | harness | Meteorite applied |
+| `incident.impact-detected` | harness | Missile applied |
 | `incident.event-applied` | harness | Any harness event |
 | `incident.status-changed` | system | `detected` → `responding` → `partially-recovered` → `recovered` |
 | `incident.run-reset` | harness | Reset |

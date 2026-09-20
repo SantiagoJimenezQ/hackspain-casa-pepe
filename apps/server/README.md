@@ -189,3 +189,7 @@ steps are unfinished, or tasks in the run are open/in progress. `completed` is
 reserved for settled plan work. An idle decision cycle does not mean the incident
 is resolved. The wait reason should identify the missing evidence, owner, and
 resuming event or operator action.
+
+## HappyRobot inbound company prioritization
+
+The initiation and outcome webhooks accept authenticated, idempotent company-priority requests bound to a specific live incident. See [configuration, payloads and verification](docs/HAPPYROBOT-INBOUND.md). These requests trigger assessment and do not alter capacity or bypass approvals.

@@ -92,6 +92,9 @@ export class EnvironmentVariables {
 	@IsString()
 	HAPPYROBOT_TRIGGER_URL: string = ""
 
+	@IsString() CASA_PEPE_INBOUND_WEBHOOK_SECRET: string = ""
+	@IsString() HAPPYROBOT_INBOUND_RUN_IDENTIFIER: string = ""
+
 	@IsString()
 	HAPPYROBOT_API_KEY: string = ""
 

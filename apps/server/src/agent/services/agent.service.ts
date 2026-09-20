@@ -48,7 +48,7 @@ import {
 	IncidentSnapshot,
 } from "@incidents/types/incident.type"
 import { LearningService } from "@learning/services/learning.service"
-import { Injectable, Logger } from "@nestjs/common"
+import { Injectable, Logger, Optional } from "@nestjs/common"
 import { OnEvent } from "@nestjs/event-emitter"
 import { Interval } from "@nestjs/schedule"
 import { diffPlans } from "@plans/helpers/plan-diff.helper"
@@ -65,6 +65,10 @@ import {
 	ToolInvocation,
 } from "@tools/types/tool.type"
 import { EngineerCallAuthorizations } from "../../../../../packages/contracts/outbound-calls"
+import {
+	COMPANY_PRIORITY_RECEIVED,
+	CompanyCallService,
+} from "../../company-calls/company-call.service"
 
 /** Marks a fact the engineer settled by authorizing the work rather than by answering it. */
 const AUTHORIZED_BY_VOICE = "authorized by voice"
@@ -96,7 +100,23 @@ export class AgentService {
 		private readonly incomingCalls: IncomingCallsService,
 		private readonly llmLoop: LlmLoopService,
 		private readonly tasksService: TasksService,
+		@Optional() private readonly companyCalls?: CompanyCallService,
 	) {}
+
+	@OnEvent(COMPANY_PRIORITY_RECEIVED, { async: true, promisify: true })
+	async onCompanyPriority(event: {
+		runIdentifier: string
+		identifier: string
+	}) {
+		const result = await this.requestCycle(event.runIdentifier, {
+			description:
+				"A caller requested a company priority change. Assess the request with current capacity, dependencies and required approvals; receipt is not approval.",
+			harnessEventIdentifier: `priority_${event.identifier}`,
+			kind: "conditions-changed",
+		})
+		if (result.kind === "completed")
+			await this.companyCalls?.markObserved(event.identifier)
+	}
 
 	@OnEvent(DOMAIN_EVENTS.INCIDENT_RUN_DEACTIVATED)
 	onRunDeactivated(event: { runIdentifier: string }): void {
@@ -699,11 +719,14 @@ export class AgentService {
 				this.learningService.list(this.scenarioOf(incident).family),
 				this.tasksService.list(runIdentifier),
 			])
+		const companyPriorityRequests =
+			(await this.companyCalls?.list(runIdentifier)) ?? []
 		return {
 			blocked: incomingCalls.some((call) => call.status === "pending"),
 			evidence: {
 				approvals,
 				calls,
+				companyPriorityRequests,
 				engineerCall: {
 					mode: this.engineersService.mode,
 					provider: this.engineersService.provider,

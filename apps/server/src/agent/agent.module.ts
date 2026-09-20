@@ -18,11 +18,13 @@ import { PlansModule } from "@plans/plans.module"
 import { RecoveryModule } from "@recovery/recovery.module"
 import { TasksModule } from "@tasks/tasks.module"
 import { ToolsModule } from "@tools/tools.module"
+import { CompanyCallsModule } from "../company-calls/company-calls.module"
 
 @Module({
 	controllers: [AgentController, OverviewController, ModelTestsController],
 	exports: [AgentService],
 	imports: [
+		CompanyCallsModule,
 		HttpModule,
 		IncidentsModule,
 		PlansModule,

@@ -34,6 +34,8 @@ export interface WebhooksConfiguration {
 }
 
 export interface HappyRobotConfiguration {
+	readonly inboundWebhookSecret?: string
+	readonly inboundRunIdentifier?: string
 	readonly mode: EngineerCallMode
 	readonly triggerURL: string
 	readonly apiKey: string

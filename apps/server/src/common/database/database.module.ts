@@ -2,6 +2,7 @@ import { requiresTLS } from "@common/helpers/database-url.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
 import { Module } from "@nestjs/common"
 import { TypeOrmModule } from "@nestjs/typeorm"
+import { PrivateCallSchema1789860000000 } from "./migrations/1789860000000-private-call-schema"
 
 @Module({
 	imports: [
@@ -17,6 +18,8 @@ import { TypeOrmModule } from "@nestjs/typeorm"
 				logging: configuration.database.queryLogging
 					? ["query"]
 					: false,
+				migrations: [PrivateCallSchema1789860000000],
+				migrationsRun: true,
 				ssl: requiresTLS(configuration.database.url)
 					? { rejectUnauthorized: false }
 					: false,

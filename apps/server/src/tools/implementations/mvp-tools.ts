@@ -1,4 +1,5 @@
 import { ApprovalsService } from "@approvals/services/approvals.service"
+import { ConcurrentPlanVersionException } from "@common/exceptions/domain.exception"
 import { RunsService } from "@incidents/services/runs.service"
 import { Injectable } from "@nestjs/common"
 import { PlansService } from "@plans/services/plans.service"
@@ -8,6 +9,18 @@ import {
 	ToolExecutionResult,
 	ToolInvocation,
 } from "@tools/types/tool.type"
+
+/** The run moved on before this proposal landed, so the agent reassesses instead of retrying. */
+function stalePlanResult(): ToolExecutionResult {
+	return {
+		error: {
+			code: "STALE_PLAN",
+			message: "Run or previous plan no longer matches",
+			retryable: false,
+		},
+		status: "failed",
+	}
+}
 
 @Injectable()
 export class GetIncidentContextTool {
@@ -65,21 +78,26 @@ export class SaveRecoveryPlanTool {
 			input.incidentIdentifier !== context.incidentIdentifier ||
 			(previous?.identifier ?? "") !== input.expectedPreviousIdentifier
 		) {
-			return {
-				error: {
-					code: "STALE_PLAN",
-					message: "Run or previous plan no longer matches",
-					retryable: false,
-				},
-				status: "failed",
-			}
+			return stalePlanResult()
 		}
 		if (previous)
 			await this.approvals.supersedePending(
 				context.runIdentifier,
 				`Plan revised: ${input.triggeredBy}`,
 			)
-		const plan = await this.plans.createVersion({ ...input, previous })
-		return { output: { kind: "recovery-plan", plan }, status: "succeeded" }
+		// The check above reads the latest plan; the insert is what finally settles who got the
+		// version. Losing that race means the same thing as failing the check.
+		try {
+			const plan = await this.plans.createVersion({ ...input, previous })
+			return {
+				output: { kind: "recovery-plan", plan },
+				status: "succeeded",
+			}
+		} catch (error) {
+			if (error instanceof ConcurrentPlanVersionException) {
+				return stalePlanResult()
+			}
+			throw error
+		}
 	}
 }

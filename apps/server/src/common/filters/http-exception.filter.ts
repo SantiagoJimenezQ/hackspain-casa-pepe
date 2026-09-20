@@ -73,6 +73,22 @@ export class HTTPExceptionFilter implements ExceptionFilter {
 			request.url,
 			correlationIdentifier,
 		)
+		const pathname = request.url.split("?")[0]
+		if (
+			errorResponse.statusCode === HttpStatus.BAD_REQUEST &&
+			/^\/api\/webhooks\/happyrobot(?:\/|$)/.test(pathname)
+		) {
+			// Validation messages describe constraints; parser errors can echo raw JSON.
+			const validation = errorResponse.message === "Validation failed"
+			this.logger.warn("HappyRobot webhook rejected", {
+				correlationIdentifier,
+				details: validation ? errorResponse.details.slice(0, 30) : [],
+				method: request.method,
+				path: pathname,
+				reason: validation ? "Validation failed" : "Bad request",
+				statusCode: errorResponse.statusCode,
+			})
+		}
 		if (errorResponse.statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
 			const stack =
 				exception instanceof Error ? exception.stack : String(exception)

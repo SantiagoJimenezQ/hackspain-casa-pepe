@@ -18,7 +18,7 @@ import { localeTags } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export function TopBar() {
-  const { overview, status, busyAction, triggerImpact, triggerTwist, resetDemo, learningResetMessage } = useDashboard();
+  const { overview, status, busyAction, triggerImpact, triggerTwist, resetDemo } = useDashboard();
   const { locale, t } = useI18n();
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
@@ -138,7 +138,6 @@ export function TopBar() {
         available={overview.incident.active && overview.incident.runKind !== "replay" && !["normal", "reset", "recovered"].includes(overview.incident.status)}
         locale={locale}
       /> : null}
-      {learningResetMessage ? <p role="status" className="border-b border-border px-4 py-2 text-xs text-muted-foreground">{learningResetMessage}</p> : null}
     </>
   );
 }

@@ -174,7 +174,9 @@ describe("live dashboard provider", () => {
     }
     const { user } = renderWithProviders(<><TopBar /><LearningProbe /></>);
     await screen.findByText("Lessons: 1");
-    await user.click(screen.getByRole("button", { name: "Borrar aprendizajes" }));
+    // The action lives inside the learnings panel now, not in the navbar.
+    await user.click(screen.getByText("Aprendizajes"));
+    await user.click(await screen.findByRole("button", { name: "Borrar todos los aprendizajes" }));
     if (succeeds) {
       await screen.findByText("Lessons: 0");
       expect(screen.getByRole("status")).toHaveTextContent("2 aprendizajes borrados");
@@ -184,7 +186,12 @@ describe("live dashboard provider", () => {
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
     }
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/demo/reset"))).toBe(false);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Borrar aprendizajes" })).toBeEnabled());
+    // Emptying the memory leaves nothing to delete, so the button only comes back when it failed.
+    await waitFor(() =>
+      succeeds
+        ? expect(screen.getByRole("button", { name: "Borrar todos los aprendizajes" })).toBeDisabled()
+        : expect(screen.getByRole("button", { name: "Borrar todos los aprendizajes" })).toBeEnabled(),
+    );
   });
 
   it("shows saved lessons, refreshes them, and distinguishes errors from empty memory", async () => {
@@ -200,7 +207,7 @@ describe("live dashboard provider", () => {
       return Response.json({ lessons: [] });
     });
     const { user } = renderWithProviders(<TopBar />);
-    await user.click(screen.getByRole("button", { name: "Aprendizajes" }));
+    await user.click(screen.getByText("Aprendizajes"));
     expect(await screen.findByRole("dialog")).toHaveAccessibleName("Aprendizajes del agente");
     expect(await screen.findByText("Only 7 of 12 units were available")).toBeVisible();
     expect(screen.getByText("3 observaciones")).toBeVisible();

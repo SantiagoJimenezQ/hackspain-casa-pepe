@@ -78,7 +78,7 @@ export class DemoController {
 	@Post("impact")
 	@HttpCode(HttpStatus.OK)
 	@ApiOperation({
-		summary: "Introduce the meteorite impact. The agent starts responding",
+		summary: "Introduce the missile impact. The agent starts responding",
 	})
 	async impact(@Query() query: RunScopedQueryDTO): Promise<IncidentSnapshot> {
 		return this.incidentsService.applyHarnessEvent(

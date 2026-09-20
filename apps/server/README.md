@@ -2,7 +2,7 @@
 
 Owner: harness and backend track, in coordination with the agent and integrations track.
 
-Backend of **Casa Pepe**, the AI incident coordinator for HackSpain. It implements the `apps/server/` process described in the [root README](../../README.md) and the use case in [MASTER.md](../../MASTER.md): a meteorite takes down the `eu-west-1` region of a delivery company and the agent decides what to recover first with the backup capacity available, coordinates people, asks the operator for approval, executes the recovery and verifies it.
+Backend of **Casa Pepe**, the AI incident coordinator for HackSpain. It implements the `apps/server/` process described in the [root README](../../README.md) and the use case in [MASTER.md](../../MASTER.md): a missile takes down the `eu-west-1` region of a delivery company and the agent decides what to recover first with the backup capacity available, coordinates people, asks the operator for approval, executes the recovery and verifies it.
 
 Built with NestJS and TypeScript, persisted in **Supabase (Postgres)** through TypeORM. The Next.js dashboard reads the authenticated API and proxied SSE activity stream; other consumers can subscribe through signed outbound webhooks.
 
@@ -65,7 +65,7 @@ Everything the operator reads follows the scenario language: service names, impa
 ```bash
 BASE=http://localhost:3000/api; AUTH="Authorization: API casa-pepe-local-api-key"
 curl -X POST $BASE/demo/start  -H "$AUTH" -H "Content-Type: application/json" -d '{"scenarioIdentifier":"meteorite-eu-west-1-es"}'   # 1. everything healthy (Spanish scenario)
-curl -X POST $BASE/demo/impact -H "$AUTH"      # 2. meteorite: the agent creates plan v1 and calls the engineer
+curl -X POST $BASE/demo/impact -H "$AUTH"      # 2. missile: the agent creates plan v1 and calls the engineer
 curl -X POST $BASE/demo/twist  -H "$AUTH"      # 5. backup capacity is insufficient: plan v2, approvals invalidated
 curl $BASE/approvals?status=pending -H "$AUTH"
 curl -X POST $BASE/approvals/<identifier>/decision -H "$AUTH" -H "Content-Type: application/json" \
@@ -153,7 +153,7 @@ src/
   common/          typed configuration, error filter, helpers, Postgres connection
   authentication/  API key guard
   health/          terminus
-  scenarios/       meteorite scenario definition
+  scenarios/       missile scenario definition
   incidents/       harness: incident state, runs, demo controls
   activity/        activity log and source of the webhooks
   plans/           plan versions and diff between versions

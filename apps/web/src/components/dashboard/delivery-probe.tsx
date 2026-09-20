@@ -9,9 +9,20 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { casaPepeClient } from "@/lib/casa-pepe-client";
 import type { DeliveryProbeResult, Overview } from "@/lib/casa-pepe-types";
 
+/** The probe calls the real HTTP recovery environment, so it only exists when there is one. */
+export function deliveryProbeSupported(overview: Overview): boolean {
+  return overview.agent.recoveryMode === "http"
+    && overview.incident.active
+    && overview.incident.runKind !== "replay"
+    && overview.incident.simulation?.mode === "manual";
+}
+
 export function DeliveryProbe() {
   const { overview, retry } = useDashboard();
-  return overview ? <DeliveryProbeControl key={overview.incident.runIdentifier} overview={overview} refresh={retry} /> : null;
+  // With simulated recovery there is no service to probe, and the card would only take room
+  // from the list of services, which is what the panel is for.
+  if (!overview || !deliveryProbeSupported(overview)) return null;
+  return <DeliveryProbeControl key={overview.incident.runIdentifier} overview={overview} refresh={retry} />;
 }
 
 export function DeliveryProbeControl({ overview, refresh }: { overview: Overview; refresh: () => Promise<void> }) {
@@ -20,7 +31,7 @@ export function DeliveryProbeControl({ overview, refresh }: { overview: Overview
   const [error, setError] = useState("");
   const [result, setResult] = useState<DeliveryProbeResult | null>(null);
   const runIdentifier = overview.incident.runIdentifier;
-  const supported = overview.agent.recoveryMode === "http" && overview.incident.active && overview.incident.runKind !== "replay" && overview.incident.simulation?.mode === "manual";
+  const supported = deliveryProbeSupported(overview);
   const history = (overview.deliveryProbes ?? []).filter(item => item.runIdentifier === runIdentifier);
   const results = result && !history.some(item => item.checkedAt === result.checkedAt) ? [...history, result].slice(-2) : history;
   async function probe() {

@@ -121,13 +121,15 @@ describe("incident state helper", () => {
 					: service,
 			),
 		})
-		expect(selected.identifier).toBe("backup-bahrain")
+		expect(selected.identifier).toBe("backup-frankfurt")
 	})
 
 	it("sizes failover from a degraded leftover and leaves a full Oman", () => {
 		const leftover = createLastDegradedIncident()
 		expect(nextRecoveryUnits(leftover)).toBe(1)
-		expect(selectBackupResource(leftover).identifier).toBe("backup-bahrain")
+		expect(selectBackupResource(leftover).identifier).toBe(
+			"backup-frankfurt",
+		)
 	})
 
 	it("does not stay on a committed region with zero remaining units", () => {
@@ -141,7 +143,7 @@ describe("incident state helper", () => {
 		}
 		expect(nextRecoveryUnits(recovered)).toBe(0)
 		expect(selectBackupResource(recovered).identifier).toBe(
-			"backup-bahrain",
+			"backup-frankfurt",
 		)
 	})
 })

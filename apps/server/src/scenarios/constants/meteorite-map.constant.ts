@@ -8,7 +8,7 @@ import {
 
 export const IMPACT_REGION = "me-central-1"
 export const OMAN_REGION = "muscat-lz"
-export const BAHRAIN_REGION = "me-south-1"
+export const FRANKFURT_REGION = "eu-central-1"
 export const RIYADH_REGION = "riyadh"
 
 export const METEORITE_SITES = [
@@ -29,11 +29,11 @@ export const METEORITE_SITES = [
 		role: "backup" as const,
 	},
 	{
-		identifier: "bahrain",
-		latitude: 26.2285,
-		longitude: 50.586,
+		identifier: "frankfurt",
+		latitude: 50.1109,
+		longitude: 8.6821,
 		priority: 2,
-		region: BAHRAIN_REGION,
+		region: FRANKFURT_REGION,
 		role: "backup" as const,
 	},
 	{
@@ -51,14 +51,14 @@ const SITE_LABELS: Record<
 	Record<(typeof METEORITE_SITES)[number]["identifier"], string>
 > = {
 	en: {
-		bahrain: "Manama",
 		dubai: "Dubai",
+		frankfurt: "Frankfurt",
 		muscat: "Muscat LZ",
 		riyadh: "Riyadh",
 	},
 	es: {
-		bahrain: "Manama",
 		dubai: "Dubái",
+		frankfurt: "Fráncfort",
 		muscat: "Mascate LZ",
 		riyadh: "Riad",
 	},
@@ -66,7 +66,7 @@ const SITE_LABELS: Record<
 
 export const METEORITE_LINKS: ReadonlyArray<ScenarioTopologyLink> = [
 	{ from: "dubai", identifier: "dubai-muscat", to: "muscat" },
-	{ from: "dubai", identifier: "dubai-bahrain", to: "bahrain" },
+	{ from: "dubai", identifier: "dubai-frankfurt", to: "frankfurt" },
 	{ from: "dubai", identifier: "dubai-riyadh", to: "riyadh" },
 ]
 
@@ -220,14 +220,16 @@ export function meteoriteResources(
 			unit,
 		},
 		{
-			identifier: "backup-bahrain",
+			identifier: "backup-frankfurt",
 			name:
-				language === "es" ? "Baréin me-south-1" : "Bahrain me-south-1",
+				language === "es"
+					? "Fráncfort eu-central-1"
+					: "Frankfurt eu-central-1",
 			note:
 				language === "es"
 					? "Segunda región de respaldo por distancia"
 					: "Second closest backup region",
-			region: BAHRAIN_REGION,
+			region: FRANKFURT_REGION,
 			reportedCapacity: 12,
 			unit,
 		},

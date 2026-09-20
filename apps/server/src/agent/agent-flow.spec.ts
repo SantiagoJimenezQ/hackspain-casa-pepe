@@ -218,7 +218,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			totalCapacity: 1,
 		})
 		const planTwo = await waitForPlanVersion(runIdentifier, 3)
-		expect(planTwo.capacity.resourceIdentifier).toBe("backup-bahrain")
+		expect(planTwo.capacity.resourceIdentifier).toBe("backup-frankfurt")
 		expect(planTwo.capacity.totalCapacity).toBe(12)
 		expect(
 			planTwo.priorities.find(
@@ -339,7 +339,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		})
 		expect(
 			finalIncident.resources.find(
-				(resource) => resource.identifier === "backup-bahrain",
+				(resource) => resource.identifier === "backup-frankfurt",
 			)?.allocatedCapacity,
 		).toBe(12)
 
@@ -398,7 +398,7 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		)
 		const plan = await waitForPlanVersion(restarted.runIdentifier, 2)
 
-		expect(plan.capacity.resourceIdentifier).toBe("backup-bahrain")
+		expect(plan.capacity.resourceIdentifier).toBe("backup-frankfurt")
 		expect(plan.capacity.totalCapacity).toBe(12)
 		expect(plan.capacity.assumedCapacity).toBe(12)
 		expect(

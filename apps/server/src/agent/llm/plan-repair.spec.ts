@@ -747,7 +747,7 @@ describe("post-recovery stall repair", () => {
 		expect(result.capacity).toMatchObject({
 			assumedCapacity: 12,
 			plannedUnits: 3,
-			resourceIdentifier: "backup-bahrain",
+			resourceIdentifier: "backup-frankfurt",
 			totalCapacity: 12,
 		})
 		expect(result.steps.map((step) => step.invocation.name)).toEqual([
@@ -759,7 +759,7 @@ describe("post-recovery stall repair", () => {
 			dependsOn: [],
 			identifier: "stp_route-assignment_execute",
 			invocation: {
-				input: { resourceIdentifier: "backup-bahrain" },
+				input: { resourceIdentifier: "backup-frankfurt" },
 				name: "execute_recovery",
 			},
 			status: "proposed",
@@ -819,7 +819,7 @@ describe("post-recovery stall repair", () => {
 			assumedCapacity: 12,
 			plannedUnits: 9,
 			remainingUnits: 3,
-			resourceIdentifier: "backup-bahrain",
+			resourceIdentifier: "backup-frankfurt",
 			totalCapacity: 12,
 		})
 		expect(result.steps.map((step) => step.identifier)).toEqual([
@@ -828,7 +828,7 @@ describe("post-recovery stall repair", () => {
 		])
 		expect(result.steps[0]).toMatchObject({
 			invocation: {
-				input: { resourceIdentifier: "backup-bahrain" },
+				input: { resourceIdentifier: "backup-frankfurt" },
 				name: "execute_recovery",
 			},
 		})
@@ -944,7 +944,7 @@ describe("recover-now without matching steps", () => {
 		const afterRoutes = {
 			...leftover,
 			resources: leftover.resources.map((resource) =>
-				resource.identifier === "backup-bahrain"
+				resource.identifier === "backup-frankfurt"
 					? { ...resource, allocatedCapacity: 3 }
 					: resource,
 			),
@@ -1001,7 +1001,7 @@ describe("recover-now without matching steps", () => {
 					plannedUnits: 3,
 					postponedUnits: 2,
 					remainingUnits: 9,
-					resourceIdentifier: "backup-bahrain",
+					resourceIdentifier: "backup-frankfurt",
 					totalCapacity: 12,
 				},
 				changesFromPrevious: [],
@@ -1029,7 +1029,7 @@ describe("recover-now without matching steps", () => {
 				plannedUnits: 3,
 				postponedUnits: 1,
 				remainingUnits: 9,
-				resourceIdentifier: "backup-bahrain",
+				resourceIdentifier: "backup-frankfurt",
 				totalCapacity: 12,
 			},
 			priorities: afterRoutes.services.map((service, index) => ({

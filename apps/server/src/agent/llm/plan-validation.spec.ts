@@ -1171,7 +1171,7 @@ describe("repair followed by validation", () => {
 				(priority) => priority.serviceIdentifier === "route-assignment",
 			)?.decision,
 		).toBe("recover-now")
-		expect(result.capacity.resourceIdentifier).toBe("backup-bahrain")
+		expect(result.capacity.resourceIdentifier).toBe("backup-frankfurt")
 		const execute = result.steps.find(
 			(step) => step.identifier === "stp_route-assignment_execute",
 		)
@@ -1364,7 +1364,7 @@ describe("repair followed by validation", () => {
 			assumedCapacity: 12,
 			plannedUnits: 9,
 			remainingUnits: 3,
-			resourceIdentifier: "backup-bahrain",
+			resourceIdentifier: "backup-frankfurt",
 		})
 		expect(
 			result.steps.some(

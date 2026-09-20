@@ -42,7 +42,7 @@ const snapshot = {
     title: "Crisis Baréin",
     company: "Casa Pepe",
     narrative: "",
-    region: "me-south-1",
+    region: "eu-central-1",
     backupRegion: "me-central-1",
     status: "active",
     active: true,
@@ -399,7 +399,7 @@ describe("live dashboard chrome", () => {
 
     await waitFor(() => expect(screen.getByText("Leyó el contexto del incidente")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Impacto" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Twist" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Recortar capacidad" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reiniciar" })).toBeInTheDocument();
     expect(screen.getByText("Tiempo de incidente")).toBeInTheDocument();
     expect(screen.getAllByText("Recuperando Flujo de eventos").length).toBeGreaterThan(0);

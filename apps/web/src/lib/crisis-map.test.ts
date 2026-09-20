@@ -23,7 +23,7 @@ import type { Overview } from "@/lib/casa-pepe-types";
 const nodes = [
   { identifier: "dubai", label: "Dubái", region: "me-central-1", latitude: 25.2048, longitude: 55.2708, role: "primary" as const, status: "down" as const },
   { identifier: "muscat", label: "Mascate LZ", region: "muscat-lz", latitude: 23.588, longitude: 58.3829, role: "backup" as const, status: "up" as const },
-  { identifier: "bahrain", label: "Manama", region: "me-south-1", latitude: 26.2285, longitude: 50.586, role: "backup" as const, status: "up" as const },
+  { identifier: "frankfurt", label: "Manama", region: "eu-central-1", latitude: 26.2285, longitude: 50.586, role: "backup" as const, status: "up" as const },
   { identifier: "riyadh", label: "Riad", region: "riyadh", latitude: 24.7136, longitude: 46.6753, role: "backup" as const, status: "up" as const },
 ];
 
@@ -71,10 +71,10 @@ describe("crisis map camera and projection", () => {
     expect(failoverArcVisible(["execute_recovery"])).toBe(true);
     expect(failoverArcVisible(["contact_engineer"])).toBe(true);
     const overview = {
-      incident: { backupRegion: "me-south-1", topology: { nodes } },
+      incident: { backupRegion: "eu-central-1", topology: { nodes } },
     } as unknown as Overview;
-    expect(failoverTarget(overview)?.identifier).toBe("bahrain");
-    expect(failoverTarget({ incident: { backupRegion: "me-south-1" } } as unknown as Overview)).toBeNull();
+    expect(failoverTarget(overview)?.identifier).toBe("frankfurt");
+    expect(failoverTarget({ incident: { backupRegion: "eu-central-1" } } as unknown as Overview)).toBeNull();
   });
 
   it("projects gulf sites with geographic order on Natural Earth", () => {

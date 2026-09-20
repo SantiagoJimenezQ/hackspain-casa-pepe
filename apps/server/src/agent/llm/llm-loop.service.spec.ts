@@ -1629,7 +1629,7 @@ describe("complete public turn records", () => {
 				(priority) => priority.serviceIdentifier === "route-assignment",
 			)?.decision,
 		).toBe("recover-now")
-		expect(saved.capacity.resourceIdentifier).toBe("backup-bahrain")
+		expect(saved.capacity.resourceIdentifier).toBe("backup-frankfurt")
 		expect(
 			saved.steps.find(
 				(step) => step.identifier === "stp_route-assignment_execute",
@@ -1801,7 +1801,7 @@ describe("complete public turn records", () => {
 		expect(saved.capacity).toMatchObject({
 			plannedUnits: 9,
 			remainingUnits: 3,
-			resourceIdentifier: "backup-bahrain",
+			resourceIdentifier: "backup-frankfurt",
 		})
 		expect(
 			saved.steps.find(

@@ -84,7 +84,7 @@ export function createLastDegradedIncident(): IncidentSnapshot {
 			if (resource.identifier === "backup-oman") {
 				return { ...resource, allocatedCapacity: 4 }
 			}
-			if (resource.identifier === "backup-bahrain") {
+			if (resource.identifier === "backup-frankfurt") {
 				return { ...resource, allocatedCapacity: 8 }
 			}
 			return resource

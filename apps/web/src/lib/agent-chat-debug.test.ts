@@ -22,7 +22,7 @@ function overviewWith(partial: Partial<Overview> = {}): Overview {
       title: "Crisis",
       company: "Casa Pepe",
       narrative: "",
-      region: "me-south-1",
+      region: "eu-central-1",
       backupRegion: "me-central-1",
       status: "active",
       active: true,
@@ -206,7 +206,7 @@ describe("formatChatDebugDump", () => {
           outputIdentifier: "out_1",
           turn: 0,
           text: "Necesito el contexto actual del incidente.\nVoy a leer logs internos.",
-          toolCalls: [{ id: "call_1", name: "get_incident_context", arguments: { verbose: true, region: "me-south-1" } }],
+          toolCalls: [{ id: "call_1", name: "get_incident_context", arguments: { verbose: true, region: "eu-central-1" } }],
           model: "gpt-test",
           finishReason: "tool_calls",
           disposition: "accepted",
@@ -235,7 +235,7 @@ describe("formatChatDebugDump", () => {
     expect(dump).toContain("requiresApproval: true");
     expect(dump).toContain("TRANSCRIPT (all collapsed sections expanded)");
     expect(dump).toContain("Voy a leer logs internos.");
-    expect(dump).toContain('"region": "me-south-1"');
+    expect(dump).toContain('"region": "eu-central-1"');
     expect(dump).toContain("412 tokens");
     expect(dump).toContain('"hidden": "full payload"');
     expect(dump).toContain("[task] Explore · blast radius · in_progress");

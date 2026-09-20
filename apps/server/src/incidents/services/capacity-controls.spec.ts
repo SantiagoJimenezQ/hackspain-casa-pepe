@@ -48,7 +48,7 @@ describe("targeted capacity controls", () => {
 			{
 				availableCapacity: 1,
 				reason: "Mantenimiento imprevisto",
-				resourceIdentifier: "backup-bahrain",
+				resourceIdentifier: "backup-frankfurt",
 				type: "capacity-limited",
 			},
 			"Demo controls",
@@ -59,25 +59,25 @@ describe("targeted capacity controls", () => {
 				?.totalCapacity,
 		).toBe(4)
 		expect(
-			result.resources.find((r) => r.identifier === "backup-bahrain")
+			result.resources.find((r) => r.identifier === "backup-frankfurt")
 				?.totalCapacity,
 		).toBe(1)
 		expect(
 			(await h.runs.getByRunIdentifier("run-other")).resources.find(
-				(r) => r.identifier === "backup-bahrain",
+				(r) => r.identifier === "backup-frankfurt",
 			)?.totalCapacity,
 		).not.toBe(1)
 		expect(result.harnessEvents.at(-1)?.event).toMatchObject({
 			availableCapacity: 1,
 			previousCapacity: 12,
-			resourceIdentifier: "backup-bahrain",
+			resourceIdentifier: "backup-frankfurt",
 		})
 		expect(h.activity.record).toHaveBeenCalledWith(
 			expect.objectContaining({
 				payload: expect.objectContaining({
 					previousCapacity: 12,
 					reason: "Mantenimiento imprevisto",
-					resourceIdentifier: "backup-bahrain",
+					resourceIdentifier: "backup-frankfurt",
 				}),
 				type: "resource.capacity-changed",
 			}),

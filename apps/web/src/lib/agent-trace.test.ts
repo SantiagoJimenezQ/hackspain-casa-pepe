@@ -42,7 +42,7 @@ function overviewWith(tools: ToolCall[], services = [
       title: "Crisis",
       company: "Casa Pepe",
       narrative: "",
-      region: "me-south-1",
+      region: "eu-central-1",
       backupRegion: "me-central-1",
       status: "active",
       active: true,

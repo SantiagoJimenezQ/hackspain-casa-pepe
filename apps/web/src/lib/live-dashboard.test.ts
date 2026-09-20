@@ -6,7 +6,7 @@ const overview = {
   incident: {
     active: true, customers: [{ identifier: "c", name: "Customer", shortName: "C", sector: "Retail", users: 4, serviceIdentifiers: ["database"], accent: "#fff" }],
     services: [{ identifier: "database", name: "Database", status: "down" }],
-    topology: { nodes: [{ identifier: "bahrain", label: "Bahrain", region: "me-south-1", latitude: 26, longitude: 50, role: "primary", status: "down" }], links: [] },
+    topology: { nodes: [{ identifier: "frankfurt", label: "Bahrain", region: "eu-central-1", latitude: 26, longitude: 50, role: "primary", status: "down" }], links: [] },
   },
 } as unknown as Overview;
 

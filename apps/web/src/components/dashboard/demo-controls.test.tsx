@@ -12,7 +12,7 @@ vi.mock("@/lib/casa-pepe-client", () => ({casaPepeClient: {changeCapacity: vi.fn
 afterEach(() => vi.clearAllMocks());
 const incident = {runIdentifier: "run-browser", active: true, runKind: "live", simulation: {mode: "manual"}, resources: [
   {identifier: "backup-oman", name: "Omán", region: "om", totalCapacity: 4, allocatedCapacity: 0},
-  {identifier: "backup-bahrain", name: "Baréin", region: "bh", totalCapacity: 12, allocatedCapacity: 3},
+  {identifier: "backup-frankfurt", name: "Baréin", region: "bh", totalCapacity: 12, allocatedCapacity: 3},
 ]} as Incident;
 const overview = {incident, agent: {recoveryMode: "http"}, deliveryProbes: []} as unknown as Overview;
 const priority = {serviceIdentifier: "orders", serviceName: "Pedidos", rank: 1, decision: "recover-now", reason: "Desbloquea el reparto", blockedBy: []};

@@ -414,7 +414,6 @@ describe("live dashboard chrome", () => {
     expect(screen.getByText("Migrando")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Trabajo del agente" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ir al último" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Copiar chat (debug)" })).toBeInTheDocument();
     expect(screen.queryByText("Completado")).not.toBeInTheDocument();
     expect(screen.queryByText("En curso")).not.toBeInTheDocument();
     expect(screen.queryByText(/Trabajo del agente ·/)).not.toBeInTheDocument();
@@ -901,13 +900,13 @@ describe("live dashboard chrome", () => {
 
     const approve = await screen.findByRole("button", { name: "Aprobar" });
     const reject = screen.getByRole("button", { name: "Rechazar" });
-    const debug = screen.getByRole("button", { name: "Copiar chat (debug)" });
     const prompt = screen.getByRole("alert");
     expect(screen.getByText("Llamar al ingeniero de turno")).toBeInTheDocument();
     expect(screen.getByText("La recuperación necesita autorización del operador.")).toBeInTheDocument();
     expect(prompt).toHaveClass("rounded-[6px]");
     expect(approve).toHaveClass("bg-white");
-    expect(debug.compareDocumentPosition(approve) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const transcript = screen.getByRole("region", { name: "Trabajo del agente" });
+    expect(transcript.compareDocumentPosition(approve) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(reject.compareDocumentPosition(approve) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

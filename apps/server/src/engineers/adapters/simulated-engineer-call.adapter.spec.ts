@@ -70,8 +70,8 @@ describe("simulated call evidence", () => {
 		const result = await call([], true)
 		for (const key of ["notifyAllClients", "trafficFailoverAuthorized"]) {
 			expect(result.authorizations[key]).toEqual({
-				value: true,
 				rationale: expect.stringContaining("Simulated authorization"),
+				value: true,
 			})
 		}
 		expect(result.summary).toContain("SIMULATED_CALL_ALWAYS_AUTHORIZED")

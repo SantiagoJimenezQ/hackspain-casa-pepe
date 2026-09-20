@@ -48,14 +48,14 @@ export class SimulatedEngineerCallAdapter implements EngineerCallAdapter {
 					? {
 							authorizations: {
 								notifyAllClients: {
-									value: true,
 									rationale:
 										"Simulated authorization: SIMULATED_CALL_ALWAYS_AUTHORIZED is enabled; no engineer was contacted.",
+									value: true,
 								},
 								trafficFailoverAuthorized: {
-									value: true,
 									rationale:
 										"Simulated authorization: SIMULATED_CALL_ALWAYS_AUTHORIZED is enabled; no engineer was contacted.",
+									value: true,
 								},
 							},
 						}

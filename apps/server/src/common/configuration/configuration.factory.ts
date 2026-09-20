@@ -217,13 +217,13 @@ export function createApplicationConfiguration(
 			webhookSecret: variables.RESEND_WEBHOOK_SECRET,
 		},
 		engineerCall: {
-			simulatedAlwaysAuthorized:
-				variables.SIMULATED_CALL_ALWAYS_AUTHORIZED === "true",
 			fallbackToSimulated:
 				variables.ENGINEER_CALL_FALLBACK_TO_SIMULATED === "true",
 			mode: (variables.ENGINEER_CALL_MODE ??
 				variables.HAPPYROBOT_MODE) as EngineerCallMode,
 			provider: variables.ENGINEER_CALL_PROVIDER as EngineerCallProvider,
+			simulatedAlwaysAuthorized:
+				variables.SIMULATED_CALL_ALWAYS_AUTHORIZED === "true",
 		},
 		happyRobot: {
 			apiKey:

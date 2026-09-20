@@ -4,7 +4,7 @@ import { CapacityControls } from "@/components/dashboard/capacity-controls";
 import Image from "next/image";
 import { InboundCallDetails } from "@/components/dashboard/inbound-call-details";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Radio, RefreshCcw, RotateCcw, Zap } from "lucide-react";
+import { CheckCircle2, Radio, RotateCcw, Zap } from "lucide-react";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { LanguageSwitcher } from "@/components/dashboard/language-switcher";
 import { LearningPanel } from "@/components/dashboard/learning-panel";
@@ -18,7 +18,7 @@ import { localeTags } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export function TopBar() {
-  const { overview, status, busyAction, triggerImpact, triggerTwist, resetDemo, resetLearnings, learningResetMessage } = useDashboard();
+  const { overview, status, busyAction, triggerImpact, triggerTwist, resetDemo, learningResetMessage } = useDashboard();
   const { locale, t } = useI18n();
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
@@ -31,7 +31,6 @@ export function TopBar() {
   const recovered = Boolean(clock?.recovered);
   const impacted = Boolean(overview?.incident.impactedAt);
   const busy = busyAction !== null;
-  const clearingLearnings = busyAction === "reset-learnings";
   return (
     <>
       <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-background/75 px-3 py-2 backdrop-blur sm:px-4">

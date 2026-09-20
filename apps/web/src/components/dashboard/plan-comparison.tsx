@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRightLeft } from "lucide-react";
+import { ArrowRightLeft, ChevronRight } from "lucide-react";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,9 +18,17 @@ export function PlanComparison({ comparison }: { comparison: Comparison }) {
   const focusIds = (changedIds.length ? changedIds : current.priorities.map(priority => priority.serviceIdentifier)).slice(0, 3);
   return <Sheet>
     <div className="flex shrink-0 flex-col gap-2 px-4 pb-3">
-      <SheetTrigger render={<Button variant="outline" className="w-full justify-between" />}>
+      <SheetTrigger render={<Button variant="outline" className="w-full justify-start gap-2" />}>
         <ArrowRightLeft data-icon="inline-start" />
-        {previous ? `${es ? "Comparar planes" : "Compare plans"}: v${previous.version} → v${current.version}` : (es ? "Ver plan y motivos" : "View plan and reasons")}
+        <span className="min-w-0 flex-1 truncate text-left">
+          {previous ? (es ? "Comparar planes" : "Compare plans") : (es ? "Ver plan y motivos" : "View plan and reasons")}
+        </span>
+        {previous ? (
+          <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+            v{previous.version} → v{current.version}
+          </span>
+        ) : null}
+        <ChevronRight data-icon="inline-end" className="shrink-0 text-muted-foreground" />
       </SheetTrigger>
       {previous ? <p className="text-xs text-muted-foreground">{comparison.capacityChanges.at(-1)?.reason || current.reason}</p> : null}
     </div>

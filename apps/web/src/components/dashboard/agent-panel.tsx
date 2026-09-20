@@ -5,8 +5,8 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import { GitBranch } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, Check, CheckCircleIcon, ChevronDownIcon, CircleIcon, Copy, Loader2, XCircleIcon } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowDown, CheckCircleIcon, ChevronDownIcon, CircleIcon, Loader2, XCircleIcon } from "lucide-react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Task, TaskContent, TaskTrigger } from "@/components/ai-elements/task";
@@ -39,7 +39,6 @@ import {
   type CurrentWork,
   type TranscriptItem,
 } from "@/lib/agent-trace";
-import { formatChatDebugDump } from "@/lib/agent-chat-debug";
 import type { Approval, LlmPublicToolCall, ToolCall } from "@/lib/casa-pepe-types";
 import type { VisualStatus } from "@/lib/live-dashboard";
 import { cn } from "@/lib/utils";
@@ -489,30 +488,9 @@ export function AgentPanel() {
   const { locale, t } = useI18n();
   const [treeOpen, setTreeOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState<Record<string, boolean>>({});
-  const [copied, setCopied] = useState(false);
-  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const work = useMemo(() => (overview ? currentWork(overview, activity, locale) : null), [overview, activity, locale]);
   const tools = useMemo(() => (overview ? mergedToolCalls(overview, activity) : []), [overview, activity]);
   const items = useMemo(() => (overview ? buildTranscript(overview, activity, locale) : []), [overview, activity, locale]);
-
-  useEffect(() => () => {
-    if (copiedTimer.current) window.clearTimeout(copiedTimer.current);
-  }, []);
-
-  const copyChatDebug = useCallback(() => {
-    if (!overview) return;
-    const text = formatChatDebugDump(overview, activity);
-    const clipboard = navigator.clipboard;
-    if (!clipboard?.writeText) return;
-    void clipboard.writeText(text).then(() => {
-      setCopied(true);
-      if (copiedTimer.current) window.clearTimeout(copiedTimer.current);
-      copiedTimer.current = setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {
-      setCopied(false);
-    });
-  }, [overview, activity]);
 
   const plan = overview?.plan.kind === "plan" ? overview.plan.plan : null;
   const runSettled = Boolean(overview && agentSettled(overview));
@@ -533,18 +511,6 @@ export function AgentPanel() {
           <span className={cn("min-w-0 truncate", headerToneClass(work, live))}>{work.title}</span>
         </span>
         <button type="button" title={t("agent.decisionTree")} aria-label={t("agent.openDecisionTree")} onClick={() => setTreeOpen(true)} className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-status-up"><GitBranch className="size-4" /></button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          className="shrink-0 text-[10px] text-muted-foreground"
-          aria-label={copied ? t("agent.copied") : t("agent.copyDebug")}
-          title={copied ? t("agent.copied") : t("agent.copyDebug")}
-          onClick={copyChatDebug}
-        >
-          {copied ? <Check className="text-status-up" /> : <Copy />}
-          DEBUG
-        </Button>
       </div>
       {treeOpen ? <DecisionTreeView onClose={() => setTreeOpen(false)} /> : null}
       {overview.planComparison ? <PlanComparison comparison={overview.planComparison} /> : null}

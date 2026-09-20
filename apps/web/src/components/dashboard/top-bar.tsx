@@ -7,6 +7,7 @@ import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { LanguageSwitcher } from "@/components/dashboard/language-switcher";
 import { LearningPanel } from "@/components/dashboard/learning-panel";
 import { ThemeSwitcher } from "@/components/dashboard/theme-switcher";
+import { useI18n } from "@/components/i18n/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { incidentClock } from "@/lib/agent-trace";

@@ -60,6 +60,7 @@ export class RunReportService {
 					this.scenariosService.getByIdentifier(
 						incident.scenarioIdentifier,
 					).family,
+					runIdentifier,
 				),
 			])
 		const firstRecovery = events.find(

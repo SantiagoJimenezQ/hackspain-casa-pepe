@@ -54,6 +54,8 @@ export type Service = {
 };
 
 export type Incident = {
+  callCode?: string;
+  runKind?: string;
   runIdentifier: string;
   title: string;
   company: string;
@@ -170,13 +172,23 @@ export type Task = {
   updatedAt: string;
 };
 
+/** A `null` value means nobody reached a verdict on that permission. */
+export type CallAuthorizations = {
+  notifyAllClients?: { value: boolean | null } | null;
+  trafficFailoverAuthorized?: { value: boolean | null } | null;
+};
+
 export type EngineerCall = {
   identifier: string;
   engineer: { name: string; role: string };
   purpose: string;
   mode: "simulated" | "live";
   status: string;
-  result: { summary: string; transcript: string } | null;
+  result: {
+    summary: string;
+    transcript: string;
+    authorizations?: CallAuthorizations | null;
+  } | null;
   failureReason: string;
   startedAt: string;
   finishedAt: string;
@@ -223,6 +235,7 @@ export type RunReport = {
 };
 
 export type Overview = {
+  inboundCall?: { phoneNumber: string };
   incident: Incident;
   plan: { kind: "none" } | { kind: "plan"; plan: Plan };
   pendingApprovals: Approval[];

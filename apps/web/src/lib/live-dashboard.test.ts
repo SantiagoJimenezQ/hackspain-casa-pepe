@@ -192,4 +192,66 @@ describe("live dashboard adapter", () => {
     expect(customerViewOrdered(board).map((customer) => customer.identifier)).toEqual(["beta", "alpha", "gamma"]);
     expect(customerViewOrdered(board).map((customer) => customer.action)).toEqual(["recovered", "migrating", "offline"]);
   });
+
+  it("queues the three named companies first, in order", () => {
+    const board = {
+      incident: {
+        active: true,
+        impactedAt: "2026-09-19T10:00:00.000Z",
+        status: "responding",
+        customers: [
+          { identifier: "moeve", name: "Moeve", shortName: "M", sector: "Energía", users: 10, serviceIdentifiers: ["svc-a"], accent: "#fff" },
+          { identifier: "happyrobot", name: "HappyRobot", shortName: "H", sector: "Logística", users: 10, serviceIdentifiers: ["svc-b"], accent: "#fff" },
+          { identifier: "emirates-nbd", name: "Emirates NBD", shortName: "E", sector: "Fintech", users: 10, serviceIdentifiers: ["svc-c"], accent: "#fff" },
+          { identifier: "purehealth", name: "PureHealth", shortName: "P", sector: "Salud", users: 10, serviceIdentifiers: ["svc-d"], accent: "#fff" },
+        ],
+        services: [
+          { identifier: "svc-a", name: "A", status: "down" },
+          { identifier: "svc-b", name: "B", status: "down" },
+          { identifier: "svc-c", name: "C", status: "down" },
+          { identifier: "svc-d", name: "D", status: "down" },
+        ],
+      },
+      toolCalls: [],
+      recentActivity: [],
+    } as unknown as Overview;
+
+    expect(customerViewOrdered(board).map((customer) => customer.identifier)).toEqual([
+      "purehealth",
+      "emirates-nbd",
+      "happyrobot",
+      "moeve",
+    ]);
+  });
+
+  it("queues companies by sector: health, then finance, then logistics", () => {
+    const board = {
+      incident: {
+        active: true,
+        impactedAt: "2026-09-19T10:00:00.000Z",
+        status: "responding",
+        customers: [
+          { identifier: "logistics", name: "Logi", shortName: "L", sector: "Logística", users: 10, serviceIdentifiers: ["svc-a"], accent: "#fff" },
+          { identifier: "energy", name: "Ener", shortName: "E", sector: "Energía", users: 10, serviceIdentifiers: ["svc-b"], accent: "#fff" },
+          { identifier: "health", name: "Heal", shortName: "H", sector: "Salud", users: 10, serviceIdentifiers: ["svc-c"], accent: "#fff" },
+          { identifier: "finance", name: "Fina", shortName: "F", sector: "Fintech", users: 10, serviceIdentifiers: ["svc-d"], accent: "#fff" },
+        ],
+        services: [
+          { identifier: "svc-a", name: "A", status: "down" },
+          { identifier: "svc-b", name: "B", status: "down" },
+          { identifier: "svc-c", name: "C", status: "down" },
+          { identifier: "svc-d", name: "D", status: "down" },
+        ],
+      },
+      toolCalls: [],
+      recentActivity: [],
+    } as unknown as Overview;
+
+    expect(customerViewOrdered(board).map((customer) => customer.identifier)).toEqual([
+      "health",
+      "finance",
+      "logistics",
+      "energy",
+    ]);
+  });
 });

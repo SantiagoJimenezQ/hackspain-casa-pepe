@@ -7,6 +7,8 @@ export const LOG_MESSAGES = {
 			"Agent cycle limit reached for this run, stopping automatic execution",
 		CYCLE_SKIPPED_INACTIVE_RUN:
 			"Agent cycle skipped because the run is no longer active",
+		CYCLE_SKIPPED_RECOVERED:
+			"Agent cycle skipped because the incident is already recovered",
 		CYCLE_SKIPPED_REPLAY: "Agent cycle skipped because the run is a replay",
 		CYCLE_STARTED: "Agent cycle started",
 		ENGINEER_CALL_DISPATCHED:

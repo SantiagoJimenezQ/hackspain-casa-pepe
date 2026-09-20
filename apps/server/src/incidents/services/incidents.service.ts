@@ -1,4 +1,10 @@
 import { ActivityService } from "@activity/services/activity.service"
+import { AGENT_MESSAGES } from "@agent/constants/agent-messages.constant"
+import { AgentMessages } from "@agent/types/agent-messages.type"
+import {
+	currentSessionId,
+	LEGACY_SESSION,
+} from "@authentication/session/browser-session"
 import { DOMAIN_EVENTS } from "@common/constants/domain-events.constant"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
 import { insertEntity, updateEntity } from "@common/database/persistence.helper"
@@ -76,8 +82,7 @@ export class IncidentsService {
 			scenario,
 			simulation,
 		)
-		const entity = await insertEntity(
-			this.repository,
+		const entity = await this.insertRun(
 			this.buildBaselineEntity(runtimeScenario, "live", "", simulation),
 		)
 		const snapshot = toIncidentSnapshot(entity)
@@ -118,8 +123,7 @@ export class IncidentsService {
 			scenario,
 			replayCapacityState,
 		)
-		const entity = await insertEntity(
-			this.repository,
+		const entity = await this.insertRun(
 			this.buildBaselineEntity(
 				runtimeScenario,
 				"replay",
@@ -147,10 +151,11 @@ export class IncidentsService {
 			return this.runsService.getByRunIdentifier(current.runIdentifier)
 		}
 		if (current) {
-			await this.deactivateRun(
-				current,
-				"The operator changed the language; this run ends here",
-			)
+			if (currentSessionId() === LEGACY_SESSION)
+				await this.deactivateRun(
+					current,
+					"The operator changed the language",
+				)
 		}
 		return this.startRun(scenario.identifier)
 	}
@@ -163,10 +168,11 @@ export class IncidentsService {
 			? current.scenarioIdentifier
 			: this.scenariosService.list()[0].identifier
 		if (current) {
-			await this.deactivateRun(
-				current,
-				"The operator reset the scenario; this run ends here",
-			)
+			if (currentSessionId() === LEGACY_SESSION)
+				await this.deactivateRun(
+					current,
+					"The operator reset the scenario",
+				)
 			await this.activityService.record({
 				correlation: {},
 				incidentIdentifier: current.identifier,
@@ -396,7 +402,10 @@ export class IncidentsService {
 			runIdentifier: snapshot.runIdentifier,
 			simulated: true,
 			source: "harness",
-			summary: describeHarnessEvent(harnessEvent),
+			summary: describeHarnessEvent(
+				harnessEvent,
+				this.messagesFor(entity),
+			),
 			title: "Harness event applied",
 			type: "incident.event-applied",
 		})
@@ -483,7 +492,12 @@ export class IncidentsService {
 			runIdentifier: entity.runIdentifier,
 			simulated: true,
 			source: "harness",
-			summary: `${request.units} ${resource.unit} allocated to ${request.serviceIdentifier}, ${remaining - request.units} remaining`,
+			summary: this.messagesFor(entity).capacityAllocated(
+				request.units,
+				resource.unit,
+				nameOfService(entity, request.serviceIdentifier),
+				remaining - request.units,
+			),
 			title: "Capacity allocated",
 			type: "resource.capacity-changed",
 		})
@@ -599,7 +613,11 @@ export class IncidentsService {
 			runIdentifier,
 			simulated: false,
 			source: "agent",
-			summary: `${status}: ${statement} (${source})`,
+			summary: this.messagesFor(entity).factRecorded(
+				status,
+				statement,
+				source,
+			),
 			title: "Fact recorded",
 			type: "fact.recorded",
 		})
@@ -662,6 +680,33 @@ export class IncidentsService {
 		entity.updatedAt = nowISO()
 		await updateEntity(this.repository, entity)
 		return entity.agentCycles
+	}
+
+	/** Everything an operator reads about a run is written in the language of its scenario. */
+	async messagesForRun(runIdentifier: string): Promise<AgentMessages> {
+		return this.messagesFor(
+			await this.runsService.getEntityByRunIdentifier(runIdentifier),
+		)
+	}
+
+	/** The name an operator reads for a service; the identifier only when the run has no such service. */
+	async serviceNameOf(
+		runIdentifier: string,
+		serviceIdentifier: string,
+	): Promise<string> {
+		const entity =
+			await this.runsService.getEntityByRunIdentifier(runIdentifier)
+		const service = entity.services.find(
+			(candidate) => candidate.identifier === serviceIdentifier,
+		)
+		return service ? service.name : serviceIdentifier
+	}
+
+	private messagesFor(entity: IncidentEntity): AgentMessages {
+		return AGENT_MESSAGES[
+			this.scenariosService.getByIdentifier(entity.scenarioIdentifier)
+				.language
+		]
 	}
 
 	getScenario(scenarioIdentifier: string): ScenarioDefinition {
@@ -848,6 +893,56 @@ export class IncidentsService {
 		})
 	}
 
+	/** Serialize replacement even when two tabs start together. No external work inside the transaction. */
+	private async insertRun(entity: IncidentEntity): Promise<IncidentEntity> {
+		// Internal fixtures and historical administration are not anonymous browser runs.
+		if (entity.browserSessionId === LEGACY_SESSION)
+			return insertEntity(this.repository, entity)
+		const previous = await this.repository.manager.transaction(
+			async (manager) => {
+				await manager.query(
+					"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+					[entity.browserSessionId],
+				)
+				const repository = manager.getRepository(IncidentEntity)
+				const active = await repository.find({
+					where: {
+						active: true,
+						browserSessionId: entity.browserSessionId,
+					},
+				})
+				for (const run of active) {
+					run.active = false
+					run.status = "reset"
+					run.updatedAt = nowISO()
+					run.harnessEvents = [
+						...run.harnessEvents,
+						{
+							appliedAt: run.updatedAt,
+							event: {
+								source: "Harness",
+								statement:
+									"Replaced by a new run in this browser",
+								status: "confirmed",
+								type: "fact-reported",
+							},
+							identifier: createPrefixedIdentifier("hev"),
+							source: "Harness",
+						},
+					]
+					await updateEntity(repository, run)
+				}
+				await insertEntity(repository, entity)
+				return active
+			},
+		)
+		for (const run of previous)
+			this.eventEmitter.emit(DOMAIN_EVENTS.INCIDENT_RUN_DEACTIVATED, {
+				runIdentifier: run.runIdentifier,
+			})
+		return entity
+	}
+
 	private buildBaselineEntity(
 		scenario: ScenarioDefinition,
 		runKind: RunKind,
@@ -859,6 +954,7 @@ export class IncidentsService {
 			active: true,
 			agentCycles: 0,
 			backupRegion: scenario.backupRegion,
+			browserSessionId: currentSessionId(),
 			businessImpactSummary: scenario.businessImpactSummary,
 			company: scenario.company,
 			createdAt: timestamp,
@@ -891,12 +987,25 @@ export class IncidentsService {
 	}
 }
 
-export function describeHarnessEvent(harnessEvent: HarnessEvent): string {
+function nameOfService(entity: IncidentEntity, serviceIdentifier: string) {
+	const service = entity.services.find(
+		(candidate) => candidate.identifier === serviceIdentifier,
+	)
+	return service ? service.name : serviceIdentifier
+}
+
+export function describeHarnessEvent(
+	harnessEvent: HarnessEvent,
+	messages: AgentMessages,
+): string {
 	switch (harnessEvent.type) {
 		case "meteorite-impact":
-			return "Meteorite impact: the primary region is offline"
+			return messages.harnessImpact
 		case "capacity-limited":
-			return `Backup capacity limited to ${harnessEvent.availableCapacity} units: ${harnessEvent.reason}`
+			return messages.harnessCapacityLimited(
+				harnessEvent.availableCapacity,
+				harnessEvent.reason,
+			)
 		case "service-health-changed":
 			return `${harnessEvent.serviceIdentifier} changed to ${harnessEvent.status}: ${harnessEvent.reason}`
 		case "fact-reported":

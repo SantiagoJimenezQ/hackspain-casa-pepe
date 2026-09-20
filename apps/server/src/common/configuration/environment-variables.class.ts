@@ -49,6 +49,9 @@ export class EnvironmentVariables {
 	@IsIn(["true", "false"])
 	DATABASE_QUERY_LOGGING: string = "false"
 
+	@IsIn(["true", "false"])
+	BROWSER_SESSION_SCHEMA_UPGRADE: string = "false"
+
 	@Type(() => Number)
 	@IsInt()
 	@Min(1)
@@ -91,6 +94,10 @@ export class EnvironmentVariables {
 
 	@IsString()
 	HAPPYROBOT_TRIGGER_URL: string = ""
+
+	@IsString() HAPPYROBOT_INBOUND_PHONE_NUMBER: string = "+12603688621"
+
+	@IsString() CASA_PEPE_INBOUND_WEBHOOK_SECRET: string = ""
 
 	@IsString()
 	HAPPYROBOT_API_KEY: string = ""

@@ -32,6 +32,25 @@ History older than the live 100-event window is loaded through the authenticated
 
 The dashboard renders the backend’s actual incident, services, capacity, plan, approvals, calls, tools, tasks, activity, learning insights, and current run report.
 
-The top bar’s **Borrar aprendizajes** button deletes all saved learning insights through the authenticated API and shows the number removed. It leaves the current incident and its existing plans intact. Use **Reiniciar** afterwards to start a fresh run without prior learning; the run may accumulate new lessons as it progresses.
+The top bar’s **Borrar aprendizajes** button deletes this browser session’s saved learning insights through the authenticated API and shows the number removed. It leaves the current incident and its existing plans intact. Use **Reiniciar** afterwards to start a fresh run without prior learning; the run may accumulate new lessons as it progresses.
 
 The top bar’s **Aprendizajes** button opens a read-only panel with saved lesson summaries, subjects, observation counts, and update dates. It reloads on opening; **Actualizar** fetches lessons recorded during the current run. Loading failures are shown separately from an empty memory. The list uses the same Spanish scenario filter as the existing learning endpoint; **Borrar aprendizajes** still clears all scenarios.
+
+## Inbound incident calls
+
+The incident header displays the persisted six-digit call code beside a dial link for the configured HappyRobot inbound number. Read that code to the voice agent to select the exact incident before requesting a company priority. Old API responses without a code or number show an unavailable state rather than inventing values.
+
+## Browser identity
+
+The first page response sets a random HttpOnly session cookie. All tabs in the
+same browser profile share the active run and learning; other profiles/devices
+are independent. Refresh resumes the current run. Clearing cookies or using a new
+private session starts a separate history. The cookie expires after 30 days.
+
+The Next.js proxy forwards this identity server-side. Old localStorage run IDs are
+ignored. Visible tabs reconcile the active run every five seconds so a reset in
+another tab is reflected and its activity stream reconnects. Opening any dashboard
+page directly creates the cookie; calling an API without first opening a page
+returns 401. Deploy alongside the matching backend ownership changes.
+
+The top bar’s **Aprendizajes** button opens a read-only panel with saved lesson summaries, subjects, observation counts, and update dates. It reloads on opening; **Actualizar** fetches lessons recorded during the current run. Loading failures are shown separately from an empty memory. The list uses the same Spanish scenario filter as the existing learning endpoint; **Borrar aprendizajes** still clears all scenarios within this browser session.

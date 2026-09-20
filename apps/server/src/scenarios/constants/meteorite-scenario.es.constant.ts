@@ -62,7 +62,7 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 			confirmed: true,
 			source: "Monitorización",
 			statement:
-				"El impacto de un meteorito ha dejado fuera de servicio toda la región de Dubái me-central-1",
+				"El impacto de un misil ha dejado fuera de servicio toda la región de Dubái me-central-1",
 		},
 		{
 			confirmed: true,
@@ -91,7 +91,7 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 	],
 	language: "es",
 	narrative:
-		"Un meteorito ha destruido los centros de datos de AWS Dubái (me-central-1) que alojan la plataforma de reparto. El respaldo más cercano es la Local Zone de Omán, después Baréin y Riad.",
+		"Un misil ha destruido los centros de datos de AWS Dubái (me-central-1) que alojan la plataforma de reparto. El respaldo más cercano es la Local Zone de Omán, después Baréin y Riad.",
 	region: IMPACT_REGION,
 	resources: meteoriteResources("es"),
 	services: [
@@ -254,7 +254,7 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 		name: "Carlos Vega",
 		role: "Responsable de atención al cliente",
 	},
-	title: "Impacto de meteorito en Dubái",
+	title: "Impacto de misil en Dubái",
 	topology: meteoriteTopology("es"),
 	twist: {
 		capacityAfterTwist: 1,

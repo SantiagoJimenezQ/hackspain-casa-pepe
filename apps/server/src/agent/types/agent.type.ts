@@ -115,6 +115,7 @@ export type OverviewPlan =
 	| { readonly kind: "plan"; readonly plan: PlanRecord }
 
 export interface Overview {
+	readonly inboundCall?: { readonly phoneNumber: string }
 	readonly incident: IncidentSnapshot
 	readonly plan: OverviewPlan
 	readonly pendingApprovals: ReadonlyArray<ApprovalRecord>

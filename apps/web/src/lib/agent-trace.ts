@@ -70,7 +70,10 @@ export type TranscriptItem =
       finishReason?: string | null;
       usage?: unknown;
       redacted?: boolean;
-    };
+    }
+  | { kind: "discarded"; id: string; occurredAt: string; items: ThinkingItem[] };
+
+export type ThinkingItem = Extract<TranscriptItem, { kind: "thinking" }>;
 
 export const LLM_ACTIVITY_TYPES = [
   "agent.llm-output",
@@ -301,6 +304,19 @@ export function agentSettled(overview: Pick<Overview, "incident" | "plan" | "age
   return !overview.agent?.cycleInProgress && (overview.agent?.runningToolCalls ?? 0) === 0;
 }
 
+/** How far along its life a tool call is; every terminal status shares the last place. */
+const TOOL_STATUS_RANK: Record<string, number> = {
+  cancelled: 3,
+  failed: 3,
+  pending: 1,
+  running: 2,
+  succeeded: 3,
+};
+
+function toolStatusRank(status: string): number {
+  return TOOL_STATUS_RANK[status] ?? 0;
+}
+
 export function mergedToolCalls(overview: Overview, activity: ReadonlyArray<ActivityRecord> = []) {
   const byId = new Map<string, ToolCall>();
   for (const tool of overview.toolCalls) {
@@ -311,14 +327,23 @@ export function mergedToolCalls(overview: Overview, activity: ReadonlyArray<Acti
     const tool = toolFromActivity(event);
     if (!tool) continue;
     const existing = byId.get(tool.identifier);
-    byId.set(tool.identifier, existing ? {
-      ...existing,
-      ...tool,
+    if (!existing) {
+      byId.set(tool.identifier, tool);
+      continue;
+    }
+    // The live buffer holds a tool's whole life, and the last event in the array used to win
+    // whatever it said. A "started" that arrives after the overview already reported the tool
+    // finished would put it back on the screen as running, sometimes for minutes. The record
+    // that is further along its life wins; the other one only fills in what it is missing.
+    const advancing = toolStatusRank(tool.status) >= toolStatusRank(existing.status);
+    const base = advancing ? { ...existing, ...tool } : { ...tool, ...existing };
+    byId.set(tool.identifier, {
+      ...base,
       input: tool.input ?? existing.input,
       output: tool.output ?? existing.output,
       parentIdentifier: tool.parentIdentifier ?? existing.parentIdentifier,
       subagent: tool.subagent ?? existing.subagent,
-    } : tool);
+    });
   }
   const merged = [...byId.values()];
   if (agentSettled(overview)) {
@@ -372,9 +397,9 @@ export function currentWork(
     return { kind: "approval", title: overview.pendingApprovals[0].actionSummary, reason: overview.pendingApprovals[0].reason };
   }
   if (overview.agent.cycleInProgress || agentStillDeciding(events)) {
-    return { kind: "thinking", title: liveThinkingLabel(events) };
+    return { kind: "thinking", title: liveThinkingLabel(events, locale) };
   }
-  return { kind: "idle", title: "En espera" };
+  return { kind: "idle", title: translate(locale, "agent.idle") };
 }
 
 export function isPlaceholderSummary(text: string) {
@@ -396,7 +421,7 @@ function agentStillDeciding(events: ReadonlyArray<ActivityRecord>): boolean {
   return false;
 }
 
-export function liveThinkingLabel(events: ReadonlyArray<ActivityRecord>): string {
+export function liveThinkingLabel(events: ReadonlyArray<ActivityRecord>, locale: Locale = DEFAULT_LOCALE): string {
   const ordered = uniqueActivity(events);
   for (let index = ordered.length - 1; index >= 0; index -= 1) {
     const event = ordered[index];
@@ -404,10 +429,10 @@ export function liveThinkingLabel(events: ReadonlyArray<ActivityRecord>): string
     if (payloadDisposition(event) === "accepted") continue;
     const call = payloadToolCalls(event)[0];
     const name = call?.name || payloadTools(event)[0];
-    if (name) return toolTitle({ name, input: toolCallInput(call) });
-    if (event.type === "agent.llm-output") return "Pensando";
+    if (name) return toolTitle({ name, input: toolCallInput(call) }, [], locale);
+    if (event.type === "agent.llm-output") return translate(locale, "agent.thinking");
   }
-  return "Pensando";
+  return translate(locale, "agent.thinking");
 }
 
 function uniqueActivity(events: ReadonlyArray<ActivityRecord>): ActivityRecord[] {
@@ -625,20 +650,22 @@ export function reasoningHeadline(text: string, max = 72) {
   return `${line.slice(0, max).trimEnd()}…`;
 }
 
-export function dispositionTitle(disposition?: LlmDisposition) {
-  if (disposition === "pending") return "Validando";
-  if (disposition === "rejected") return "Rechazado";
-  if (disposition === "stale") return "Obsoleto";
-  if (disposition === "incomplete") return "Incompleto";
-  return "";
+export function dispositionTitle(disposition?: LlmDisposition, locale: Locale = DEFAULT_LOCALE) {
+  const key = messageKey(`agent.disposition.${disposition}`);
+  return key ? translate(locale, key) : "";
 }
 
-export function completedReasoningLabel(text: string, durationMs = 0, disposition?: LlmDisposition) {
+export function completedReasoningLabel(
+  text: string,
+  durationMs = 0,
+  disposition?: LlmDisposition,
+  locale: Locale = DEFAULT_LOCALE,
+) {
   const duration = formatReasoningDuration(durationMs);
   const headline = reasoningHeadline(text);
-  const status = dispositionTitle(disposition);
+  const status = dispositionTitle(disposition, locale);
   const parts = [headline, status, duration].filter((part) => part !== "");
-  if (!headline && !status) return `Pensó ${duration}`;
+  if (!headline && !status) return translate(locale, "agent.thought", { duration });
   return parts.join(" · ");
 }
 
@@ -658,23 +685,22 @@ function reasoningBody(draft: ReasoningDraft): string {
   return draft.dispositionReason ?? "";
 }
 
-function reasoningTitle(draft: ReasoningDraft, body: string) {
+function reasoningTitle(draft: ReasoningDraft, body: string, locale: Locale) {
   const headline = reasoningHeadline(body);
   if (headline) return headline;
   const name = draftToolName(draft);
-  if (name) return toolTitle({ name, input: toolCallInput(draft.toolCalls[0]) });
-  if (draft.disposition === "rejected") return "Propuesta rechazada";
-  if (draft.disposition === "stale") return "Propuesta obsoleta";
-  if (draft.disposition === "incomplete") return "Respuesta incompleta";
-  return "Pensando";
+  if (name) return toolTitle({ name, input: toolCallInput(draft.toolCalls[0]) }, [], locale);
+  const proposal = messageKey(`agent.proposal.${draft.disposition}`);
+  if (proposal) return translate(locale, proposal);
+  return translate(locale, "agent.thinking");
 }
 
-function toThinkingItem(draft: ReasoningDraft): Extract<TranscriptItem, { kind: "thinking" }> {
+function toThinkingItem(draft: ReasoningDraft, locale: Locale): Extract<TranscriptItem, { kind: "thinking" }> {
   const text = reasoningBody(draft);
   const streaming = draft.status === "streaming" || draft.disposition === "pending";
   const title = draft.status === "streaming" && draft.disposition === undefined
-    ? "Pensando"
-    : reasoningTitle(draft, text);
+    ? translate(locale, "agent.thinking")
+    : reasoningTitle(draft, text, locale);
   return {
     kind: "thinking",
     id: draft.id,
@@ -693,9 +719,9 @@ function toThinkingItem(draft: ReasoningDraft): Extract<TranscriptItem, { kind: 
   };
 }
 
-function reasoningTurns(events: ReadonlyArray<ActivityRecord>): Extract<TranscriptItem, { kind: "thinking" }>[] {
+function reasoningTurns(events: ReadonlyArray<ActivityRecord>, locale: Locale): Extract<TranscriptItem, { kind: "thinking" }>[] {
   return reasoningDrafts(events)
-    .map(toThinkingItem)
+    .map((draft) => toThinkingItem(draft, locale))
     .filter((item) => item.status === "streaming" || item.text !== "" || (item.toolCalls?.length ?? 0) > 0 || Boolean(item.disposition));
 }
 
@@ -770,12 +796,12 @@ function itemTime(item: TranscriptItem): number {
   return Date.parse(item.occurredAt) || 0;
 }
 
-export function buildTranscript(overview: Overview, activity: ReadonlyArray<ActivityRecord> = []): TranscriptItem[] {
+export function buildTranscript(overview: Overview, activity: ReadonlyArray<ActivityRecord> = [], locale: Locale = DEFAULT_LOCALE): TranscriptItem[] {
   const events = [...overview.recentActivity, ...activity];
   const tools = mergedToolCalls(overview, events);
   const nested = nestTools(tools);
   const remainders = decidedApprovals(events).map((approval): TranscriptItem => ({ kind: "approval", approval }));
-  const thoughts = reasoningTurns(events);
+  const thoughts = reasoningTurns(events, locale);
   const items = [...nested, ...remainders, ...thoughts].toSorted((left, right) => {
     const delta = itemTime(left) - itemTime(right);
     if (delta !== 0) return delta;
@@ -783,7 +809,7 @@ export function buildTranscript(overview: Overview, activity: ReadonlyArray<Acti
     if (kindDelta !== 0) return kindDelta;
     return transcriptId(left).localeCompare(transcriptId(right));
   });
-  const work = currentWork(overview, activity);
+  const work = currentWork(overview, activity, locale);
   const hasLiveTurn = thoughts.some((item) => item.status === "streaming" || item.disposition === "pending");
   if (work.kind === "thinking" && !hasLiveTurn) {
     items.push({
@@ -792,10 +818,66 @@ export function buildTranscript(overview: Overview, activity: ReadonlyArray<Acti
       text: "",
       status: "streaming",
       occurredAt: "",
-      title: liveThinkingLabel(events),
+      title: liveThinkingLabel(events, locale),
     });
   }
-  return items;
+  if (agentSettled(overview)) {
+    return settledTranscript(items);
+  }
+  return collapseDiscarded(items);
+}
+
+/**
+ * Once the incident is closed the reasoning is history, not work in progress: the panel reads as
+ * the list of what the agent actually did. The turns themselves stay in the decision tree and in
+ * the debug dump, so nothing is lost, only moved out of the way.
+ */
+function settledTranscript(items: TranscriptItem[]): TranscriptItem[] {
+  return items.filter(
+    (item) => item.kind === "tool" || item.kind === "task" || item.kind === "approval",
+  );
+}
+
+/** A turn the server threw away: it never produced an action, so it is churn rather than history. */
+function isDiscardedTurn(item: TranscriptItem): item is ThinkingItem {
+  if (item.kind !== "thinking") return false;
+  if (item.status === "streaming") return false;
+  return item.disposition === "stale" || item.disposition === "rejected";
+}
+
+/**
+ * Folds each run of consecutive discarded turns into one row. A lone discard stays inline: hiding a
+ * single attempt costs a click and saves no space.
+ */
+export function collapseDiscarded(items: TranscriptItem[]): TranscriptItem[] {
+  const collapsed: TranscriptItem[] = [];
+  let run: ThinkingItem[] = [];
+
+  const flush = () => {
+    if (!run.length) return;
+    if (run.length === 1) {
+      collapsed.push(run[0]);
+    } else {
+      collapsed.push({
+        kind: "discarded",
+        id: `discarded-${run[0].id}`,
+        occurredAt: run[0].occurredAt,
+        items: run,
+      });
+    }
+    run = [];
+  };
+
+  for (const item of items) {
+    if (isDiscardedTurn(item)) {
+      run.push(item);
+      continue;
+    }
+    flush();
+    collapsed.push(item);
+  }
+  flush();
+  return collapsed;
 }
 
 function transcriptId(item: TranscriptItem) {

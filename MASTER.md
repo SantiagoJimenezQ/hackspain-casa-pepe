@@ -2,7 +2,7 @@
 
 Equipo, esta es la propuesta de trabajo para **Casa Pepe**, nuestro proyecto para HackSpain.
 
-Vamos a construir un coordinador de incidentes con IA para un escenario ficticio: **un meteorito provoca una caída de la región de AWS donde corre nuestra aplicación**. El sistema debe detectar el impacto, decidir qué atender primero, coordinar la respuesta y cambiar de plan cuando aparezca nueva información. Una persona podrá supervisarlo e intervenir. El sistema también debe aprender de interacciones anteriores y utilizar ese aprendizaje en decisiones posteriores.
+Vamos a construir un coordinador de incidentes con IA para un escenario ficticio: **un misil provoca una caída de la región de AWS donde corre nuestra aplicación**. El sistema debe detectar el impacto, decidir qué atender primero, coordinar la respuesta y cambiar de plan cuando aparezca nueva información. Una persona podrá supervisarlo e intervenir. El sistema también debe aprender de interacciones anteriores y utilizar ese aprendizaje en decisiones posteriores.
 
 ## 1. Escenario y objetivo de la demo
 
@@ -17,7 +17,7 @@ Antes de implementar, debemos acordar:
 - Qué cambio inesperado obliga a revisar el plan.
 - Qué consideramos una recuperación satisfactoria.
 
-El meteorito da contexto a la historia. La decisión interesante es **qué recuperamos primero, con qué recursos y qué dejamos esperando**.
+El misil da contexto a la historia. La decisión interesante es **qué recuperamos primero, con qué recursos y qué dejamos esperando**.
 
 ## 2. Harness: entorno que controla la simulación
 
@@ -150,7 +150,7 @@ También necesitamos acordar:
 Secuencia propuesta:
 
 1. Mostramos el sistema funcionando con normalidad.
-2. Introducimos el impacto del meteorito y aparecen los fallos.
+2. Introducimos el impacto del misil y aparecen los fallos.
 3. El agente evalúa el impacto y prepara un primer plan.
 4. Llama a un compañero a través de HappyRobot y registra la información recibida.
 5. Introducimos la limitación de capacidad de respaldo.

@@ -141,6 +141,10 @@ describe("agent replanning during execution", () => {
 
 describe("human task follow-up", () => {
 	function setup() {
+		const companyCalls = {
+			list: jest.fn().mockResolvedValue([{ identifier: "priority-1" }]),
+			markObserved: jest.fn(),
+		}
 		const tasks = { list: jest.fn().mockResolvedValue([]) }
 		const plans = { findLatestPlan: jest.fn().mockResolvedValue(null) }
 		const incident = {
@@ -170,9 +174,31 @@ describe("human task follow-up", () => {
 			{ list: jest.fn().mockResolvedValue([]) } as never,
 			{} as never,
 			tasks as never,
+			companyCalls as never,
 		)
-		return { service, tasks }
+		return { companyCalls, service, tasks }
 	}
+
+	it.each(["completed", "skipped", "failed"])(
+		"keeps priority work pending unless assessment is %s",
+		async (kind) => {
+			const { service, companyCalls } = setup()
+			const request = jest
+				.spyOn(service, "requestCycle")
+				.mockResolvedValue({ kind } as never)
+			await service.onCompanyPriority({
+				identifier: "priority-1",
+				runIdentifier: "run",
+			})
+			expect(request).toHaveBeenCalledWith(
+				"run",
+				expect.objectContaining({ kind: "conditions-changed" }),
+			)
+			expect(companyCalls.markObserved).toHaveBeenCalledTimes(
+				kind === "completed" ? 1 : 0,
+			)
+		},
+	)
 
 	it("resumes the owning run when a human updates a task", async () => {
 		const { service } = setup()
@@ -215,6 +241,9 @@ describe("human task follow-up", () => {
 			kind: "follow-up",
 		})
 		expect(before.evidence.tasks).toEqual([task])
+		expect(before.evidence.companyPriorityRequests).toEqual([
+			{ identifier: "priority-1" },
+		])
 		expect(before.evidence.engineerCall).toEqual({
 			mode: "live",
 			provider: "elevenlabs",

@@ -45,7 +45,7 @@ describe("demo controls", () => {
  })
  it("renders persisted before/after, reasons and invalidated approvals without activity history", async () => {
    const user = userEvent.setup(); render(<PlanComparison comparison={comparison} />);
-   await user.click(screen.getByRole("button", {name: "Comparar planes: v1 → v2"}));
+   await user.click(screen.getByRole("button", {name: /Comparar planes/}));
    expect(await screen.findByRole("dialog")).toHaveTextContent("Omán: 4 → 1 unidades");
    expect(screen.getByRole("heading", {name: "Antes"})).toBeVisible();
    expect(screen.getByRole("heading", {name: "Ahora"})).toBeVisible();

@@ -17,7 +17,7 @@ export function CapacityControls() {
   const es = locale === "es";
   return <Sheet>
     <SheetTrigger render={<Button size="sm" variant="outline" disabled={!overview || busyAction !== null} />}>
-      <SlidersHorizontal data-icon="inline-start" />{es ? "Capacidad" : "Capacity"}
+      <SlidersHorizontal data-icon="inline-start" /> <span className="hidden lg:inline">{es ? "Capacidad" : "Capacity"}</span>
     </SheetTrigger>
     <SheetContent className="data-[side=right]:w-full data-[side=right]:sm:max-w-xl overflow-y-auto">
       <SheetHeader>

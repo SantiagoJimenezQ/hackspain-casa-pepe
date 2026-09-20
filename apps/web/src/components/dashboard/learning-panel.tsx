@@ -16,8 +16,8 @@ export function LearningPanel() {
 
   return (
     <Sheet onOpenChange={(open) => { if (open) void refreshLearning(); }}>
-      <SheetTrigger render={<Button size="xs" variant="outline" />}>
-        <BookOpen /> Aprendizajes
+      <SheetTrigger render={<Button size="sm" variant="outline" />}>
+        <BookOpen /> <span className="hidden lg:inline">Aprendizajes</span>
       </SheetTrigger>
       <SheetContent className="data-[side=right]:w-full data-[side=right]:sm:max-w-lg">
         <SheetHeader className="pr-12">

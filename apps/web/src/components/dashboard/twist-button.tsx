@@ -31,7 +31,7 @@ export function TwistButton({ disabled, onTrigger }: { disabled: boolean; onTrig
         aria-describedby={open ? helpId : undefined}
         delay={500}
         closeOnClick={false}
-        render={<Button size="sm" variant="secondary" aria-label={es ? "Recortar capacidad" : "Cut capacity"} aria-disabled={disabled} className="aria-disabled:opacity-50" />}
+        render={<Button size="sm" variant="outline" aria-label={es ? "Recortar capacidad" : "Cut capacity"} aria-disabled={disabled} className="aria-disabled:opacity-50" />}
         onPointerDown={(event) => {
           if (event.button !== 0) return;
           cancelHold();

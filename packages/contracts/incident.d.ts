@@ -26,6 +26,10 @@ export type HarnessEvent =
 	| {
 			type: "capacity-limited"
 			availableCapacity: number
+			/** Omitted only for legacy events targeting the active backup. */
+			resourceIdentifier?: string
+			/** Recorded by the server before applying the change. */
+			previousCapacity?: number
 			reason: string
 	  }
 	| {

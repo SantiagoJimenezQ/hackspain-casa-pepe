@@ -369,9 +369,35 @@ export class IncidentsService {
 					expectedRunIdentifier,
 				)
 			: await this.runsService.getActiveEntity()
-		if (expectedRunIdentifier && !entity.active) {
-			throw new StaleRunException(expectedRunIdentifier)
+		if (!entity.active || entity.runKind === "replay") {
+			throw new StaleRunException(entity.runIdentifier)
 		}
+		if (harnessEvent.type === "capacity-limited") {
+			const resourceIdentifier = harnessEvent.resourceIdentifier
+			const resource = entity.resources.find((candidate) =>
+				resourceIdentifier
+					? candidate.identifier === resourceIdentifier
+					: candidate.region === entity.backupRegion,
+			)
+			if (!resource)
+				throw new BadRequestException("Unknown recovery resource")
+			if (
+				!Number.isSafeInteger(harnessEvent.availableCapacity) ||
+				harnessEvent.availableCapacity < resource.allocatedCapacity
+			) {
+				throw new BadRequestException(
+					`Total capacity must be an integer of at least ${resource.allocatedCapacity} allocated units`,
+				)
+			}
+			if (!harnessEvent.reason.trim())
+				throw new BadRequestException("A reason is required")
+			harnessEvent = {
+				...harnessEvent,
+				previousCapacity: resource.totalCapacity,
+				resourceIdentifier: resource.identifier,
+			}
+		}
+
 		const timestamp = nowISO()
 		const applied: AppliedHarnessEvent = {
 			appliedAt: timestamp,
@@ -717,14 +743,29 @@ export class IncidentsService {
 				return
 			}
 			case "capacity-limited": {
-				const activeRegion = entity.backupRegion
+				const resourceBefore = entity.resources.find(
+					(resource) =>
+						resource.identifier === harnessEvent.resourceIdentifier,
+				)
+				if (!resourceBefore)
+					throw new BadRequestException("Unknown recovery resource")
+				const activeRegion = resourceBefore.region
 				entity.topologyNodes = entity.topologyNodes.map((node) =>
 					node.role === "backup" && node.region === activeRegion
-						? { ...node, status: "degraded" }
+						? {
+								...node,
+								status:
+									harnessEvent.availableCapacity === 0
+										? "down"
+										: harnessEvent.availableCapacity <
+												resourceBefore.totalCapacity
+											? "degraded"
+											: "up",
+							}
 						: node,
 				)
 				entity.resources = entity.resources.map((resource) =>
-					resource.region === activeRegion
+					resource.identifier === harnessEvent.resourceIdentifier
 						? {
 								...resource,
 								confirmed: true,
@@ -743,12 +784,14 @@ export class IncidentsService {
 					incidentIdentifier: entity.identifier,
 					payload: {
 						availableCapacity: harnessEvent.availableCapacity,
+						previousCapacity: resourceBefore.totalCapacity,
 						reason: harnessEvent.reason,
+						resourceIdentifier: resourceBefore.identifier,
 					},
 					runIdentifier: entity.runIdentifier,
 					simulated: true,
 					source: "harness",
-					summary: `Backup capacity confirmed at ${harnessEvent.availableCapacity} units. ${harnessEvent.reason}`,
+					summary: `${resourceBefore.name}: ${resourceBefore.totalCapacity} → ${harnessEvent.availableCapacity} units. ${harnessEvent.reason}`,
 					title: "Backup capacity changed",
 					type: "resource.capacity-changed",
 				})

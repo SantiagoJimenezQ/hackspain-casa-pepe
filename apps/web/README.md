@@ -33,3 +33,7 @@ History older than the live 100-event window is loaded through the authenticated
 The dashboard renders the backend’s actual incident, services, capacity, plan, approvals, calls, tools, tasks, activity, learning insights, and current run report.
 
 The top bar’s **Borrar aprendizajes** button deletes all saved learning insights through the authenticated API and shows the number removed. It leaves the current incident and its existing plans intact. Use **Reiniciar** afterwards to start a fresh run without prior learning; the run may accumulate new lessons as it progresses.
+
+## Recorded-demo evidence
+
+**Capacidad** edits one datacenter's total usable capacity with an explicit reason. Inputs show allocated/free units; apply is disabled for invalid values. **Comparar planes** reads `planComparison` from the backend overview, including the previous plan, reasons and superseded approvals. **Probar servicio** submits a synthetic delivery through the server proxy and shows the route returned by the HTTP demo environment. It requires an active manual run with HTTP recovery; simulation is labelled and cannot produce a fake successful check. Probe results are returned in `deliveryProbes` and survive refresh.

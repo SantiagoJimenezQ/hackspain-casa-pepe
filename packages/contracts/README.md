@@ -14,3 +14,5 @@ The former standalone HTTP server, old `/api/status` API, generated JSON OpenAPI
 - `tool-tests.d.ts` describes the standalone integration-check request, catalog and durable result payloads. These checks exercise synthetic email and engineer-call actions without an incident run.
 
 - `outbound-calls.d.ts` describes provider-neutral call context, external references, and authorization evidence.
+
+- `demo-controls.d.ts` describes targeted capacity changes, HTTP delivery probes and persisted plan comparisons returned by `/overview`.

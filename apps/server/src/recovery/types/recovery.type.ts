@@ -76,6 +76,8 @@ export type AdapterExecuteOutcome =
 	| { readonly kind: "failed"; readonly reason: string }
 
 export interface VerificationResult {
+	readonly deliveryIdentifier?: string
+	readonly routeIdentifier?: string
 	readonly serviceIdentifier: string
 	readonly status: ServiceHealthStatus
 	readonly verified: boolean

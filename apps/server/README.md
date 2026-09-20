@@ -41,7 +41,7 @@ The service persists in Postgres. Point it at the team Supabase project in `.env
 SUPABASE_DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
 ```
 
-The connection string is in Supabase under *Project settings > Database > Connection string (URI)*. Use the session pooler on port 5432; the transaction pooler (6543) does not support the prepared statements TypeORM uses, and the direct connection is IPv6 only on the free plan. Tables are created automatically on startup (`synchronize`), which is enough for the hackathon; a stable deployment should move to migrations. TLS is enabled automatically for Supabase hosts (and for any URL with `sslmode=require`); any other Postgres, such as a local install, connects without TLS.
+The connection string is in Supabase under *Project settings > Database > Connection string (URI)*. Use the session pooler on port 5432; the transaction pooler (6543) does not support the prepared statements TypeORM uses, and the direct connection is IPv6 only on the free plan. Schema creation/upgrade now requires the explicit one-time `BROWSER_SESSION_SCHEMA_UPGRADE=true` flag; ordinary startup performs no schema changes. TLS is enabled automatically for Supabase hosts (and for any URL with `sslmode=require`); any other Postgres, such as a local install, connects without TLS.
 
 Every environment variable is documented in [.env.example](.env.example). Set `DATABASE_QUERY_LOGGING=true` to print every SQL statement when diagnosing latency; against the Supabase pooler each round trip costs about 120 ms, so the service writes with single-statement inserts and updates and keeps webhook subscriptions cached.
 
@@ -205,8 +205,9 @@ callbacks retain their existing signed authentication and explicit record IDs.
 Public status now requires `?runIdentifier=...`. Uncorrelated incoming email
 stays unassigned.
 
-Deploy a single continuously running backend and matching frontend. Startup runs
+Deploy a single continuously running backend and matching frontend. The explicit `BROWSER_SESSION_SCHEMA_UPGRADE=true` startup runs
 the ownership migration: existing data becomes legacy and active legacy runs stop.
+Set the flag back to false after the upgrade. Never enable it on PR previews using shared Supabase.
 Stop old servers before upgrading; do not mix old/new versions or roll back without
 a pre-migration database backup. See [Architecture.md](../../Architecture.md) for
 schema, scheduler limitations, integration boundaries and PostgreSQL test commands.

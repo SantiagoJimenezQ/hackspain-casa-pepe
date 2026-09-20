@@ -192,6 +192,8 @@ export function createApplicationConfiguration(
 		database: {
 			poolMaximum: variables.DATABASE_POOL_MAXIMUM,
 			queryLogging: variables.DATABASE_QUERY_LOGGING === "true",
+			sessionSchemaUpgrade:
+				variables.BROWSER_SESSION_SCHEMA_UPGRADE === "true",
 			url: variables.SUPABASE_DATABASE_URL,
 		},
 		demo: {

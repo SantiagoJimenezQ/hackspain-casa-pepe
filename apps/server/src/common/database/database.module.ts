@@ -19,11 +19,11 @@ import { BrowserSessions1790000000000 } from "./migrations/1790000000000-browser
 					? ["query"]
 					: false,
 				migrations: [BrowserSessions1790000000000],
-				migrationsRun: true,
+				migrationsRun: configuration.database.sessionSchemaUpgrade,
 				ssl: requiresTLS(configuration.database.url)
 					? { rejectUnauthorized: false }
 					: false,
-				synchronize: true,
+				synchronize: configuration.database.sessionSchemaUpgrade,
 				type: "postgres",
 				url: configuration.database.url,
 			}),

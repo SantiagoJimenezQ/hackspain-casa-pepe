@@ -19,6 +19,7 @@ export interface RuntimeConfiguration {
 }
 
 export interface DatabaseConfiguration {
+	readonly sessionSchemaUpgrade: boolean
 	readonly url: string
 	readonly queryLogging: boolean
 	readonly poolMaximum: number

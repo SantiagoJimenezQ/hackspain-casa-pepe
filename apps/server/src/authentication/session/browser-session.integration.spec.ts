@@ -68,6 +68,7 @@ describeDatabase("anonymous browser isolation against PostgreSQL", () => {
 			new ConfigService(
 				validateEnvironmentVariables({
 					...process.env,
+					BROWSER_SESSION_SCHEMA_UPGRADE: "true",
 					DATABASE_POOL_MAXIMUM: 6,
 					SUPABASE_DATABASE_URL: databaseURL,
 				}),

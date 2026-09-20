@@ -96,18 +96,6 @@ export function TopBar() {
             <Separator orientation="vertical" className="mx-0.5 h-5 self-center" />
             <Button
               size="sm"
-              variant="ghost"
-              onClick={() => void resetLearnings()}
-              disabled={!live || busy}
-              title={t("topbar.clearLearningsHint")}
-            >
-              <RefreshCcw className={cn(clearingLearnings && "animate-spin")} />
-              <span className="hidden xl:inline">
-                {clearingLearnings ? t("topbar.clearingLearnings") : t("topbar.clearLearnings")}
-              </span>
-            </Button>
-            <Button
-              size="sm"
               variant="destructive"
               onClick={() => void resetDemo()}
               disabled={!live || busy}

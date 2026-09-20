@@ -9,8 +9,13 @@ describe("simulated call evidence", () => {
 	beforeEach(() => jest.useFakeTimers())
 	afterEach(() => jest.useRealTimers())
 
-	async function call(questions: EngineerQuestion[]) {
+	async function call(
+		questions: EngineerQuestion[],
+		enabled = false,
+		mode = "simulated",
+	) {
 		const adapter = new SimulatedEngineerCallAdapter({
+			engineerCall: { mode, simulatedAlwaysAuthorized: enabled },
 			happyRobot: { simulatedCallDelayMilliseconds: 10 },
 		} as never)
 		const deliver = jest.fn().mockResolvedValue(undefined)
@@ -60,5 +65,20 @@ describe("simulated call evidence", () => {
 		])
 		expect(result.summary).toContain("no information")
 		expect(result.answers[0].confirmed).toBeUndefined()
+	})
+	it("supplies explicitly simulated positive authorizations only when enabled", async () => {
+		const result = await call([], true)
+		for (const key of ["notifyAllClients", "trafficFailoverAuthorized"]) {
+			expect(result.authorizations[key]).toEqual({
+				value: true,
+				rationale: expect.stringContaining("Simulated authorization"),
+			})
+		}
+		expect(result.summary).toContain("SIMULATED_CALL_ALWAYS_AUTHORIZED")
+		expect(result.answers).toEqual([])
+	})
+	it("does not synthesize authorization when used as a live-call fallback", async () => {
+		const result = await call([], true, "live")
+		expect(result.authorizations).toBeUndefined()
 	})
 })

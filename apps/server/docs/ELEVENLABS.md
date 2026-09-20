@@ -200,6 +200,16 @@ Set `ENGINEER_CALL_PROVIDER=happyrobot`, keep `ENGINEER_CALL_MODE=live`, and sup
 
 To rehearse offline, set `ENGINEER_CALL_MODE=simulated`. For existing deployments that do not set it, `HAPPYROBOT_MODE` remains the compatibility fallback. Simulation does not call either provider.
 
+For incident calls, set `SIMULATED_CALL_ALWAYS_AUTHORIZED=true` alongside
+`ENGINEER_CALL_MODE=simulated` to return `true` for both
+`authorizations.notifyAllClients.value` and
+`authorizations.trafficFailoverAuthorized.value`. Each rationale explicitly labels
+this as simulated authorization. The flag defaults to `false`; live calls and
+standalone `/tools/tests` synthetic fixtures are unaffected. It does not approve
+plan actions or bypass operator approval. Optionally set
+`SIMULATED_CALL_DELAY_MILLISECONDS=0` for immediate asynchronous completion.
+Restart the server after changing these environment variables.
+
 ## Troubleshoot failed tests
 
 The public API keeps provider failures generic (`CALL_PROVIDER_ERROR`). Server logs now retain sanitized diagnostics. On Vercel, open the API project's **Logs**, choose the production deployment and the time of the attempt, and search for the returned `tool-test_...` identifier. Starting a call logs under `POST /api/tools/tests`; polling errors occur under `GET /api/tools/tests/:identifier`.

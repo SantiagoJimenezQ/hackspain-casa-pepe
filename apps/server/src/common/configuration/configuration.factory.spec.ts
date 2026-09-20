@@ -67,6 +67,7 @@ describe("validateEnvironmentVariables", () => {
 			fallbackToSimulated: true,
 			mode: "live",
 			provider: "elevenlabs",
+			simulatedAlwaysAuthorized: false,
 		})
 		expect(configuration.elevenLabs).toEqual({
 			agentId: "agent_test",
@@ -85,6 +86,7 @@ describe("validateEnvironmentVariables", () => {
 			fallbackToSimulated: true,
 			mode: "live",
 			provider: "happyrobot",
+			simulatedAlwaysAuthorized: false,
 		})
 	})
 
@@ -106,6 +108,7 @@ describe("validateEnvironmentVariables", () => {
 			fallbackToSimulated: true,
 			mode: "live",
 			provider: "elevenlabs",
+			simulatedAlwaysAuthorized: false,
 		})
 	})
 
@@ -181,4 +184,24 @@ describe("browser schema upgrade opt-in", () => {
 			).toBe(expected)
 		},
 	)
+})
+
+it("validates the opt-in simulated authorization flag", () => {
+	for (const value of ["true", "false"]) {
+		const configuration = createApplicationConfiguration(
+			validateEnvironmentVariables({
+				...VALID,
+				SIMULATED_CALL_ALWAYS_AUTHORIZED: value,
+			}),
+		)
+		expect(configuration.engineerCall.simulatedAlwaysAuthorized).toBe(
+			value === "true",
+		)
+	}
+	expect(() =>
+		validateEnvironmentVariables({
+			...VALID,
+			SIMULATED_CALL_ALWAYS_AUTHORIZED: "yes",
+		}),
+	).toThrow(/SIMULATED_CALL_ALWAYS_AUTHORIZED/)
 })

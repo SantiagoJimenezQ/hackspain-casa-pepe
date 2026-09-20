@@ -52,6 +52,7 @@ export interface ElevenLabsConfiguration {
 }
 
 export interface EngineerCallConfiguration {
+	readonly simulatedAlwaysAuthorized?: boolean
 	readonly mode: EngineerCallMode
 	readonly provider: EngineerCallProvider
 	/** Keeps the run alive by dispatching a simulated call when the live provider rejects it. */

@@ -83,6 +83,9 @@ export class EnvironmentVariables {
 	@IsIn(["simulated", "live"])
 	ENGINEER_CALL_MODE: string | undefined = undefined
 
+	@IsIn(["true", "false"])
+	SIMULATED_CALL_ALWAYS_AUTHORIZED: string = "false"
+
 	@IsIn(["elevenlabs", "happyrobot"])
 	ENGINEER_CALL_PROVIDER: string = "happyrobot"
 

@@ -4,6 +4,7 @@ import { Module } from "@nestjs/common"
 import { TypeOrmModule } from "@nestjs/typeorm"
 import { PrivateCallSchema1789860000000 } from "./migrations/1789860000000-private-call-schema"
 import { IncidentCallCode1789889000000 } from "./migrations/1789889000000-incident-call-code"
+import { BrowserSessions1790000000000 } from "./migrations/1790000000000-browser-sessions"
 
 @Module({
 	imports: [
@@ -22,12 +23,13 @@ import { IncidentCallCode1789889000000 } from "./migrations/1789889000000-incide
 				migrations: [
 					PrivateCallSchema1789860000000,
 					IncidentCallCode1789889000000,
+					BrowserSessions1790000000000,
 				],
-				migrationsRun: true,
+				migrationsRun: configuration.database.sessionSchemaUpgrade,
 				ssl: requiresTLS(configuration.database.url)
 					? { rejectUnauthorized: false }
 					: false,
-				synchronize: true,
+				synchronize: configuration.database.sessionSchemaUpgrade,
 				type: "postgres",
 				url: configuration.database.url,
 			}),

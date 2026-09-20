@@ -2,6 +2,8 @@ import { ActivityModule } from "@activity/activity.module"
 import { AgentModule } from "@agent/agent.module"
 import { ApprovalsModule } from "@approvals/approvals.module"
 import { AuthenticationModule } from "@authentication/authentication.module"
+import { BrowserSessionGuard } from "@authentication/session/browser-session.guard"
+import { BrowserSessionInterceptor } from "@authentication/session/browser-session.interceptor"
 import { CommonModule } from "@common/common.module"
 import { DatabaseModule } from "@common/database/database.module"
 import { CustomersModule } from "@customers/customers.module"
@@ -10,6 +12,7 @@ import { HealthModule } from "@health/health.module"
 import { IncidentsModule } from "@incidents/incidents.module"
 import { LearningModule } from "@learning/learning.module"
 import { Module } from "@nestjs/common"
+import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core"
 import { EventEmitterModule } from "@nestjs/event-emitter"
 import { ScheduleModule } from "@nestjs/schedule"
 import { PlansModule } from "@plans/plans.module"
@@ -42,6 +45,10 @@ import { WebhooksModule } from "@webhooks/webhooks.module"
 		AgentModule,
 		WebhooksModule,
 		ReplaysModule,
+	],
+	providers: [
+		{ provide: APP_GUARD, useClass: BrowserSessionGuard },
+		{ provide: APP_INTERCEPTOR, useClass: BrowserSessionInterceptor },
 	],
 })
 export class AppModule {}

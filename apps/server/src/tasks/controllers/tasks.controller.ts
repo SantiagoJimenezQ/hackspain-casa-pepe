@@ -1,13 +1,16 @@
+import { RunResource } from "@authentication/session/browser-session"
 import { RunsService } from "@incidents/services/runs.service"
 import { Body, Controller, Get, Param, Patch, Query } from "@nestjs/common"
 import { ApiOperation, ApiSecurity, ApiTags } from "@nestjs/swagger"
 import { ListTasksDTO } from "@tasks/dtos/list-tasks.dto"
 import { UpdateTaskStatusDTO } from "@tasks/dtos/update-task-status.dto"
+import { TaskEntity } from "@tasks/entities/task.entity"
 import { TasksService } from "@tasks/services/tasks.service"
 import { TaskRecord } from "@tasks/types/task.type"
 
 @ApiTags("Tasks")
 @ApiSecurity("operator")
+@RunResource(TaskEntity)
 @Controller("tasks")
 export class TasksController {
 	constructor(

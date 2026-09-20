@@ -1,5 +1,9 @@
 import { RUN_IDLE_TIMEOUT_MILLISECONDS } from "@agent/constants/agent.constant"
 import {
+	currentSessionId,
+	sessionContext,
+} from "@authentication/session/browser-session"
+import {
 	EntityNotFoundException,
 	NoActiveRunException,
 } from "@common/exceptions/domain.exception"
@@ -24,7 +28,7 @@ export class RunsService {
 	async findActiveEntity(): Promise<IncidentEntity | null> {
 		return this.repository.findOne({
 			order: { createdAt: "DESC" },
-			where: { active: true },
+			where: { active: true, browserSessionId: currentSessionId() },
 		})
 	}
 
@@ -67,7 +71,12 @@ export class RunsService {
 		runIdentifier: string,
 	): Promise<IncidentEntity> {
 		const entity = await this.repository.findOne({
-			where: { runIdentifier },
+			where: {
+				runIdentifier,
+				...(sessionContext.getStore()
+					? { browserSessionId: currentSessionId() }
+					: {}),
+			},
 		})
 		if (!entity) {
 			throw new EntityNotFoundException(RUN_ENTITY_NAME, runIdentifier)
@@ -83,7 +92,12 @@ export class RunsService {
 
 	async isRunActive(runIdentifier: string): Promise<boolean> {
 		const entity = await this.repository.findOne({
-			where: { runIdentifier },
+			where: {
+				runIdentifier,
+				...(sessionContext.getStore()
+					? { browserSessionId: currentSessionId() }
+					: {}),
+			},
 		})
 		if (!entity) {
 			return false
@@ -104,6 +118,7 @@ export class RunsService {
 	async listRuns(): Promise<ReadonlyArray<RunSummary>> {
 		const entities = await this.repository.find({
 			order: { createdAt: "DESC" },
+			where: { browserSessionId: currentSessionId() },
 		})
 		return entities.map(toRunSummary)
 	}

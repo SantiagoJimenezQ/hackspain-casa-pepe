@@ -1,5 +1,6 @@
 import { ActivityService } from "@activity/services/activity.service"
 import { ActivityRecord } from "@activity/types/activity.type"
+import { currentSessionId } from "@authentication/session/browser-session"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
 import { InvalidStateTransitionException } from "@common/exceptions/domain.exception"
 import {
@@ -28,7 +29,13 @@ const IDLE_STATE: ReplayState = {
 export class ReplaysService {
 	private readonly logger = new Logger(ReplaysService.name)
 
-	private state: ReplayState = IDLE_STATE
+	private readonly states = new Map<string, ReplayState>()
+	private get state(): ReplayState {
+		return this.states.get(currentSessionId()) ?? IDLE_STATE
+	}
+	private set state(value: ReplayState) {
+		this.states.set(currentSessionId(), value)
+	}
 
 	constructor(
 		private readonly incidentsService: IncidentsService,

@@ -46,8 +46,14 @@ Unknown or ambiguous company names are accepted as `needs-clarification`, not si
 
 ## 3. Verify the result
 
-`GET /api/call-outcomes?runIdentifier=<run>` requires the normal `Authorization: API <API_KEY>` operator header. Confirm the outcome appears once, check its company resolution, and inspect the run's activity and resulting plan. Capacity must stay unchanged by receipt. A stored receipt and an actual plan change are different checks.
+`GET /api/call-outcomes?runIdentifier=<run>` requires both `Authorization: API <API_KEY>` and the owning `X-Casa-Pepe-Session` header; the dashboard supplies these through its server proxy. Confirm the outcome appears once, check its company resolution, and inspect the run's activity and resulting plan. Capacity must stay unchanged by receipt. A stored receipt and an actual plan change are different checks.
 
 The pending reassessment survives restart. Its interval requires a running backend; request-only hosting may delay processing while suspended. For a reliable phone demo, keep the coordinator running and verify its resulting plan independently. Deployment and publishing the HappyRobot inbound workflow are required before calling the configured number.
 
 The updated provider draft asks for the code first and remains unpublished until this endpoint contract is deployed. Its two tools are `vincular_incidente` and `registrar_prioridad_empresa`.
+
+## Browser-session isolation and schema upgrade
+
+Browser sessions own incidents. The call code selects the existing run without a browser cookie; the provider still needs the dedicated secret and no priority request grants approval. The outcome list requires the owning browser session, and coordinator learning is scoped using the persisted run owner.
+
+All three schema migrations and entity synchronization share `BROWSER_SESSION_SCHEMA_UPGRADE`. Back up the database, stop older backend processes, and start one updated backend with this flag set to `true`. Verify the upgrade, then set it back to `false` and restart; deploy the matching frontend. Never enable this flag in previews connected to shared Supabase. If the browser-session migration already ran, it is not repeated; new HappyRobot migrations run on the next explicit upgrade. Historical sessions remain legacy and historical call bindings are not reassigned to a new browser.

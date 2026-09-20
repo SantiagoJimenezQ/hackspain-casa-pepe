@@ -11,37 +11,12 @@ export class CasaPepeClientError extends Error {
   }
 }
 
-const RUN_STORAGE_KEY = "casa-pepe.runIdentifier";
-
-/** Each browser session follows its own run so several people can drive independent demos. */
+// The server resolves the active run from the HttpOnly browser cookie.
+// A previous localStorage run ID is deliberately ignored after this migration.
 let currentRunIdentifier = "";
-
-function readStoredRun(): string {
-  if (currentRunIdentifier) return currentRunIdentifier;
-  try {
-    currentRunIdentifier = window.localStorage.getItem(RUN_STORAGE_KEY) ?? "";
-  } catch {
-    currentRunIdentifier = "";
-  }
-  return currentRunIdentifier;
-}
-
-function rememberRun(runIdentifier: string) {
-  currentRunIdentifier = runIdentifier;
-  try {
-    if (runIdentifier) window.localStorage.setItem(RUN_STORAGE_KEY, runIdentifier);
-    else window.localStorage.removeItem(RUN_STORAGE_KEY);
-  } catch {
-    // Storage is a convenience; the in-memory value still scopes this session.
-  }
-}
-
-function withRun(path: string): string {
-  const runIdentifier = readStoredRun();
-  if (!runIdentifier) return path;
-  const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}runIdentifier=${encodeURIComponent(runIdentifier)}`;
-}
+const readStoredRun = () => currentRunIdentifier;
+const rememberRun = (runIdentifier: string) => { currentRunIdentifier = runIdentifier; };
+const withRun = (path: string) => path;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -76,7 +51,11 @@ async function startRun(path: string, body?: string): Promise<RunScoped> {
 export const casaPepeClient = {
   currentRunIdentifier: () => readStoredRun(),
   forgetRun: () => rememberRun(""),
-  overview: () => request<Overview>(withRun("/api/casa-pepe/overview")),
+  overview: async () => {
+    const overview = await request<Overview>("/api/casa-pepe/overview");
+    rememberRun(overview.incident.runIdentifier);
+    return overview;
+  },
   llmHistory: (options?: { runIdentifier?: string; beforeSequence?: number; limit?: number }) => {
     const params = new URLSearchParams();
     const runIdentifier = options?.runIdentifier || readStoredRun();

@@ -16,6 +16,10 @@ import { SimulationState } from "@scenarios/types/simulation.type"
 import { Column, Entity, Index, PrimaryColumn } from "typeorm"
 
 @Entity({ name: "incidents" })
+@Index("incidents_one_active_browser", ["browserSessionId"], {
+	unique: true,
+	where: `"active" = true AND "browserSessionId" <> 'legacy'`,
+})
 export class IncidentEntity {
 	@Index({ unique: true })
 	@Column({
@@ -24,6 +28,10 @@ export class IncidentEntity {
 		type: "text",
 	})
 	callCode: string
+
+	@Index()
+	@Column({ default: "legacy", type: "text" })
+	browserSessionId: string
 
 	@PrimaryColumn({ type: "text" })
 	identifier: string

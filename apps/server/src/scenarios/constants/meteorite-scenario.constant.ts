@@ -88,7 +88,7 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 	],
 	language: "en",
 	narrative:
-		"A missile has destroyed the AWS Dubai (me-central-1) data centers that host the delivery platform. The closest constrained backup is Oman Local Zone, then Bahrain and Riyadh.",
+		"A missile has destroyed the AWS Dubai (me-central-1) data centers that host the delivery platform. The closest constrained backup is Oman Local Zone, then Riyadh and Frankfurt.",
 	region: IMPACT_REGION,
 	resources: meteoriteResources("en"),
 	services: [

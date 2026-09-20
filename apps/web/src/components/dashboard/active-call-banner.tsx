@@ -51,10 +51,11 @@ export function ActiveCallBanner() {
 
   const authorized = derived?.authorized ?? false;
 
-  // A finished call that granted permissions says so before leaving: first "call ended",
-  // then the verdict. Without the pause the operator never sees the permission land.
+  // The permission is what the call was for. The voice agent reports it the moment it hears
+  // it, while the line is still open, so the card announces the verdict then instead of
+  // waiting for the line to drop: by the time the call formally ends the news is old.
   useEffect(() => {
-    if (!callId || live || !authorized) {
+    if (!callId || !authorized) {
       setShowAuthorized(false);
       return;
     }
@@ -63,10 +64,12 @@ export function ActiveCallBanner() {
       ACTIVE_CALL_AUTHORIZED_AFTER_MS,
     );
     return () => window.clearTimeout(timer);
-  }, [callId, live, authorized]);
+  }, [callId, authorized]);
 
+  // A call still ringing with nothing decided stays up; the permission, or the line dropping,
+  // is what starts the countdown to dismissal.
   useEffect(() => {
-    if (!callId || live) return;
+    if (!callId || (live && !authorized)) return;
     const timer = window.setTimeout(
       () => {
         setDismissed((current) => {

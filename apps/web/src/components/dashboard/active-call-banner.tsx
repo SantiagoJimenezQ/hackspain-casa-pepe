@@ -33,7 +33,8 @@ export function ActiveCallBanner() {
   const { t } = useI18n();
   const [now, setNow] = useState(() => Date.now());
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
-  const [showAuthorized, setShowAuthorized] = useState(false);
+  /** The call whose permission the card has already announced. */
+  const [announcedCall, setAnnouncedCall] = useState("");
 
   const derived = useMemo(
     () => activeCallView(overview, activity, now),
@@ -51,16 +52,17 @@ export function ActiveCallBanner() {
 
   const authorized = derived?.authorized ?? false;
 
+  // Derived rather than stored: another call, or a permission that never arrives, simply stops
+  // matching, so there is nothing to reset and no state to write while rendering.
+  const showAuthorized = authorized && announcedCall === callId;
+
   // The permission is what the call was for. The voice agent reports it the moment it hears
   // it, while the line is still open, so the card announces the verdict then instead of
   // waiting for the line to drop: by the time the call formally ends the news is old.
   useEffect(() => {
-    if (!callId || !authorized) {
-      setShowAuthorized(false);
-      return;
-    }
+    if (!callId || !authorized) return;
     const timer = window.setTimeout(
-      () => setShowAuthorized(true),
+      () => setAnnouncedCall(callId),
       ACTIVE_CALL_AUTHORIZED_AFTER_MS,
     );
     return () => window.clearTimeout(timer);

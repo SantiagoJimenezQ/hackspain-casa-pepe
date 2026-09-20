@@ -190,6 +190,10 @@ reserved for settled plan work. An idle decision cycle does not mean the inciden
 is resolved. The wait reason should identify the missing evidence, owner, and
 resuming event or operator action.
 
+## HappyRobot inbound company prioritization
+
+The initiation and outcome webhooks accept authenticated, idempotent company-priority requests bound to a specific live incident. See [configuration, payloads and verification](docs/HAPPYROBOT-INBOUND.md). These requests trigger assessment and do not alter capacity or bypass approvals.
+
 ## Anonymous browser sessions
 
 Operator incident routes now require both `Authorization: API <API_KEY>` and
@@ -206,7 +210,7 @@ Public status now requires `?runIdentifier=...`. Uncorrelated incoming email
 stays unassigned.
 
 Deploy a single continuously running backend and matching frontend. The explicit `BROWSER_SESSION_SCHEMA_UPGRADE=true` startup runs
-the ownership migration: existing data becomes legacy and active legacy runs stop.
+the pending ownership and HappyRobot migrations plus schema synchronization. The ownership migration labels historical data legacy and stops active legacy runs when first applied. HappyRobot adds its private session table and backfills unique incident call codes.
 Set the flag back to false after the upgrade. Never enable it on PR previews using shared Supabase.
 Stop old servers before upgrading; do not mix old/new versions or roll back without
 a pre-migration database backup. See [Architecture.md](../../Architecture.md) for

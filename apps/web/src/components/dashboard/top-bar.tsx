@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { InboundCallDetails } from "@/components/dashboard/inbound-call-details";
 import { useEffect, useState } from "react";
 import { CheckCircle2, Radio, RefreshCcw, RotateCcw, Sparkles, Zap } from "lucide-react";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
@@ -149,6 +150,12 @@ export function TopBar() {
           </div>
         </div>
       </header>
+      {overview ? <InboundCallDetails
+        callCode={overview.incident.callCode}
+        phoneNumber={overview.inboundCall?.phoneNumber}
+        available={overview.incident.active && overview.incident.runKind !== "replay" && !["normal", "reset", "recovered"].includes(overview.incident.status)}
+        locale={locale}
+      /> : null}
       {learningResetMessage ? <p role="status" className="border-b border-border px-4 py-2 text-xs text-muted-foreground">{learningResetMessage}</p> : null}
     </>
   );

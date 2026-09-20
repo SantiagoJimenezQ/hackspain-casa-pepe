@@ -14,6 +14,8 @@ The former standalone HTTP server, old `/api/status` API, generated JSON OpenAPI
 - `tool-tests.d.ts` describes the standalone integration-check request, catalog and durable result payloads. These checks exercise synthetic email and engineer-call actions without an incident run.
 
 - `outbound-calls.d.ts` describes provider-neutral call context, external references, and authorization evidence.
+- `call-outcomes.d.ts` describes inbound conversation binding, company-priority outcomes and redacted operator evidence.
+
 
 - `browser-session.d.ts` defines the anonymous session transport. Operator incident
   requests require `X-Casa-Pepe-Session` in addition to the backend API key. Run IDs

@@ -62,4 +62,17 @@ describe("Activity sequence numbering", () => {
 		expect(new Set(sequences).size).toBe(3)
 		expect(findOne).toHaveBeenCalledTimes(1)
 	})
+	it("reserves transaction audit numbers ahead of normal activity writers", async () => {
+		const service = new ActivityService(
+			{
+				create: (values: Partial<ActivityEventEntity>) =>
+					Object.assign(new ActivityEventEntity(), values),
+				insert: jest.fn().mockResolvedValue({ identifiers: [] }),
+			} as never,
+			{ emit: jest.fn() } as never,
+		)
+		expect(service.reserveSequence("run-1", 7)).toBe(8)
+		expect((await service.record(entry("next"))).sequence).toBe(9)
+		expect(service.reserveSequence("run-1", 7)).toBe(10)
+	})
 })

@@ -11,7 +11,7 @@ import { nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
 import { Page } from "@common/types/pagination.type"
 import { Injectable } from "@nestjs/common"
-import { EventEmitter2 } from "@nestjs/event-emitter"
+import { EventEmitter2, OnEvent } from "@nestjs/event-emitter"
 import { InjectRepository } from "@nestjs/typeorm"
 import { FindOptionsWhere, In, LessThan, MoreThan, Repository } from "typeorm"
 
@@ -30,6 +30,26 @@ export class ActivityService {
 		private readonly repository: Repository<ActivityEventEntity>,
 		private readonly eventEmitter: EventEmitter2,
 	) {}
+
+	@OnEvent(DOMAIN_EVENTS.ACTIVITY_RECORDED)
+	observeCommittedActivity({ record }: ActivityRecordedEvent) {
+		this.sequences.set(
+			record.runIdentifier,
+			Math.max(
+				this.sequences.get(record.runIdentifier) ?? 0,
+				record.sequence,
+			),
+		)
+	}
+
+	/** Reserve before an external transaction inserts an audit row. Rollback may leave a gap. */
+	reserveSequence(runIdentifier: string, persistedMaximum: number): number {
+		const next =
+			Math.max(this.sequences.get(runIdentifier) ?? 0, persistedMaximum) +
+			1
+		this.sequences.set(runIdentifier, next)
+		return next
+	}
 
 	async record(input: RecordActivityInput): Promise<ActivityRecord> {
 		return this.persist(input, false, "")

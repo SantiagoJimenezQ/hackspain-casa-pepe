@@ -729,6 +729,14 @@ Query: `runIdentifier` (defaults to active run), `limit` (1–500, default 100),
 
 The SSE endpoint now drains all backlog pages after the resume cursor and buffers concurrent live events during catch-up. The existing frontend behavior is unchanged, including its 100-event activity window. Consumers building a full transcript should load history through the cursor endpoint and deduplicate it against SSE events.
 
+## HappyRobot inbound company priority
+
+- `POST /api/webhooks/happyrobot/initiation` — bind a provider conversation to an active incident (200).
+- `POST /api/webhooks/happyrobot/call-outcomes` — persist one priority request and queue assessment (202).
+- `GET /api/call-outcomes?runIdentifier=<run>` — operator-authenticated evidence.
+
+The two webhooks require `x-casa-pepe-webhook-secret`. See [payloads and error semantics](HAPPYROBOT-INBOUND.md).
+
 ## Anonymous browser isolation
 
 Incident/operator routes require `X-Casa-Pepe-Session` (a cryptographically random

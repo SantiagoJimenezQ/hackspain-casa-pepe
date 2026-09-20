@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto"
 import { AddressInfo } from "node:net"
 import { ActivityService } from "@activity/services/activity.service"
 import { LlmClientService } from "@agent/llm/llm-client.service"
+import { AgentService } from "@agent/services/agent.service"
 import { ApprovalEntity } from "@approvals/entities/approval.entity"
 import { validateEnvironmentVariables } from "@common/configuration/configuration.factory"
 import { ConfigurationService } from "@common/services/configuration.service"
@@ -14,6 +15,7 @@ import { ConfigService } from "@nestjs/config"
 import { Test } from "@nestjs/testing"
 import { PlanEntity } from "@plans/entities/plan.entity"
 import { AppModule } from "@root/app.module"
+import { waitFor } from "@root/testing/wait-for.helper"
 import { TaskEntity } from "@tasks/entities/task.entity"
 import { ToolCallEntity } from "@tools/entities/tool-call.entity"
 import { DataSource, EntityTarget, ObjectLiteral } from "typeorm"
@@ -69,6 +71,7 @@ describeDatabase("anonymous browser isolation against PostgreSQL", () => {
 				validateEnvironmentVariables({
 					...process.env,
 					BROWSER_SESSION_SCHEMA_UPGRADE: "true",
+					CASA_PEPE_INBOUND_WEBHOOK_SECRET: "isolated-inbound-secret",
 					DATABASE_POOL_MAXIMUM: 6,
 					SUPABASE_DATABASE_URL: databaseURL,
 				}),
@@ -326,6 +329,143 @@ describeDatabase("anonymous browser isolation against PostgreSQL", () => {
 		).toBe(false)
 		await request("/demo/reset", a, "POST")
 		expect((await deliver()).status).toBe(409)
+	})
+
+	it("routes a code-selected priority only to its owner and rejects stale bindings", async () => {
+		const owner = randomBytes(32).toString("hex")
+		const other = randomBytes(32).toString("hex")
+		const first = (await start(owner)).body
+		const second = (await start(other)).body
+		expect(first.callCode).toMatch(/^\d{6}$/)
+		expect(second.callCode).toMatch(/^\d{6}$/)
+		expect(second.callCode).not.toBe(first.callCode)
+		const incidents = database.getRepository(IncidentEntity)
+		await incidents.update(
+			{ runIdentifier: first.runIdentifier },
+			{ status: "responding" },
+		)
+		const capacity = (
+			await incidents.findOneByOrFail({
+				runIdentifier: first.runIdentifier,
+			})
+		).resources
+		const cycle = jest
+			.spyOn(app.get(AgentService), "requestCycle")
+			.mockResolvedValue({
+				kind: "skipped",
+				reason: "Isolated callback routing test",
+			})
+		const deliver = async (path: string, body: unknown) => {
+			const response = await fetch(
+				`${base}/webhooks/happyrobot/${path}`,
+				{
+					body: JSON.stringify(body),
+					headers: {
+						"Content-Type": "application/json",
+						"x-casa-pepe-webhook-secret": "isolated-inbound-secret",
+					},
+					method: "POST",
+				},
+			)
+			return { body: await response.json(), status: response.status }
+		}
+		try {
+			const binding = await deliver("initiation", {
+				conversationId: `isolated-company-call-${randomBytes(12).toString("hex")}`,
+				incidentIdentifier: first.callCode,
+			})
+			expect(binding.status).toBe(200)
+			expect(binding.body.runIdentifier).toBe(first.runIdentifier)
+			const outcome = {
+				outcome: {
+					customerName: first.customers[0].name,
+					kind: "priority-request",
+					requestedPriority: "first",
+				},
+				schemaVersion: 1,
+				sessionReference: binding.body.sessionReference,
+			}
+			const [receipt, duplicate] = await Promise.all([
+				deliver("call-outcomes", outcome),
+				deliver("call-outcomes", outcome),
+			])
+			expect(receipt.status).toBe(202)
+			expect(duplicate.status).toBe(202)
+			expect(duplicate.body).toEqual(receipt.body)
+			await waitFor(
+				async () =>
+					cycle.mock.calls.some(
+						([run, trigger]) =>
+							run === first.runIdentifier &&
+							trigger.kind === "conditions-changed",
+					)
+						? true
+						: null,
+				"priority cycle for owner",
+			)
+			expect(
+				cycle.mock.calls.some(
+					([run, trigger]) =>
+						run === second.runIdentifier &&
+						trigger.kind === "conditions-changed",
+				),
+			).toBe(false)
+			const ownOutcomes = await request(
+				`/call-outcomes?runIdentifier=${first.runIdentifier}`,
+				owner,
+			)
+			expect(ownOutcomes.status).toBe(200)
+			expect(ownOutcomes.body).toHaveLength(1)
+			expect(JSON.stringify(ownOutcomes.body)).not.toContain(
+				binding.body.sessionReference,
+			)
+			expect(
+				(
+					await request(
+						`/call-outcomes?runIdentifier=${first.runIdentifier}`,
+						other,
+					)
+				).status,
+			).toBe(404)
+			expect(
+				(
+					await request(
+						`/call-outcomes?runIdentifier=${second.runIdentifier}`,
+						other,
+					)
+				).body,
+			).toEqual([])
+			const ownActivity = await app
+				.get(ActivityService)
+				.listAllForRun(first.runIdentifier)
+			const otherActivity = await app
+				.get(ActivityService)
+				.listAllForRun(second.runIdentifier)
+			expect(
+				ownActivity.filter((e) => e.payload.companyPriorityRequest),
+			).toHaveLength(1)
+			expect(
+				otherActivity.some((e) => e.payload.companyPriorityRequest),
+			).toBe(false)
+			expect(
+				(
+					await incidents.findOneByOrFail({
+						runIdentifier: first.runIdentifier,
+					})
+				).resources,
+			).toEqual(capacity)
+			const replacement = await request("/demo/reset", owner, "POST")
+			expect(replacement.status).toBe(200)
+			expect(
+				(await request("/incidents/current", owner)).body.callCode,
+			).not.toBe(first.callCode)
+			expect((await deliver("call-outcomes", outcome)).status).toBe(409)
+			expect(
+				(await request("/incidents/current", other)).body.runIdentifier,
+			).toBe(second.runIdentifier)
+		} finally {
+			cycle.mockRestore()
+		}
 	})
 
 	it("keeps administration off browser sessions and public status explicitly run-scoped", async () => {

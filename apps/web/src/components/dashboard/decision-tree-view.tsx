@@ -7,6 +7,7 @@ import { useI18n } from '@/components/i18n/locale-provider';
 import { buildDecisionTree, elapsedLabel, mergeTreeEvents, type DecisionTreeNode, type DecisionTreeBranch } from '@/lib/decision-tree';
 import { loadTreeHistory } from '@/lib/decision-tree-history';
 import type { ActivityRecord } from '@/lib/casa-pepe-types';
+import { localeTags, messageKey } from '@/lib/i18n';
 import styles from './decision-tree.module.css';
 
 const kindKeys = { signal: 'tree.kind.signal', decision: 'tree.kind.decision', plan: 'tree.kind.plan', revision: 'tree.kind.revision', action: 'tree.kind.action', result: 'tree.kind.result' } as const;
@@ -131,7 +132,31 @@ function RunTree({ run, start, title, onClose }: { run: string; start: string; t
   </dialog>;
 }
 
+/**
+ * Where the milestone came from, in the terms an operator thinks in: when it happened, what kind
+ * of event it was and whether it was real. The activity identifier and its sequence number are
+ * internal bookkeeping, so they stay out of the panel.
+ */
+function SourceDetails({ node }: { node: DecisionTreeNode }) {
+  const { locale, t } = useI18n();
+  const when = new Date(node.occurredAt);
+  const origin = messageKey(`tree.title.${node.sourceType}`);
+  return (
+    <details className={styles.source}>
+      <summary>{t('tree.sourceEvent')}</summary>
+      <dl>
+        <dt>{t('tree.sourceDate')}</dt>
+        <dd>{Number.isNaN(when.getTime()) ? node.occurredAt : when.toLocaleString(localeTags[locale])}</dd>
+        <dt>{t('tree.sourceType')}</dt>
+        <dd>{origin ? t(origin) : node.sourceType}</dd>
+        <dt>{t('tree.sourceMode')}</dt>
+        <dd>{node.simulated ? t('tree.simulated') : t('tree.notSimulated')}{node.replayed ? t('tree.replayed') : ''}</dd>
+      </dl>
+    </details>
+  );
+}
+
 function NodeDetails({ node, branch, start }: { node: DecisionTreeNode; branch?: DecisionTreeBranch; start: string }) {
   const { t } = useI18n();
-  return <><span className={styles.eyebrow}>{branch ? t('tree.planPriority').toUpperCase() : t(kindKeys[node.kind]).toUpperCase()}</span><h2>{branch?.title ?? node.title}</h2><div className={`${styles.detailStatus} ${styles[branch?.tone ?? node.tone]}`}><StatusIcon tone={branch?.tone ?? node.tone} /><span>{branch?.status ?? node.status}</span><time>{elapsedLabel(node.occurredAt, start)}</time></div><h3>{t('tree.recordedReason')}</h3><p className={styles.explanation}>{branch?.reason || node.reason || t('tree.noExplanation')}</p>{!branch && node.details.length ? <><h3>{t('tree.contextChanges')}</h3><ul>{node.details.map((text, index) => <li key={index}>{text}</li>)}</ul></> : null}<details className={styles.source}><summary>{t('tree.sourceEvent')}</summary><dl><dt>{t('tree.sourceType')}</dt><dd>{node.sourceType}</dd><dt>{t('tree.sourceIdentifier')}</dt><dd>{node.sourceIdentifier}</dd><dt>{t('tree.sourceDate')}</dt><dd>{node.occurredAt}</dd><dt>{t('tree.sourceSequence')}</dt><dd>{node.sequence}</dd><dt>{t('tree.sourceMode')}</dt><dd>{node.simulated ? t('tree.simulated') : t('tree.notSimulated')}{node.replayed ? t('tree.replayed') : ''}</dd></dl></details></>;
+  return <><span className={styles.eyebrow}>{branch ? t('tree.planPriority').toUpperCase() : t(kindKeys[node.kind]).toUpperCase()}</span><h2>{branch?.title ?? node.title}</h2><div className={`${styles.detailStatus} ${styles[branch?.tone ?? node.tone]}`}><StatusIcon tone={branch?.tone ?? node.tone} /><span>{branch?.status ?? node.status}</span><time>{elapsedLabel(node.occurredAt, start)}</time></div><h3>{t('tree.recordedReason')}</h3><p className={styles.explanation}>{branch?.reason || node.reason || t('tree.noExplanation')}</p>{!branch && node.details.length ? <><h3>{t('tree.contextChanges')}</h3><ul>{node.details.map((text, index) => <li key={index}>{text}</li>)}</ul></> : null}<SourceDetails node={node} /></>;
 }

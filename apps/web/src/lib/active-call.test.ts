@@ -270,4 +270,40 @@ describe("active call view", () => {
     );
     expect(view?.phase).toBe("no-answer");
   });
+
+  it("does not let the still-running tool put a finished call back on the line", () => {
+    const finishedAt = new Date(NOW - ACTIVE_CALL_TERMINAL_WINDOW_MS - 1000).toISOString();
+    const view = activeCallView(
+      overviewWith({
+        engineerCalls: [
+          call({ identifier: "call_1", status: "completed", finishedAt }),
+        ],
+        toolCalls: [
+          tool({
+            identifier: "t_call",
+            name: "call_engineer",
+            status: "running",
+            input: { engineerName: "Guillermo", engineerRole: "On-call" },
+          }),
+        ],
+      }),
+      [],
+      NOW,
+    );
+    expect(view).toBeNull();
+  });
+
+  it("keeps showing a call whose end arrived a moment ahead of the browser clock", () => {
+    const finishedAt = new Date(NOW + 1500).toISOString();
+    const view = activeCallView(
+      overviewWith({
+        engineerCalls: [
+          call({ identifier: "call_1", status: "completed", finishedAt }),
+        ],
+      }),
+      [],
+      NOW,
+    );
+    expect(view).toMatchObject({ identifier: "call_1", phase: "ended", live: false });
+  });
 });

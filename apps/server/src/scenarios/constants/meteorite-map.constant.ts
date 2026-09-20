@@ -157,7 +157,9 @@ const CUSTOMERS = [
 		name: "PureHealth",
 		sectorEn: "Healthcare",
 		sectorEs: "Salud",
-		serviceIdentifiers: ["orders-database", "customer-notifications"],
+		// The hospital runs on the orders database alone, so it comes back with the very first
+		// recovery. Notifications stay with the airline, which is the customer that lives on them.
+		serviceIdentifiers: ["orders-database"],
 		shortName: "PH",
 		users: 2750,
 	},

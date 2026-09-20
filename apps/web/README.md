@@ -46,3 +46,5 @@ ignored. Visible tabs reconcile the active run every five seconds so a reset in
 another tab is reflected and its activity stream reconnects. Opening any dashboard
 page directly creates the cookie; calling an API without first opening a page
 returns 401. Deploy alongside the matching backend ownership changes.
+
+The top bar’s **Aprendizajes** button opens a read-only panel with saved lesson summaries, subjects, observation counts, and update dates. It reloads on opening; **Actualizar** fetches lessons recorded during the current run. Loading failures are shown separately from an empty memory. The list uses the same Spanish scenario filter as the existing learning endpoint; **Borrar aprendizajes** still clears all scenarios within this browser session.

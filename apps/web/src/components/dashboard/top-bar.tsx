@@ -5,14 +5,18 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Radio, RefreshCcw, RotateCcw, Sparkles, Zap } from "lucide-react";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { LanguageSwitcher } from "@/components/dashboard/language-switcher";
+import { LearningPanel } from "@/components/dashboard/learning-panel";
 import { ThemeSwitcher } from "@/components/dashboard/theme-switcher";
+import { useI18n } from "@/components/i18n/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { incidentClock } from "@/lib/agent-trace";
+import { localeTags } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export function TopBar() {
   const { overview, status, busyAction, triggerImpact, triggerTwist, resetDemo, resetLearnings, learningResetMessage } = useDashboard();
+  const { locale, t } = useI18n();
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -40,7 +44,7 @@ export function TopBar() {
           </span>
           <div>
             <p className="text-[14px] font-semibold tracking-tight text-foreground">Casa Pepe</p>
-            <p className="font-mono text-[9px] tracking-[0.14em] text-muted-foreground uppercase">Incident coordination</p>
+            <p className="font-mono text-[9px] tracking-[0.14em] text-muted-foreground uppercase">{t("topbar.subtitle")}</p>
           </div>
         </div>
 
@@ -49,7 +53,7 @@ export function TopBar() {
             "flex items-center gap-2 rounded-xl border px-2.5 py-1 transition-colors sm:ml-2",
             recovered ? "border-status-up/45 bg-status-up/10" : "border-border bg-muted/40",
           )}
-          title={recovered ? "Incidente resuelto" : "Tiempo desde el impacto"}
+          title={recovered ? t("topbar.resolvedLabel") : t("topbar.sinceImpact")}
         >
           {recovered ? <CheckCircle2 className="size-4 shrink-0 text-status-up" /> : null}
           <div className="leading-none">
@@ -67,7 +71,7 @@ export function TopBar() {
                 recovered ? "text-status-up/80" : "text-muted-foreground",
               )}
             >
-              {recovered ? "Resuelto" : "Tiempo de incidente"}
+              {recovered ? t("topbar.resolved") : t("topbar.incidentTime")}
             </p>
           </div>
         </div>
@@ -79,30 +83,31 @@ export function TopBar() {
               variant={impacted || recovered ? "outline" : "default"}
               onClick={() => void triggerImpact()}
               disabled={!live || busy || impacted || recovered}
-              title="Dispara el impacto del incidente y arranca al agente"
+              title={t("topbar.impactHint")}
             >
-              <Zap /> <span className="hidden lg:inline">Impacto</span>
+              <Zap /> <span className="hidden lg:inline">{t("topbar.impact")}</span>
             </Button>
             <Button
               size="sm"
               variant="secondary"
               onClick={() => void triggerTwist()}
               disabled={!live || busy}
-              title="Inyecta un giro en el escenario en curso"
+              title={t("topbar.twistHint")}
             >
-              <Sparkles /> <span className="hidden lg:inline">Twist</span>
+              <Sparkles /> <span className="hidden lg:inline">{t("topbar.twist")}</span>
             </Button>
+            <LearningPanel />
             <Separator orientation="vertical" className="mx-0.5 h-5 self-center" />
             <Button
               size="sm"
               variant="ghost"
               onClick={() => void resetLearnings()}
               disabled={!live || busy}
-              title="Borra todos los aprendizajes guardados de ejecuciones anteriores. No reinicia el incidente actual."
+              title={t("topbar.clearLearningsHint")}
             >
               <RefreshCcw className={cn(clearingLearnings && "animate-spin")} />
               <span className="hidden xl:inline">
-                {clearingLearnings ? "Borrando aprendizajes…" : "Borrar aprendizajes"}
+                {clearingLearnings ? t("topbar.clearingLearnings") : t("topbar.clearLearnings")}
               </span>
             </Button>
             <Button
@@ -110,9 +115,9 @@ export function TopBar() {
               variant="destructive"
               onClick={() => void resetDemo()}
               disabled={!live || busy}
-              title="Reinicia la demo al estado inicial"
+              title={t("topbar.resetHint")}
             >
-              <RotateCcw /> <span className="hidden lg:inline">Reiniciar</span>
+              <RotateCcw /> <span className="hidden lg:inline">{t("topbar.reset")}</span>
             </Button>
           </div>
 
@@ -131,10 +136,10 @@ export function TopBar() {
                 <span className={cn("relative size-1.5 rounded-full", impacted ? "bg-status-up" : "bg-muted-foreground/60")} />
               </span>
               <Radio className="size-3" />
-              {impacted ? "ACTIVIDAD EN DIRECTO" : "EN ESPERA"}
+              {impacted ? t("topbar.liveActivity") : t("topbar.standby")}
             </span>
             <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
-              {now?.toLocaleTimeString("es-ES") ?? "--:--:--"}
+              {now?.toLocaleTimeString(localeTags[locale]) ?? "--:--:--"}
             </p>
           </div>
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { DashboardProvider } from "@/components/dashboard/dashboard-provider";
+import { InlineScript } from "@/components/inline-script";
 import { LocaleProvider } from "@/components/i18n/locale-provider";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { ThemeProvider } from "@/components/theme/theme-provider";
@@ -53,7 +54,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+        <InlineScript html={themeBootScript} />
       </head>
       <body className="h-full overflow-x-auto overflow-y-hidden bg-background text-foreground">
         <TooltipProvider>

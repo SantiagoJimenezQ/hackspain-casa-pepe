@@ -132,6 +132,9 @@ function formatTranscriptItem(
       ...item.children.map((child) => formatTranscriptItem(child, services, depth + 1)),
     ].join("\n");
   }
+  if (item.kind === "discarded") {
+    return item.items.map((child) => formatTranscriptItem(child, services, depth)).join("\n");
+  }
   const extras = [
     `[approval] ${approvalRemainderTitle(item.approval)}`,
     `decision: ${item.approval.decision}`,

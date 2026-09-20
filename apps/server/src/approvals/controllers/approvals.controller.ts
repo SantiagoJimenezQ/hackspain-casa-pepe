@@ -1,7 +1,9 @@
 import { DecideApprovalDTO } from "@approvals/dtos/decide-approval.dto"
 import { ListApprovalsDTO } from "@approvals/dtos/list-approvals.dto"
+import { ApprovalEntity } from "@approvals/entities/approval.entity"
 import { ApprovalsService } from "@approvals/services/approvals.service"
 import { ApprovalRecord } from "@approvals/types/approval.type"
+import { RunResource } from "@authentication/session/browser-session"
 import { RunsService } from "@incidents/services/runs.service"
 import {
 	Body,
@@ -17,6 +19,7 @@ import { ApiOperation, ApiSecurity, ApiTags } from "@nestjs/swagger"
 
 @ApiTags("Approvals")
 @ApiSecurity("operator")
+@RunResource(ApprovalEntity)
 @Controller("approvals")
 export class ApprovalsController {
 	constructor(

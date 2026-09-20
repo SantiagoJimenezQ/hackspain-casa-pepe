@@ -49,6 +49,9 @@ export class EnvironmentVariables {
 	@IsIn(["true", "false"])
 	DATABASE_QUERY_LOGGING: string = "false"
 
+	@IsIn(["true", "false"])
+	BROWSER_SESSION_SCHEMA_UPGRADE: string = "false"
+
 	@Type(() => Number)
 	@IsInt()
 	@Min(1)

@@ -160,3 +160,25 @@ describe("validateEnvironmentVariables", () => {
 		)
 	})
 })
+
+describe("browser schema upgrade opt-in", () => {
+	it.each([
+		[undefined, false],
+		["false", false],
+		["true", true],
+	])(
+		"enables schema changes only for explicit true (%s)",
+		(flag, expected) => {
+			const variables = validateEnvironmentVariables({
+				...VALID,
+				...(flag === undefined
+					? {}
+					: { BROWSER_SESSION_SCHEMA_UPGRADE: flag }),
+			})
+			expect(
+				createApplicationConfiguration(variables).database
+					.sessionSchemaUpgrade,
+			).toBe(expected)
+		},
+	)
+})

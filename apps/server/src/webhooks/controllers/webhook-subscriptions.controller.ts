@@ -1,3 +1,4 @@
+import { SessionAdministration } from "@authentication/session/browser-session"
 import {
 	Body,
 	Controller,
@@ -21,6 +22,7 @@ import {
 
 @ApiTags("Webhooks")
 @ApiSecurity("operator")
+@SessionAdministration()
 @Controller("webhooks")
 export class WebhookSubscriptionsController {
 	constructor(

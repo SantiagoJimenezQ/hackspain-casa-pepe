@@ -2,8 +2,17 @@ import { InsightData, InsightKind } from "@learning/types/learning.type"
 import { Column, Entity, Index, PrimaryColumn } from "typeorm"
 
 @Entity({ name: "learning_insights" })
-@Index(["scenarioIdentifier", "kind", "subject"], { unique: true })
+@Index(
+	"learning_browser_subject",
+	["browserSessionId", "scenarioIdentifier", "kind", "subject"],
+	{
+		unique: true,
+	},
+)
 export class LearningInsightEntity {
+	@Column({ default: "legacy", type: "text" })
+	browserSessionId: string
+
 	@PrimaryColumn({ type: "text" })
 	identifier: string
 

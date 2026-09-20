@@ -8,12 +8,12 @@ Every response is JSON. Identifiers carry a prefix: `run_`, `inc_`, `plan_`, `ap
 
 | Scope | Header | Who |
 |---|---|---|
-| `operator` (default) | `Authorization: API <API_KEY>` | Frontend, operator and demo controls |
+| `operator` (default) | `Authorization: API <API_KEY>` and `X-Casa-Pepe-Session` | Frontend, operator and demo controls |
 | `public` | none | `/health` and inbound webhooks (they verify their own secret) |
 
 Without a valid credential: `401` with `{ "statusCode": 401, "message": "An API key is required" }`.
 
-Browser `EventSource` clients cannot set headers: `GET /activity/stream` also accepts the key as the `apiKey` query parameter.
+Browser `EventSource` clients use the same-origin Next.js stream proxy, which adds both headers server-side. Direct SSE clients must supply the session header as well as the API key.
 
 ## Error format
 
@@ -43,7 +43,7 @@ Common errors:
 
 ## Common parameter `runIdentifier`
 
-List queries, `GET /incidents/current`, `GET /agent/status`, `POST /agent/cycle` and every demo control accept `?runIdentifier=run_…`. Several runs can be active at the same time, one per person driving a demo: `POST /demo/start` no longer stops other runs, `POST /demo/reset` resets only the run it targets, and the agent and simulation clock tick every active run independently. When `runIdentifier` is omitted the most recently started active run is used, so single-user setups keep working. Without an active run they return `409 No Active Run`.
+List queries and demo controls accept `?runIdentifier=run_…` where documented. Any explicit identifier must belong to the caller’s session. Omitting it selects only that browser’s current run. `POST /demo/start` and reset replace that browser’s run while other sessions continue independently. Without an active run these routes return `409 No Active Run`.
 
 ---
 
@@ -336,7 +336,7 @@ Response `{ items: ActivityRecord[], total, limit, offset }` ordered by ascendin
 
 ### `GET /activity/stream?runIdentifier=&types=&afterSequence=&limit=&apiKey=`
 
-Server-sent events (`text/event-stream`). First replays up to `limit` events after `afterSequence` for the run (active run when omitted), then pushes every new event live. Each message has `event: <type>`, `id: <sequence>` and `data: <ActivityRecord>`. Reconnect with the last `id` as `afterSequence` to resume without gaps.
+Server-sent events (`text/event-stream`). First replays up to `limit` events after `afterSequence` for the run (active run when omitted), then pushes only that run’s new events live. Each message has `event: <type>`, `id: <sequence>` and `data: <ActivityRecord>`. Reconnect with the last `id` as `afterSequence` to resume without gaps.
 
 ```js
 const source = new EventSource(`${base}/activity/stream?apiKey=${apiKey}&afterSequence=0`)
@@ -508,7 +508,7 @@ Creates a new run with `runKind: "replay"`, deactivates the current one and re-e
 
 ## Learning (`/learning`)
 
-The agent learns across runs of the same scenario family (both languages share the knowledge).
+The agent learns across runs of the same browser session and scenario family (both languages share knowledge within that session).
 
 ### `GET /learning/insights?scenarioIdentifier=`
 
@@ -519,7 +519,7 @@ The agent learns across runs of the same scenario family (both languages share t
 
 ### `DELETE /learning/insights`
 
-Forgets everything. Returns `{ removed }`. Use it before a demo that should start with no prior knowledge.
+Forgets this session’s insights. Returns `{ removed }`. Use it before a demo that should start with no prior knowledge.
 
 ### `GET /learning/reports/current`, `GET /learning/reports/:runIdentifier`
 
@@ -710,7 +710,7 @@ See [MVP tools rehearsal](../../../demo/MVP-TOOLS.md) for configuration, payload
 | `GET /engineers/incoming-calls` | Operator API key | Reports for the active run, including confirmation state. |
 | `POST /engineers/incoming-calls/:identifier/confirm` | Operator API key | Confirm numeric capacity and trigger a revised plan. |
 | `GET /status` | Public | Readable service-status page with a manual refresh link. |
-| `GET /status/public` | Public | Explicitly published, customer-safe JSON service status for the active run; no credentials, call details or internal plan data. |
+| `GET /status/public` | Public | Explicitly published, customer-safe JSON service status for the explicit `?runIdentifier=...`; no credentials, call details or internal plan data. |
 
 `GET /tools` now includes the eight MVP names plus the legacy tools. Email destinations are server configuration, never agent input. The email tool records provider acceptance separately from inbox delivery; simulated emails send nothing. HTTP `verify_recovery` submits a test delivery for `route-assignment`; other services use health queries scoped to the run. `check_services_status` runs after every verification and before the status publication: it queries the independent health read of every service (recovery environment in `http` mode, scenario state in `simulated` mode), compares it with the state the agent has recorded and returns `checks[]` with `knownStatus`, `observedStatus`, `matches` and `healthy`, plus `healthyCount`, `totalCount` and the list of `discrepancies`. Discrepancies are reported, never applied to the harness state. Each run records a `services.checked` activity event.
 
@@ -728,3 +728,18 @@ The authenticated activity API and stream expose full public explanations in `pa
 Query: `runIdentifier` (defaults to active run), `limit` (1–500, default 100), optional `beforeSequence` (exclusive positive integer cursor). Returns `{ items: ActivityRecord[], nextBeforeSequence: number | null }` in descending sequence order. Request subsequent pages using the returned cursor; null means history is exhausted. No new Next.js proxy or history UI is included; the frontend team owns that integration. Keep the backend API key server-side. Older pre-upgrade records keep their original fields.
 
 The SSE endpoint now drains all backlog pages after the resume cursor and buffers concurrent live events during catch-up. The existing frontend behavior is unchanged, including its 100-event activity window. Consumers building a full transcript should load history through the cursor endpoint and deduplicate it against SSE events.
+
+## Anonymous browser isolation
+
+Incident/operator routes require `X-Casa-Pepe-Session` (a cryptographically random
+32-byte token encoded as 64 lowercase hexadecimal characters) alongside the API
+key. Reuse the token for the same client. Omitting `runIdentifier` resolves only
+that session's current run; supplying another session's identifier returns 404.
+Missing/invalid session headers return 401. This applies to JSON and SSE.
+
+Run history, learning, replay progress and record-by-ID mutations are session-scoped.
+Start/reset replaces only the caller's active run. Direct administrator routes
+(`/tools/tests`, `/agent/models/test`, webhook subscriptions/deliveries) require the
+API key without a session header; browser sessions receive 403. Signed provider
+callbacks remain independent of browser identity. Public status requires an explicit
+`runIdentifier`; inbound email without run correlation is kept unassigned.

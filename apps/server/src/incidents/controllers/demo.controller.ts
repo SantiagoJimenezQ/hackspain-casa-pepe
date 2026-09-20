@@ -27,7 +27,7 @@ export class DemoController {
 	@Post("start")
 	@ApiOperation({
 		summary:
-			"Start a new independent run with every service healthy. Other active runs keep running",
+			"Start a healthy run for this browser, replacing its previous run. Other browsers keep running",
 	})
 	start(@Body() body: StartRunDTO): Promise<IncidentSnapshot> {
 		return this.incidentsService.startRun(body.scenarioIdentifier, body)

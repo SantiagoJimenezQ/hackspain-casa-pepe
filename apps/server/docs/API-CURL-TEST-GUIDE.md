@@ -12,7 +12,7 @@ pnpm --filter @casa-pepe/server test
 
 The curl walkthrough remains useful as a deployment smoke test; the automated suite is the deterministic CI check.
 
-Use a dedicated test deployment/database: starting a run replaces the active run for every consumer, and clearing learning deletes all saved insights. For repeatable results, configure the **server** with `HAPPYROBOT_MODE=simulated`, `RECOVERY_MODE=simulated`, and `INCIDENT_EMAIL_MODE=simulated`. Existing outbound webhook subscriptions still receive events. Do not run another demo or operator session concurrently.
+Use a dedicated test deployment/database. Starting a run replaces the active run for this session; clearing learning deletes only this session’s insights. For repeatable results, configure the **server** with `HAPPYROBOT_MODE=simulated`, `RECOVERY_MODE=simulated`, and `INCIDENT_EMAIL_MODE=simulated`. Existing outbound webhook subscriptions still receive events. Other sessions can run concurrently.
 
 ## 1. Configure the client
 
@@ -25,16 +25,20 @@ export BASE_URL="${BASE_URL:-http://localhost:3000/api}"
 BASE_URL="${BASE_URL%/}"
 
 # Shared curl options. Authentication is a header, not a URL parameter.
-CURL=(--silent --show-error --fail-with-body --connect-timeout 10 --max-time 60
+ADMIN_CURL=(--silent --show-error --fail-with-body --connect-timeout 10 --max-time 60
   --header "Authorization: API ${API_KEY}"
   --header 'Content-Type: application/json')
+BROWSER_TOKEN="${BROWSER_TOKEN:-$(openssl rand -hex 32)}"
+CURL=("${ADMIN_CURL[@]}" --header "X-Casa-Pepe-Session: $BROWSER_TOKEN")
 
 # Poll GET responses until a jq assertion passes; never retry mutations.
 # Prints the matching JSON for inspection or ID extraction.
 wait_for() {
   local endpoint="$1" predicate="$2" delay="${3:-1}" attempts="${4:-60}" response attempt
+  local -a options=("${CURL[@]}")
+  if [[ "$endpoint" == /tools/tests/* ]]; then options=("${ADMIN_CURL[@]}"); fi
   for ((attempt=1; attempt<=attempts; attempt++)); do
-    response=$(curl "${CURL[@]}" "${BASE_URL}${endpoint}") || return 1
+    response=$(curl "${options[@]}" "${BASE_URL}${endpoint}") || return 1
     if jq -e "$predicate" >/dev/null <<<"$response"; then
       printf '%s\n' "$response"
       return 0
@@ -74,10 +78,10 @@ These checks run without starting or changing an incident. They use a dedicated 
 
 ```bash
 # Discover the available test tools and whether live mode is configured.
-curl "${CURL[@]}" "$BASE_URL/tools/tests" | jq .
+curl "${ADMIN_CURL[@]}" "$BASE_URL/tools/tests" | jq .
 
 # Synthetic email: the server's configured recipient is used only in live mode.
-EMAIL_TEST=$(curl "${CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
+EMAIL_TEST=$(curl "${ADMIN_CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
   "tool":"send_incident_email",
   "mode":"simulated",
   "idempotencyKey":"curl-tool-test-email-1"
@@ -86,7 +90,7 @@ EMAIL_ID=$(jq -er '.identifier' <<<"$EMAIL_TEST")
 jq -e '.tool == "send_incident_email" and .mode == "simulated" and .status == "succeeded"' <<<"$EMAIL_TEST"
 
 # Synthetic engineer call: simulated mode accepts the same engineer shape as live mode.
-CALL_TEST=$(curl "${CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
+CALL_TEST=$(curl "${ADMIN_CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
   "tool":"call_engineer",
   "mode":"simulated",
   "idempotencyKey":"curl-tool-test-call-1",
@@ -94,8 +98,8 @@ CALL_TEST=$(curl "${CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
 }')
 CALL_ID=$(jq -er '.identifier' <<<"$CALL_TEST")
 jq -e '.tool == "call_engineer" and .mode == "simulated" and .status == "succeeded"' <<<"$CALL_TEST"
-curl "${CURL[@]}" "$BASE_URL/tools/tests/$EMAIL_ID" | jq .
-curl "${CURL[@]}" "$BASE_URL/tools/tests/$CALL_ID" | jq .
+curl "${ADMIN_CURL[@]}" "$BASE_URL/tools/tests/$EMAIL_ID" | jq .
+curl "${ADMIN_CURL[@]}" "$BASE_URL/tools/tests/$CALL_ID" | jq .
 ```
 
 Set `ENGINEER_CALL_MODE=live` and `ENGINEER_CALL_PROVIDER=elevenlabs` with the three `ELEVENLABS_*` credentials described in [voice setup](ELEVENLABS.md), or select `happyrobot` with its configuration. The POST body is the same for either call provider.
@@ -104,7 +108,7 @@ Live mode is opt-in and can contact external providers. Run these commands only 
 
 ```bash
 # Live email reports provider acceptance; it does not prove inbox delivery.
-LIVE_EMAIL=$(curl "${CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
+LIVE_EMAIL=$(curl "${ADMIN_CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
   "tool":"send_incident_email",
   "mode":"live",
   "idempotencyKey":"curl-tool-test-live-email-1"
@@ -112,7 +116,7 @@ LIVE_EMAIL=$(curl "${CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
 jq -e '.tool == "send_incident_email" and .mode == "live" and (.status == "accepted" or .status == "succeeded")' <<<"$LIVE_EMAIL"
 
 # Calls use ENGINEER_CALL_PROVIDER. ElevenLabs needs GET polling; HappyRobot uses its callback.
-LIVE_CALL=$(curl "${CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
+LIVE_CALL=$(curl "${ADMIN_CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
   "tool":"call_engineer",
   "mode":"live",
   "idempotencyKey":"curl-tool-test-live-call-1",
@@ -127,7 +131,7 @@ wait_for "/tools/tests/$LIVE_CALL_ID" '.status == "succeeded" or .status == "fai
 For `ENGINEER_CALL_PROVIDER=happyrobot` only, if you need to exercise the callback route itself, start a separate live check and immediately post a provider-signed synthetic callback. This verifies authentication and result handling; it does not prove that a phone call was answered:
 
 ```bash
-CALLBACK_TEST=$(curl "${CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
+CALLBACK_TEST=$(curl "${ADMIN_CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
   "tool":"call_engineer",
   "mode":"live",
   "idempotencyKey":"curl-tool-test-live-callback-1",
@@ -136,7 +140,7 @@ CALLBACK_TEST=$(curl "${CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
 CALLBACK_ID=$(jq -er '.identifier' <<<"$CALLBACK_TEST")
 CALLBACK='{"callIdentifier":"'"$CALLBACK_ID"'","outcome":"completed","summary":"Synthetic callback received","transcript":"","answers":[]}'
 curl --silent --show-error --fail-with-body --max-time 60 --header "x-happyrobot-signature: ${HAPPYROBOT_WEBHOOK_SECRET:?Set the callback secret}" --header 'Content-Type: application/json' -X POST "$BASE_URL/tools/tests/callbacks/happyrobot" --data "$CALLBACK" | jq -e '.accepted == true'
-curl "${CURL[@]}" "$BASE_URL/tools/tests/$CALLBACK_ID" | jq -e '.status == "succeeded"'
+curl "${ADMIN_CURL[@]}" "$BASE_URL/tools/tests/$CALLBACK_ID" | jq -e '.status == "succeeded"'
 ```
 
 Polling an ElevenLabs result performs a read-only conversation lookup; polling never starts or retries an outbound call. The returned `provider`, `providerReference`, and `providerCallSid` identify the external call, and `result.authorizations` retains the hosted agent's answers without applying them to an incident. Reusing an idempotency key with identical normalized input returns the same identifier; changing the tool, mode or engineer under that key returns `409`.
@@ -330,12 +334,13 @@ curl "${CURL[@]}" -X POST "$BASE_URL/demo/pause" | jq .
 
 ```bash
 # Public JSON and HTML. No operator key required.
-curl --silent --show-error --fail-with-body --max-time 15 "$BASE_URL/status/public" | jq .
-curl --silent --show-error --fail-with-body --max-time 15 "$BASE_URL/status"
+curl --silent --show-error --fail-with-body --max-time 15 "$BASE_URL/status/public?runIdentifier=$RUN_ID" | jq .
+curl --silent --show-error --fail-with-body --max-time 15 "$BASE_URL/status?runIdentifier=$RUN_ID"
 
 # A finite observation window. Exit 28 is expected when the stream times out.
 curl --silent --show-error --fail-with-body --no-buffer --max-time 15 \
   --header "Authorization: API ${API_KEY}" \
+  --header "X-Casa-Pepe-Session: $BROWSER_TOKEN" \
   "$BASE_URL/activity/stream?runIdentifier=$RUN_ID&afterSequence=0&limit=500" \
   || { CURL_EXIT=$?; test "$CURL_EXIT" -eq 28; }
 ```

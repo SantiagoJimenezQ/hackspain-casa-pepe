@@ -1,6 +1,9 @@
 import { ActivityService } from "@activity/services/activity.service"
 import { insertEntity, updateEntity } from "@common/database/persistence.helper"
-import { EntityNotFoundException } from "@common/exceptions/domain.exception"
+import {
+	ConcurrentPlanVersionException,
+	EntityNotFoundException,
+} from "@common/exceptions/domain.exception"
 import { nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
 import { Injectable } from "@nestjs/common"
@@ -16,7 +19,7 @@ import {
 	PlanStep,
 	StepUpdate,
 } from "@plans/types/plan.type"
-import { Repository } from "typeorm"
+import { QueryFailedError, Repository } from "typeorm"
 
 const UNIQUE_VIOLATION = "23505"
 

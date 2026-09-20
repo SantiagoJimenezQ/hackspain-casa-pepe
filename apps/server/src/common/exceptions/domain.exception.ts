@@ -55,6 +55,20 @@ export class StaleRunException extends DomainException {
 	}
 }
 
+/**
+ * Two saves raced for the same plan version. The loser's view of the run is one version behind,
+ * so its proposal is stale in exactly the way the caller's own check guards against.
+ */
+export class ConcurrentPlanVersionException extends DomainException {
+	constructor(runIdentifier: string) {
+		super(
+			HttpStatus.CONFLICT,
+			"Concurrent Plan Version",
+			`Another plan version for run ${runIdentifier} was saved first`,
+		)
+	}
+}
+
 export class InvalidSignatureException extends DomainException {
 	constructor() {
 		super(

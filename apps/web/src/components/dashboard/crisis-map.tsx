@@ -6,7 +6,6 @@ import type { Overview } from "@/lib/casa-pepe-types";
 import {
   type Camera,
   type MapView,
-  agentSettled,
   arcPath,
   cameraForView,
   cameraNeedsSnap,
@@ -20,6 +19,7 @@ import {
   mapViewForTools,
   placeMapLabels,
   projectPoint,
+  spreadClusteredMarkers,
   spherePath,
   toolNamesOf,
   worldPath,
@@ -28,6 +28,7 @@ import {
 import { useI18n } from "@/components/i18n/locale-provider";
 
 const FALLBACK_LABEL: MapLabelPlacement = { anchor: "start", x: 12, y: 0 };
+const FALLBACK_OFFSET = { x: 0, y: 0 };
 import { customerView, topologyView, type CustomerAction, type VisualStatus } from "@/lib/live-dashboard";
 
 const COLORS: Record<VisualStatus, string> = { up: "#3ee08f", degraded: "#f5a524", down: "#f04444" };
@@ -211,10 +212,21 @@ function CrisisMapScene({
   const nodes = topologyView(overview);
   const primary = nodes.find((node) => node.role === "primary");
   const impacted = primary?.status === "down" || Boolean(overview.incident.impactedAt);
-  const settled = agentSettled(overview);
+  // The map tracks the incident, not the agent's turn taking. A plan version that finishes while
+  // services are still down used to count as settled, which zoomed the camera back out to the
+  // world and dropped the red ring mid-crisis, only to fly back in on the next plan.
+  const settled = overview.incident.status === "recovered";
   const tools = toolNamesOf(overview.toolCalls);
   const view = mapViewForTools(impacted, tools, settled);
-  const camera = cameraForView(view, projection, width, height, nodes);
+  // Every affected company stays inside the frame while the incident is open.
+  const framedCustomers = useMemo(
+    () =>
+      customerView(overview.incident)
+        .filter((customer) => customer.latitude !== undefined && customer.longitude !== undefined)
+        .map((customer) => ({ latitude: customer.latitude ?? 0, longitude: customer.longitude ?? 0 })),
+    [overview.incident],
+  );
+  const camera = cameraForView(view, projection, width, height, nodes, framedCustomers);
   const { groupRef, markerScale } = useCameraTransform(camera, view);
   const backup = failoverTarget(overview);
   const origin = primary ? projectPoint(projection, primary.longitude, primary.latitude) : null;
@@ -226,14 +238,20 @@ function CrisisMapScene({
   );
   const crisis = impacted && !settled;
   const zoom = markerScale > 0 ? 1 / markerScale : 1;
+  // Screen coordinates: the marker layer counter-scales the camera, so this is what it draws in.
+  const customerPoints = customers.map((customer) => {
+    const [x, y] = projectPoint(projection, customer.longitude ?? 0, customer.latitude ?? 0);
+    return { identifier: customer.identifier, x: x * zoom, y: y * zoom };
+  });
+  const offsets = spreadClusteredMarkers(customerPoints);
   const labels = placeMapLabels([
     ...nodes.map((node) => {
       const [x, y] = projectPoint(projection, node.longitude, node.latitude);
       return { identifier: node.identifier, x: x * zoom, y: y * zoom, lines: 2 };
     }),
-    ...customers.map((customer) => {
-      const [x, y] = projectPoint(projection, customer.longitude ?? 0, customer.latitude ?? 0);
-      return { identifier: customer.identifier, x: x * zoom, y: y * zoom, lines: 1 };
+    ...customerPoints.map((point) => {
+      const offset = offsets.get(point.identifier) ?? FALLBACK_OFFSET;
+      return { identifier: point.identifier, x: point.x + offset.x, y: point.y + offset.y, lines: 1 };
     }),
   ]);
 
@@ -349,9 +367,27 @@ function CrisisMapScene({
             const [x, y] = projectPoint(projection, customer.longitude ?? 0, customer.latitude ?? 0);
             const pulsing = customer.action === "offline" || customer.action === "migrating";
             const label = labels.get(customer.identifier) ?? FALLBACK_LABEL;
+            const offset = offsets.get(customer.identifier) ?? FALLBACK_OFFSET;
+            const displaced = offset.x !== 0 || offset.y !== 0;
             return (
               <g key={customer.identifier} transform={`translate(${x} ${y})`}>
                 <MarkerLayer scale={markerScale}>
+                  {displaced ? (
+                    <>
+                      {/* The marker moved to be readable; this ties it back to where it really is. */}
+                      <line
+                        x1={0}
+                        y1={0}
+                        x2={offset.x}
+                        y2={offset.y}
+                        stroke={COLORS[customer.status]}
+                        strokeWidth={1}
+                        opacity={0.35}
+                      />
+                      <circle r={1.6} fill={COLORS[customer.status]} opacity={0.5} />
+                    </>
+                  ) : null}
+                  <g transform={`translate(${offset.x} ${offset.y})`}>
                   <circle
                     r="14"
                     fill={COLORS[customer.status]}
@@ -376,6 +412,7 @@ function CrisisMapScene({
                       {customer.shortName}
                     </text>
                   ) : null}
+                  </g>
                 </MarkerLayer>
               </g>
             );

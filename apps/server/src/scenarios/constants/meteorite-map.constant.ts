@@ -58,7 +58,7 @@ const SITE_LABELS: Record<
 	},
 	es: {
 		dubai: "Dubái",
-		frankfurt: "Fráncfort",
+		frankfurt: "Frankfurt",
 		muscat: "Mascate LZ",
 		riyadh: "Riad",
 	},
@@ -221,10 +221,7 @@ export function meteoriteResources(
 		},
 		{
 			identifier: "backup-frankfurt",
-			name:
-				language === "es"
-					? "Fráncfort eu-central-1"
-					: "Frankfurt eu-central-1",
+			name: "Frankfurt eu-central-1",
 			note:
 				language === "es"
 					? "Segunda región de respaldo por distancia"

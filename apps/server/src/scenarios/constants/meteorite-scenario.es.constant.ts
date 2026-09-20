@@ -91,7 +91,7 @@ export const METEORITE_SCENARIO_ES: ScenarioDefinition = {
 	],
 	language: "es",
 	narrative:
-		"Un misil ha destruido los centros de datos de AWS Dubái (me-central-1) que alojan la plataforma de reparto. El respaldo más cercano es la Local Zone de Omán, después Riad y Fráncfort.",
+		"Un misil ha destruido los centros de datos de AWS Dubái (me-central-1) que alojan la plataforma de reparto. El respaldo más cercano es la Local Zone de Omán, después Riad y Frankfurt.",
 	region: IMPACT_REGION,
 	resources: meteoriteResources("es"),
 	services: [

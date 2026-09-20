@@ -300,6 +300,63 @@ describe("tool tests HTTP controller", () => {
 		)
 	})
 
+	it("keeps boolean/null permissions and interim phase through HTTP validation", async () => {
+		const body = {
+			...happyRobotCallback("tool-test-call-permissions"),
+			authorizations: {
+				notifyAllClients: { rationale: "Refused", value: false },
+				trafficFailoverAuthorized: {
+					rationale: "Unanswered",
+					value: null,
+				},
+			},
+			phase: "authorization",
+		}
+		const response = await request(
+			baseURL,
+			"/api/tools/tests/callbacks/happyrobot",
+			{
+				auth: false,
+				body,
+				headers: {
+					"x-happyrobot-signature": HAPPYROBOT_WEBHOOK_SECRET,
+				},
+				method: "POST",
+			},
+		)
+		expect(response.status).toBe(202)
+		expect(toolTestsService.completeCall).toHaveBeenCalledWith(body)
+	})
+
+	it("rejects textual permission booleans at the HTTP boundary", async () => {
+		const response = await request(
+			baseURL,
+			"/api/tools/tests/callbacks/happyrobot",
+			{
+				auth: false,
+				body: {
+					...happyRobotCallback("tool-test-bad-permissions"),
+					authorizations: {
+						notifyAllClients: {
+							rationale: "Not a JSON boolean",
+							value: "false",
+						},
+						trafficFailoverAuthorized: {
+							rationale: "Unknown",
+							value: null,
+						},
+					},
+				},
+				headers: {
+					"x-happyrobot-signature": HAPPYROBOT_WEBHOOK_SECRET,
+				},
+				method: "POST",
+			},
+		)
+		expect(response.status).toBe(400)
+		expect(toolTestsService.completeCall).not.toHaveBeenCalled()
+	})
+
 	it("rejects a callback with a missing or wrong secret even when no operator key is supplied", async () => {
 		const callback = await request<unknown>(
 			baseURL,

@@ -47,3 +47,15 @@ export interface OutboundCallReferences {
   /** Provider selected for this call, when known. */
   readonly provider?: EngineerCallProvider
 }
+
+/** Result posted by a HappyRobot workflow. Permissions are evidence, not plan approval. */
+export interface HappyRobotCallCallback {
+  /** Authorization phase records evidence while the phone call remains pending. */
+  readonly phase?: 'authorization' | 'completed'
+  readonly callIdentifier: string
+  readonly outcome: 'completed' | 'failed' | 'no-answer'
+  readonly summary?: string
+  readonly transcript?: string
+  readonly authorizations?: EngineerCallAuthorizations
+  readonly answers?: ReadonlyArray<{ readonly key: string; readonly answer: string; readonly confirmed?: boolean }>
+}

@@ -18,6 +18,7 @@ import { firstValueFrom } from "rxjs"
 @Injectable()
 export class HappyRobotEngineerCallAdapter implements EngineerCallAdapter {
 	readonly mode: EngineerCallMode = "live"
+	readonly provider = "happyrobot" as const
 
 	private readonly logger = new Logger(HappyRobotEngineerCallAdapter.name)
 
@@ -44,29 +45,64 @@ export class HappyRobotEngineerCallAdapter implements EngineerCallAdapter {
 			)
 			.join("\n")
 		const payload = {
-			affected_services: HAPPYROBOT_DEFAULT_AFFECTED_SERVICES,
+			affected_services:
+				request.incidentContext.servicesDown.join(", ") ||
+				HAPPYROBOT_DEFAULT_AFFECTED_SERVICES,
 			ask_about: askAbout,
 			call_identifier: request.call.identifier,
 			callback_url: request.callbackURL,
+			contact_name: request.call.engineer.name,
 			engineer_name: request.call.engineer.name,
 			engineer_phone: request.call.engineer.phone,
+			incident_description:
+				request.incidentContext.incidentDescription ||
+				request.call.purpose,
 			incident_id: request.call.incidentIdentifier,
 			incident_summary: request.call.purpose,
+			outage_time: formatOutageTime(
+				request.incidentContext.outageStartedAt,
+			),
+			phone_number: request.call.engineer.phone,
+			services_down: request.incidentContext.servicesDown.join(", "),
 			severity: HAPPYROBOT_DEFAULT_SEVERITY,
 		}
 		try {
-			await firstValueFrom(
-				this.httpService.post<unknown>(triggerURL, payload, {
-					headers: {
-						Authorization: `Bearer ${apiKey}`,
-						"Content-Type": "application/json",
+			const pathname = new URL(triggerURL).pathname
+			const isWebhook = pathname.startsWith("/hooks/")
+			const isV2 = /\/api\/v2\/workflows\/[^/]+\/runs\/?$/u.test(pathname)
+			const response = await firstValueFrom(
+				this.httpService.post<{ run_id?: string }>(
+					triggerURL,
+					isV2 ? { payload } : payload,
+					{
+						headers: {
+							...(isWebhook
+								? { "x-api-key": apiKey }
+								: { Authorization: `Bearer ${apiKey}` }),
+							"Content-Type": "application/json",
+						},
+						timeout:
+							this.configuration.agent.toolTimeoutMilliseconds,
 					},
-					timeout: this.configuration.agent.toolTimeoutMilliseconds,
-				}),
+				),
 			)
+			const runId = response.data?.run_id
+			if (
+				(isV2 || isWebhook) &&
+				(typeof runId !== "string" || !runId.trim())
+			) {
+				return {
+					kind: "failed",
+					reason: "HappyRobot did not return a run ID; check the provider before retrying",
+				}
+			}
 			return {
 				kind: "accepted",
-				providerReference: request.call.identifier,
+				provider: "happyrobot",
+				providerReference:
+					typeof runId === "string" && runId.trim()
+						? runId
+						: request.call.identifier,
 			}
 		} catch {
 			const reason =
@@ -78,4 +114,11 @@ export class HappyRobotEngineerCallAdapter implements EngineerCallAdapter {
 			return { kind: "failed", reason }
 		}
 	}
+}
+
+function formatOutageTime(timestamp: string | undefined): string {
+	if (!timestamp || !/(?:Z|[+-]\d{2}:\d{2})$/i.test(timestamp)) return ""
+	const date = new Date(timestamp)
+	if (Number.isNaN(date.getTime())) return ""
+	return `${date.toISOString().slice(11, 16)} UTC`
 }

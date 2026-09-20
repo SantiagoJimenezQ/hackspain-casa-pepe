@@ -222,7 +222,12 @@ export function createApplicationConfiguration(
 			provider: variables.ENGINEER_CALL_PROVIDER as EngineerCallProvider,
 		},
 		happyRobot: {
-			apiKey: variables.HAPPYROBOT_API_KEY,
+			apiKey:
+				(variables.HAPPYROBOT_TRIGGER_URL.includes("/hooks/")
+					? variables.HAPPY_ROBOT_API_KEY_WEBHOOK
+					: "") ||
+				variables.HAPPYROBOT_API_KEY ||
+				variables.HAPPY_ROBOT_API_KEY,
 			mode: variables.HAPPYROBOT_MODE as EngineerCallMode,
 			simulatedCallDelayMilliseconds:
 				variables.SIMULATED_CALL_DELAY_MILLISECONDS,

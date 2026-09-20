@@ -1,5 +1,6 @@
 "use client";
 
+import { PlanComparison } from "@/components/dashboard/plan-comparison";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { GitBranch } from "lucide-react";
@@ -546,6 +547,7 @@ export function AgentPanel() {
         </Button>
       </div>
       {treeOpen ? <DecisionTreeView onClose={() => setTreeOpen(false)} /> : null}
+      {overview.planComparison ? <PlanComparison comparison={overview.planComparison} /> : null}
       {plan ? (
         <div className="shrink-0 border-b border-border/60 px-4 pb-3">
           <PlanTodosCard plan={plan} streaming={planStreaming} settled={runSettled} />

@@ -1,4 +1,4 @@
-import type { LearningInsight, LlmHistoryPage, Overview, RunReport } from "@/lib/casa-pepe-types";
+import type { CapacityChangeRequest, DeliveryProbeResult, LearningInsight, LlmHistoryPage, Overview, RunReport } from "@/lib/casa-pepe-types";
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n";
 
 export class CasaPepeClientError extends Error {
@@ -79,6 +79,8 @@ export const casaPepeClient = {
       JSON.stringify({ language: locale }),
     ),
   impact: () => request(withRun("/api/casa-pepe/demo/impact"), { method: "POST" }),
+  changeCapacity: (input: CapacityChangeRequest) => request("/api/casa-pepe/demo/capacity", { method: "POST", body: JSON.stringify(input) }),
+  probeDelivery: (runIdentifier: string) => request<DeliveryProbeResult>("/api/casa-pepe/recovery/probe", { method: "POST", body: JSON.stringify({ runIdentifier }) }),
   twist: () => request(withRun("/api/casa-pepe/demo/twist"), { method: "POST" }),
   reset: () => startRun(withRun("/api/casa-pepe/demo/reset")),
   runCycle: () =>

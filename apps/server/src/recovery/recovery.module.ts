@@ -8,12 +8,13 @@ import { HTTPRecoveryAdapter } from "@recovery/adapters/http-recovery.adapter"
 import { SimulatedRecoveryAdapter } from "@recovery/adapters/simulated-recovery.adapter"
 import { RECOVERY_ADAPTER } from "@recovery/constants/recovery.constant"
 import { RecoveryController } from "@recovery/controllers/recovery.controller"
+import { RecoveryProbeController } from "@recovery/controllers/recovery-probe.controller"
 import { RecoveryActionEntity } from "@recovery/entities/recovery-action.entity"
 import { RecoveryService } from "@recovery/services/recovery.service"
 import { RecoveryAdapter } from "@recovery/types/recovery.type"
 
 @Module({
-	controllers: [RecoveryController],
+	controllers: [RecoveryController, RecoveryProbeController],
 	exports: [RecoveryService],
 	imports: [
 		TypeOrmModule.forFeature([RecoveryActionEntity]),

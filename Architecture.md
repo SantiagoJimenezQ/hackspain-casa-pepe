@@ -1,75 +1,41 @@
 # Casa Pepe architecture
 
-The Next.js operator dashboard calls the NestJS API through server-side authenticated routes. NestJS owns incident state, planning, approvals and external tool adapters; PostgreSQL stores runs and their audit trail. Provider credentials remain in the backend. See [MASTER.md](MASTER.md) and the [backend README](apps/server/README.md) for the broader system.
+## Runtime and integration boundaries
 
-## Inbound company priority calls
+The Next.js dashboard (`apps/web`) uses server-side proxy routes to call the authenticated NestJS API (`apps/server`). NestJS owns incident state, resource allocations, versioned plans, approvals, tool adapters and the activity history. TypeORM persists these records in PostgreSQL. SSE events prompt the dashboard to reconcile with `/overview`. The browser never receives provider credentials or the backend API key.
 
-The dashboard shows each incident's six-digit `callCode` next to the inbound phone number from `HAPPYROBOT_INBOUND_PHONE_NUMBER`. HappyRobot answers first and asks the caller for this code. Its `vincular_incidente` tool posts the exact supplied code and the provider conversation identifier to `/api/webhooks/happyrobot/initiation`. `CompanyCallsModule` resolves the code (or a full incident/run ID), validates an active, unresolved, non-replay run and returns its canonical IDs and an opaque session reference. Unknown IDs can be corrected before binding; an existing conversation cannot switch incidents. There is no automatic selection or server-selected default run.
+## Demo controls and recovery evidence
 
-The submission tool repeats initiation with the same conversation and incident before using the returned session reference. This is an idempotent binding check, so the voice model never handles session credentials and a mismatched incident cannot redirect an outcome. HappyRobot's HTTP bodies use field tokens with `#` paths rather than interpolating a whole object.
+### Targeted capacity changes
 
-After collecting the caller's request, HappyRobot posts the reference and a versioned `priority-request` outcome to `/api/webhooks/happyrobot/call-outcomes`. Both endpoints require the dedicated `x-casa-pepe-webhook-secret` header, configured with `CASA_PEPE_INBOUND_WEBHOOK_SECRET`. This is separate from HappyRobot's API key and outbound callback secret.
+`CapacityControls` sends `POST /api/casa-pepe/demo/capacity` with an explicit run identifier, resource identifier, total usable capacity and reason. The proxy forwards this to `POST /api/demo/capacity`. NestJS validates the DTO and current run, resolves the named resource, and rejects an unknown resource, replay/inactive run, blank reason, non-integer capacity or a total below already allocated units.
 
-The server transaction locks the session and incident, persists the normalized outcome, appends an activity record and marks reassessment pending. Identical retries return the original receipt; conflicting retries are rejected. Exact full-name or short-name matches resolve a company; unknown or ambiguous names remain evidence requiring clarification. Requests cannot change capacity or grant approval.
+The change uses the existing `capacity-limited` harness event. Before persistence, the server adds the exact resource identifier and previous capacity. Legacy twist/incoming-report events without a resource identifier still target the active backup. The incident resource ledger and topology update, the existing resource-selection policy selects an eligible backup, and the normal incident event wakes the agent. Learning records the named resource rather than inferring it from a coincidentally equal capacity value.
 
-After commit, an event asks `AgentService` to reassess the owning run. Every LLM observation includes the persisted company requests, so a new request changes the evidence fingerprint used to reject stale decisions. Existing dependency, resource and approval checks still gate actions. `GET /api/call-outcomes?runIdentifier=...` provides evidence authenticated by both operator API key and the owning browser session without exposing session references.
+The control changes the simulated environment, not the agent's plan directly. The model still chooses and explains a revised plan. The existing plan validation and approval invalidation remain in force. Capacity means total usable units, including allocations; reducing below committed allocations is intentionally rejected instead of silently discarding completed work. For the 4-to-1 demo, introduce the change before the initial allocation executes.
 
-## Persistence and deployment
+### Persisted plan comparison
 
-`company_call_sessions` lives in the backend-only `casa_pepe_private` schema. During an explicit upgrade with `BROWSER_SESSION_SCHEMA_UPGRADE=true`, TypeORM migrations create that schema and a non-cycling sequence before entity synchronization creates tables/columns; the database role needs schema-creation permissions. Do not add this schema to Supabase's exposed Data API schemas. The new incident `callCode` column has a sequence-backed database default and a unique index. Adding it backfills existing incidents; new incidents and replays receive new numbers. Six-digit codes accept a space or hyphen between the two groups of three. Codes are lookup references, never authorization. The sequence fails at exhaustion rather than recycling an old code. Rollbacks must preserve the sequence and issued codes; disable destructive entity synchronization when reverting to an older application schema.
+`GET /api/overview` includes `planComparison`, built from the latest stored plan, its `previousPlanIdentifier`, incident harness events and persisted superseded approvals. It contains both resource allocations, service priorities/reasons/dependencies, execution steps/reasons, the triggering explanation, capacity changes in the interval and invalidation reasons. It does not expose private model reasoning.
 
-Conversation binding uses PostgreSQL transaction-scoped advisory locks. Receipt, audit and pending work are committed together. Activity sequence reservation coordinates with existing writers in one process; the application's existing sequence cache and coordinator still assume one active process and do not provide distributed ordering.
+This snapshot allows a refreshed browser to show the same comparison without reconstructing history from a truncated SSE backlog. Initial plans have `previous: null`; revisions compare the immediately preceding version. The selected plan's capacity can differ from the changed datacenter's capacity: for example, Omán falls from four to one while the revised plan uses twelve units in Baréin. These are displayed separately.
 
-A ten-second interval retries pending reassessments, with a sixty-second claim lease to reduce duplicate work. Completed cycles mark the request observed; failed or skipped cycles remain pending, and reset/recovered runs become stale. Observation is not a promise that the requested priority was approved or executed.
+### Manual delivery proof
 
-The pending obligation survives restarts, but its dispatcher runs inside NestJS. Vercel can suspend the process after responding: unattended progress requires a continuously running backend or a durable external worker. This change does not introduce a distributed job runner. The deployment, provider workflow publication and an actual inbound phone rehearsal remain separate verification steps.
+`DeliveryProbe` calls the server proxy at `POST /api/casa-pepe/recovery/probe`, forwarding an explicit run identifier to the authenticated backend. `RecoveryProbeController` permits only active, non-replay, manual scenarios with `RECOVERY_MODE=http`. It reuses the HTTP adapter's functional route-assignment verification, which submits a synthetic delivery to `/deliveries` on the configured demo recovery environment.
 
-See [the inbound API guide](apps/server/docs/HAPPYROBOT-INBOUND.md) for payloads, errors and setup.
+Success requires a matching run and delivery identifier, `status: assigned` and a non-empty route identifier. The frontend receives the structured identifiers, timestamp, mode and verdict. Failed checks remain failures; simulated mode never produces an HTTP success. The controller checks the run again after the external request so a reset cannot publish a late result as current evidence.
 
-## Runtime and deployment
+Each result is recorded as `recovery.probed`; `/overview` returns the two most recent persisted results as `deliveryProbes`. The manual probe does not alter service health, complete a recovery action or resolve the incident. It is evidence of one operation in the demo application, not AWS provisioning or full production recovery.
 
-The Next.js dashboard proxies JSON and server-sent events to the NestJS backend with a server-only API key. NestJS owns incident simulation, agent cycles, plans, approvals, tool adapters and audit records. TypeORM persists snapshots and related records in Supabase PostgreSQL. Browser code never connects directly to the database or receives integration credentials.
+## Deployment and tradeoffs
 
-Run **one continuously running NestJS process** for concurrent anonymous demos. Its scheduler already enumerates active runs, and per-run cycle state serializes agent work within that process. Next.js can remain on Vercel. This change does not add distributed leases, durable jobs or cross-instance SSE delivery; several Vercel backend instances sharing a database are not a reliable coordinator deployment. The database lock described below protects run replacement, not all external effects.
+No new provider, secret or database table is required. The backend and frontend must be deployed together for the new controls. Existing deployments without the additive overview fields simply omit the comparison/probe history in the new UI.
 
-## Anonymous browser ownership
+For HTTP proof, run `demo/recovery-environment/server.mjs` and configure `RECOVERY_MODE=http`, `RECOVERY_ENVIRONMENT_URL` and `RECOVERY_ENVIRONMENT_API_KEY` server-side. The URL must be reachable from the NestJS process. The bundled target binds to loopback and keeps state in memory: use a same-host local rehearsal or arrange authenticated reachability for a deployed API. Its state is scoped to each run and disappears on restart.
 
-On the first document request, the Next.js proxy creates a cryptographically random 32-byte token in an HttpOnly, SameSite=Lax cookie (Secure over HTTPS). The cookie lasts 30 days. API requests without a cookie fail rather than creating competing identities. Refreshing or opening another tab in the same browser profile shares the cookie; another profile/private session/device receives another token. Clearing cookies loses access to that browser's history; there is no account recovery or sharing mechanism.
+The shared operator API key and Next.js proxy retain the repository's existing access model; they do not introduce individual operator accounts. Coordinator scheduling and SSE remain process-local. These changes extend the current prototype rather than introducing a distributed coordination or transactional resource-allocation redesign.
 
-Next.js reads the cookie on the server and forwards `X-Casa-Pepe-Session` together with its API key. It replaces any supplied session header and rejects cross-origin mutations. The backend hashes the token with SHA-256 and uses the digest as `browserSessionId`. The token is a bearer capability; it is not returned in incident payloads or stored in the database.
+## Shared contracts and validation
 
-A global guard checks the API key, session shape, explicit run identifiers, and ownership of record-by-ID routes before controllers run or SSE headers open. A request-scoped AsyncLocalStorage context carries the session through the existing singleton services without making the agent request-scoped. RunsService scopes current-run lookup, history, and explicit run access. Background ticks and signed callbacks continue to use explicit run IDs; learning derives its owner from that persisted run rather than an ambient browser request.
-
-## State and concurrency
-
-`incidents.browserSessionId` owns the run. Plans, tasks, approvals, calls, activity and tool executions retain their existing run identifiers, through which HTTP access is authorized. Learning has its own session column because it intentionally spans multiple runs of the same browser. Its unique key includes session, scenario, insight kind and subject.
-
-Starting or resetting a browser's run takes a transaction-scoped PostgreSQL advisory lock for that session, retires its previous active run, and inserts its replacement in the same transaction. A partial unique index provides an additional one-active-run-per-browser constraint. Other browsers remain active. Post-commit deactivation events clear the old run's in-process cycle state; existing stale-run checks reject late integration results.
-
-SSE always filters backlog and live events to the authorized run, including when callers omit a run query. The dashboard asks for its cookie-scoped current run, ignores old localStorage run identities, reconciles every five seconds while visible, and reconnects when the run changes. This lets another tab observe a reset without broadcasting other runs into its old stream. Replay progress is held per session; playback remains process-local.
-
-## Integration boundaries
-
-Signed voice/recovery callbacks resolve persisted call/action/run identifiers and do not need a browser cookie. Incoming phone reports already require an explicit run identifier. Uncorrelated inbound email is stored as `unassigned`, never attached to whichever browser ran most recently. Deliberately published customer-safe status is available only with an explicit `runIdentifier`; the bare public status endpoint returns no publication.
-
-The included HTTP recovery target already namespaces recovery and verification by run. Custom targets must honor the same contract. Live email and phone adapters still use deployment-configured contacts and provider budgets: independent incident state does not create separate phone numbers, recipients or provider accounts.
-
-Standalone tool checks, model diagnostics, and webhook subscription/delivery administration remain API-key-only administrator endpoints. Browser sessions are rejected there. Administrator-configured outbound subscriptions deliberately receive deployment-wide events; they are not available for anonymous visitors to configure.
-
-## Migration and tradeoffs
-
-With `BROWSER_SESSION_SCHEMA_UPGRADE=true`, the startup TypeORM migration adds ownership columns, labels existing records `legacy`, retires historical active runs, and replaces the global learning uniqueness rule. Historical data remains in the database but is not claimable through a browser token. On an empty database, the same explicit flag enables TypeORM synchronization to create the schema from the updated entities. Both migration execution and synchronization are disabled by default, so PR previews cannot alter the shared schema. The migration is recorded and is not a destructive cleanup. Automatic rollback is intentionally refused because removing ownership would merge private histories.
-
-Back up the database and stop the previous backend. Start exactly one upgraded backend with `BROWSER_SESSION_SCHEMA_UPGRADE=true`, verify its health and owned runs, then unset the flag (or set it to false) and restart. Deploy the matching frontend. Do not enable the upgrade flag in preview environments connected to shared Supabase. Mixed old/new servers must not run against the upgraded schema: the old application still has global selection and prototype schema synchronization enabled. No migration is applied to shared Supabase merely by running the unit tests.
-
-This intentionally small design avoids accounts, a workspace table and a queue service. Browser possession provides isolation, not individual user authentication or protection against abuse of a publicly accessible paid demo. Deployment access controls and provider budgets remain operational concerns. Durable scheduling, shared browser workspaces, automatic history cleanup and multi-process coordination are deferred.
-
-## Verification
-
-`pnpm ci` runs the normal frontend/backend checks. The opt-in PostgreSQL suites exercise real HTTP ownership checks, concurrent start/reset, foreign record rejection, learning isolation, streams, signed callbacks and legacy schema migration:
-
-```sh
-BROWSER_SESSION_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:5432/browser_session_test pnpm --filter @casa-pepe/server test --runInBand browser-session
-```
-
-Use a dedicated disposable local database whose name includes `test`; the suite refuses remote hosts. No model or provider request is made. These checks establish application and database isolation, not live provider delivery or production hosting reliability.
+`packages/contracts/demo-controls.d.ts` is shared by the backend response types and frontend. `incident.d.ts` describes the enriched capacity event. Automated coverage checks DTO validation, selected-resource/run isolation, preservation of allocated capacity, replanning/approval invalidation, overview comparison data, HTTP probe results and reset handling, server proxy forwarding, and frontend interaction/error states. Live voice/provider validation is separate.

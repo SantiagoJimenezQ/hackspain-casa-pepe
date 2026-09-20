@@ -1,6 +1,7 @@
 import { ActivityModule } from "@activity/activity.module"
 import { ActivityEventEntity } from "@activity/entities/activity-event.entity"
 import { AgentModule } from "@agent/agent.module"
+import { OverviewController } from "@agent/controllers/overview.controller"
 import { LlmClientService } from "@agent/llm/llm-client.service"
 import { ApprovalsModule } from "@approvals/approvals.module"
 import { ApprovalEntity } from "@approvals/entities/approval.entity"
@@ -9,6 +10,7 @@ import { CommonModule } from "@common/common.module"
 import { EngineersModule } from "@engineers/engineers.module"
 import { EngineerCallEntity } from "@engineers/entities/engineer-call.entity"
 import { IncomingCallEntity } from "@engineers/entities/incoming-call.entity"
+import { DemoController } from "@incidents/controllers/demo.controller"
 import { IncidentEntity } from "@incidents/entities/incident.entity"
 import { IncidentsModule } from "@incidents/incidents.module"
 import { IncidentsService } from "@incidents/services/incidents.service"
@@ -209,7 +211,12 @@ describe("agent flow (integration with in-memory repositories)", () => {
 		expect(firstApprovals[0].planVersion).toBe(2)
 		expect((await tasksService.list(runIdentifier)).length).toBe(2)
 
-		await incidentsService.applyScenarioTwist()
+		await application.get(DemoController).changeCapacity({
+			reason: "Solo queda una unidad en Omán",
+			resourceIdentifier: "backup-oman",
+			runIdentifier,
+			totalCapacity: 1,
+		})
 		const planTwo = await waitForPlanVersion(runIdentifier, 3)
 		expect(planTwo.capacity.resourceIdentifier).toBe("backup-bahrain")
 		expect(planTwo.capacity.totalCapacity).toBe(12)
@@ -238,6 +245,40 @@ describe("agent flow (integration with in-memory repositories)", () => {
 			firstApprovals[0].identifier,
 		)
 		expect(supersededApproval.status).toBe("superseded")
+		const overview = await application
+			.get(OverviewController)
+			.overview({ runIdentifier })
+		expect(overview.planComparison).toMatchObject({
+			capacityChanges: [
+				expect.objectContaining({
+					previousCapacity: 4,
+					reason: "Solo queda una unidad en Omán",
+					resourceIdentifier: "backup-oman",
+					totalCapacity: 1,
+				}),
+			],
+			current: {
+				identifier: planTwo.identifier,
+				reason: planTwo.reason,
+				totalCapacity: 12,
+			},
+			previous: { identifier: planOne.identifier, totalCapacity: 4 },
+			supersededApprovals: [
+				expect.objectContaining({
+					identifier: supersededApproval.identifier,
+					reason: supersededApproval.invalidationReason,
+				}),
+			],
+		})
+		expect(overview.planComparison?.current.priorities).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					blockedBy: expect.any(Array),
+					reason: expect.any(String),
+				}),
+			]),
+		)
+
 		const [pendingApproval] = await approvalsService.list(
 			runIdentifier,
 			"pending",

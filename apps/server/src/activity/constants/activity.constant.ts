@@ -33,6 +33,7 @@ export const ACTIVITY_EVENT_TYPES = [
 	"engineer-call.authorized",
 	"recovery.executed",
 	"recovery.verified",
+	"recovery.probed",
 	"services.checked",
 	"simulation.advanced",
 	"agent.cycle-finished",

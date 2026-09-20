@@ -9,6 +9,7 @@ import { RunsService } from "@incidents/services/runs.service"
 import { Controller, Get, Query } from "@nestjs/common"
 import { ApiOperation, ApiSecurity, ApiTags } from "@nestjs/swagger"
 import { RunScopedQueryDTO } from "@plans/dtos/list-plans.dto"
+import { comparePlans } from "@plans/helpers/plan-comparison.helper"
 import { PlansService } from "@plans/services/plans.service"
 import { TasksService } from "@tasks/services/tasks.service"
 import { ToolRegistryService } from "@tools/services/tool-registry.service"
@@ -43,16 +44,17 @@ export class OverviewController {
 		const [
 			incident,
 			latestPlan,
-			pendingApprovals,
+			approvals,
 			tasks,
 			engineerCalls,
 			toolCalls,
 			activity,
 			agent,
+			deliveryProbes,
 		] = await Promise.all([
 			this.runsService.getByRunIdentifier(runIdentifier),
 			this.plansService.findLatestPlan(runIdentifier),
-			this.approvalsService.list(runIdentifier, "pending"),
+			this.approvalsService.list(runIdentifier),
 			this.tasksService.list(runIdentifier),
 			this.engineersService.list(runIdentifier),
 			this.toolsService.list(runIdentifier),
@@ -64,20 +66,32 @@ export class OverviewController {
 				types: [],
 			}),
 			this.agentService.getStatus(runIdentifier),
+			this.activityService.deliveryProbes(runIdentifier),
 		])
+		const previousPlan = latestPlan?.previousPlanIdentifier
+			? await this.plansService.getByIdentifier(
+					latestPlan.previousPlanIdentifier,
+				)
+			: null
 		const plan: OverviewPlan = latestPlan
 			? { kind: "plan", plan: latestPlan }
 			: { kind: "none" }
 		return {
 			agent,
+			deliveryProbes,
 			engineerCalls,
 			inboundCall: {
 				phoneNumber:
 					this.configuration.happyRobot.inboundPhoneNumber ?? "",
 			},
 			incident,
-			pendingApprovals,
+			pendingApprovals: approvals.filter(
+				(approval) => approval.status === "pending",
+			),
 			plan,
+			planComparison: latestPlan
+				? comparePlans(incident, latestPlan, previousPlan, approvals)
+				: null,
 			recentActivity: activity.items,
 			tasks,
 			toolCalls,

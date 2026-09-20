@@ -165,9 +165,12 @@ export class AgentService {
 				const scenario = this.scenarioOf(incident)
 				const availableCapacity = applied.event.availableCapacity
 				const limited =
-					incident.resources.find(
-						(resource) =>
-							resource.totalCapacity === availableCapacity,
+					incident.resources.find((resource) =>
+						applied.event.type === "capacity-limited" &&
+						applied.event.resourceIdentifier
+							? resource.identifier ===
+								applied.event.resourceIdentifier
+							: resource.totalCapacity === availableCapacity,
 					) ?? incident.resources[0]
 				const definition =
 					scenario.resources.find(

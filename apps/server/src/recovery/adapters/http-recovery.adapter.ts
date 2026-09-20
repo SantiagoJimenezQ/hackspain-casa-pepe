@@ -134,6 +134,13 @@ export class HTTPRecoveryAdapter implements RecoveryAdapter {
 						? `Test delivery ${deliveryIdentifier} assigned to route ${result.routeIdentifier}`
 						: "Test delivery did not receive a valid route assignment",
 					mode: "http",
+					...(valid
+						? {
+								deliveryIdentifier,
+								routeIdentifier:
+									result.routeIdentifier as string,
+							}
+						: {}),
 					serviceIdentifier,
 					status: valid ? "healthy" : "down",
 					verified: !!valid,

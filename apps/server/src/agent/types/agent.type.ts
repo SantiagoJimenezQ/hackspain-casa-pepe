@@ -23,6 +23,10 @@ import {
 } from "@scenarios/types/scenario.type"
 import { TaskRecord } from "@tasks/types/task.type"
 import { ToolCallRecord, ToolDefinitionView } from "@tools/types/tool.type"
+import type {
+	DeliveryProbeResult,
+	PlanComparison,
+} from "../../../../../packages/contracts/demo-controls"
 
 export type AgentTriggerKind = (typeof AGENT_TRIGGER_KINDS)[number]
 
@@ -117,6 +121,8 @@ export type OverviewPlan =
 export interface Overview {
 	readonly inboundCall?: { readonly phoneNumber: string }
 	readonly incident: IncidentSnapshot
+	readonly deliveryProbes: ReadonlyArray<DeliveryProbeResult>
+	readonly planComparison: PlanComparison | null
 	readonly plan: OverviewPlan
 	readonly pendingApprovals: ReadonlyArray<ApprovalRecord>
 	readonly tasks: ReadonlyArray<TaskRecord>

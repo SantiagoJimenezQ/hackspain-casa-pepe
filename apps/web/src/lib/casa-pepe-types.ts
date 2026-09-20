@@ -1,3 +1,5 @@
+import type { DeliveryProbeResult, PlanComparison } from "../../../../packages/contracts/demo-controls";
+export type { CapacityChangeRequest, DeliveryProbeResult, PlanComparison, PlanComparisonSnapshot } from "../../../../packages/contracts/demo-controls";
 import type { Locale } from "@/lib/i18n";
 
 export type ServiceHealth = "healthy" | "degraded" | "down" | "recovering";
@@ -54,8 +56,8 @@ export type Service = {
 };
 
 export type Incident = {
-  callCode?: string;
-  runKind?: string;
+  runKind?: "live" | "replay";
+  simulation?: { mode: "manual" | "randomized" };
   runIdentifier: string;
   title: string;
   company: string;
@@ -235,7 +237,8 @@ export type RunReport = {
 };
 
 export type Overview = {
-  inboundCall?: { phoneNumber: string };
+  deliveryProbes?: readonly DeliveryProbeResult[];
+  planComparison?: PlanComparison | null;
   incident: Incident;
   plan: { kind: "none" } | { kind: "plan"; plan: Plan };
   pendingApprovals: Approval[];
@@ -244,6 +247,7 @@ export type Overview = {
   toolCalls: ToolCall[];
   recentActivity: ActivityRecord[];
   agent: {
+    recoveryMode?: "simulated" | "http";
     engine?: "llm";
     model?: string;
     /** Language the run is written in; the interface follows it so nothing appears half translated. */

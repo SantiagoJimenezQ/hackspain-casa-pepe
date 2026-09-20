@@ -1,5 +1,6 @@
 "use client";
 
+import { CapacityControls } from "@/components/dashboard/capacity-controls";
 import Image from "next/image";
 import { InboundCallDetails } from "@/components/dashboard/inbound-call-details";
 import { useEffect, useState } from "react";
@@ -80,6 +81,7 @@ export function TopBar() {
 
         <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
           <div className="flex items-center gap-1 rounded-xl border border-border bg-muted/30 p-1">
+            <CapacityControls />
             <Button
               size="sm"
               variant={impacted || recovered ? "outline" : "default"}

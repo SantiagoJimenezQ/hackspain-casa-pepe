@@ -1,4 +1,5 @@
 import { AdvanceSimulationDTO } from "@incidents/dtos/advance-simulation.dto"
+import { ChangeCapacityDTO } from "@incidents/dtos/change-capacity.dto"
 import {
 	InjectHarnessEventDTO,
 	toHarnessEvent,
@@ -98,6 +99,25 @@ export class DemoController {
 	})
 	twist(@Query() query: RunScopedQueryDTO): Promise<IncidentSnapshot> {
 		return this.incidentsService.applyScenarioTwist(query.runIdentifier)
+	}
+
+	@Post("capacity")
+	@HttpCode(HttpStatus.OK)
+	@ApiOperation({
+		summary:
+			"Change total usable capacity for a specific datacenter in an explicit run",
+	})
+	changeCapacity(@Body() body: ChangeCapacityDTO): Promise<IncidentSnapshot> {
+		return this.incidentsService.applyHarnessEvent(
+			{
+				availableCapacity: body.totalCapacity,
+				reason: body.reason,
+				resourceIdentifier: body.resourceIdentifier,
+				type: "capacity-limited",
+			},
+			"Demo controls",
+			body.runIdentifier,
+		)
 	}
 
 	@Post("events")

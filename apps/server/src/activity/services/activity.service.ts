@@ -14,6 +14,7 @@ import { Injectable } from "@nestjs/common"
 import { EventEmitter2, OnEvent } from "@nestjs/event-emitter"
 import { InjectRepository } from "@nestjs/typeorm"
 import { FindOptionsWhere, In, LessThan, MoreThan, Repository } from "typeorm"
+import type { DeliveryProbeResult } from "../../../../../packages/contracts/demo-controls"
 
 interface ReplayRecordInput extends RecordActivityInput {
 	readonly replayOfEventIdentifier: string
@@ -79,6 +80,19 @@ export class ActivityService {
 			offset: query.offset,
 			total,
 		}
+	}
+
+	async deliveryProbes(
+		runIdentifier: string,
+	): Promise<ReadonlyArray<DeliveryProbeResult>> {
+		const rows = await this.repository.find({
+			order: { sequence: "DESC" },
+			take: 2,
+			where: { runIdentifier, type: "recovery.probed" },
+		})
+		return rows
+			.reverse()
+			.map((row) => row.payload.probe as DeliveryProbeResult)
 	}
 
 	async llmHistory(

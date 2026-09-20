@@ -6,7 +6,6 @@ import type { Overview } from "@/lib/casa-pepe-types";
 import {
   type Camera,
   type MapView,
-  agentSettled,
   arcPath,
   cameraForView,
   cameraNeedsSnap,
@@ -18,11 +17,18 @@ import {
   linkFill,
   linkFillDuration,
   mapViewForTools,
+  placeMapLabels,
   projectPoint,
+  spreadClusteredMarkers,
   spherePath,
   toolNamesOf,
   worldPath,
+  type MapLabelPlacement,
 } from "@/lib/crisis-map";
+import { useI18n } from "@/components/i18n/locale-provider";
+
+const FALLBACK_LABEL: MapLabelPlacement = { anchor: "start", x: 12, y: 0 };
+const FALLBACK_OFFSET = { x: 0, y: 0 };
 import { customerView, topologyView, type CustomerAction, type VisualStatus } from "@/lib/live-dashboard";
 
 const COLORS: Record<VisualStatus, string> = { up: "#3ee08f", degraded: "#f5a524", down: "#f04444" };
@@ -198,6 +204,7 @@ function CrisisMapScene({
   size: { width: number; height: number };
 }) {
   const { width, height } = size;
+  const { t } = useI18n();
   const { projection, land, sphere } = useMemo(() => {
     const next = fitWorldProjection(width, height);
     return { projection: next, land: worldPath(next), sphere: spherePath(next) };
@@ -205,10 +212,21 @@ function CrisisMapScene({
   const nodes = topologyView(overview);
   const primary = nodes.find((node) => node.role === "primary");
   const impacted = primary?.status === "down" || Boolean(overview.incident.impactedAt);
-  const settled = agentSettled(overview);
+  // The map tracks the incident, not the agent's turn taking. A plan version that finishes while
+  // services are still down used to count as settled, which zoomed the camera back out to the
+  // world and dropped the red ring mid-crisis, only to fly back in on the next plan.
+  const settled = overview.incident.status === "recovered";
   const tools = toolNamesOf(overview.toolCalls);
   const view = mapViewForTools(impacted, tools, settled);
-  const camera = cameraForView(view, projection, width, height, nodes);
+  // Every affected company stays inside the frame while the incident is open.
+  const framedCustomers = useMemo(
+    () =>
+      customerView(overview.incident)
+        .filter((customer) => customer.latitude !== undefined && customer.longitude !== undefined)
+        .map((customer) => ({ latitude: customer.latitude ?? 0, longitude: customer.longitude ?? 0 })),
+    [overview.incident],
+  );
+  const camera = cameraForView(view, projection, width, height, nodes, framedCustomers);
   const { groupRef, markerScale } = useCameraTransform(camera, view);
   const backup = failoverTarget(overview);
   const origin = primary ? projectPoint(projection, primary.longitude, primary.latitude) : null;
@@ -219,6 +237,23 @@ function CrisisMapScene({
     (customer) => customer.latitude !== undefined && customer.longitude !== undefined,
   );
   const crisis = impacted && !settled;
+  const zoom = markerScale > 0 ? 1 / markerScale : 1;
+  // Screen coordinates: the marker layer counter-scales the camera, so this is what it draws in.
+  const customerPoints = customers.map((customer) => {
+    const [x, y] = projectPoint(projection, customer.longitude ?? 0, customer.latitude ?? 0);
+    return { identifier: customer.identifier, x: x * zoom, y: y * zoom };
+  });
+  const offsets = spreadClusteredMarkers(customerPoints);
+  const labels = placeMapLabels([
+    ...nodes.map((node) => {
+      const [x, y] = projectPoint(projection, node.longitude, node.latitude);
+      return { identifier: node.identifier, x: x * zoom, y: y * zoom, lines: 2 };
+    }),
+    ...customerPoints.map((point) => {
+      const offset = offsets.get(point.identifier) ?? FALLBACK_OFFSET;
+      return { identifier: point.identifier, x: point.x + offset.x, y: point.y + offset.y, lines: 1 };
+    }),
+  ]);
 
   return (
     <svg width={width} height={height} className="absolute inset-0" role="img" aria-label="Mapa mundial de la crisis de Dubái">
@@ -254,6 +289,7 @@ function CrisisMapScene({
             const [x, y] = projectPoint(projection, node.longitude, node.latitude);
             const status = node.status;
             const isPrimary = node.role === "primary";
+            const label = labels.get(node.identifier) ?? FALLBACK_LABEL;
             return (
               <g key={node.identifier} transform={`translate(${x} ${y})`}>
                 <MarkerLayer scale={markerScale}>
@@ -286,14 +322,41 @@ function CrisisMapScene({
                   <circle r="2.4" fill={COLORS[status]} />
                   {theater ? (
                     <>
-                      <text x="12" y="3" fill="var(--foreground)" fontSize="11" fontWeight="600">{node.label}</text>
-                      <text x="12" y="16" fill="var(--muted-foreground)" fontSize="9">{node.region}</text>
+                      <text
+                        x={label.x}
+                        y={label.y + 3}
+                        textAnchor={label.anchor}
+                        fill="var(--foreground)"
+                        fontSize="11"
+                        fontWeight="600"
+                        paintOrder="stroke"
+                        stroke="var(--map-inset)"
+                        strokeWidth="3"
+                        strokeLinejoin="round"
+                      >
+                        {node.label}
+                      </text>
+                      <text
+                        x={label.x}
+                        y={label.y + 16}
+                        textAnchor={label.anchor}
+                        fill="var(--muted-foreground)"
+                        fontSize="9"
+                        paintOrder="stroke"
+                        stroke="var(--map-inset)"
+                        strokeWidth="3"
+                        strokeLinejoin="round"
+                      >
+                        {node.region}
+                      </text>
                     </>
                   ) : null}
                   {isPrimary && crisis ? (
-                    <g transform="translate(12 -28)">
+                    <g transform={`translate(${label.anchor === "start" ? 12 : -130} ${label.y - 28})`}>
                       <rect width="118" height="22" rx="4" fill="var(--map-callout)" stroke="color-mix(in srgb, #f04444 45%, var(--border))" />
-                      <text x="8" y="14" fill="#f04444" fontSize="8" fontWeight="700" letterSpacing="0.16em">IMPACTO</text>
+                      <text x="8" y="14" fill="#f04444" fontSize="8" fontWeight="700" letterSpacing="0.16em">
+                        {t("map.impactBadge")}
+                      </text>
                     </g>
                   ) : null}
                 </MarkerLayer>
@@ -303,9 +366,28 @@ function CrisisMapScene({
           {customers.map((customer) => {
             const [x, y] = projectPoint(projection, customer.longitude ?? 0, customer.latitude ?? 0);
             const pulsing = customer.action === "offline" || customer.action === "migrating";
+            const label = labels.get(customer.identifier) ?? FALLBACK_LABEL;
+            const offset = offsets.get(customer.identifier) ?? FALLBACK_OFFSET;
+            const displaced = offset.x !== 0 || offset.y !== 0;
             return (
               <g key={customer.identifier} transform={`translate(${x} ${y})`}>
                 <MarkerLayer scale={markerScale}>
+                  {displaced ? (
+                    <>
+                      {/* The marker moved to be readable; this ties it back to where it really is. */}
+                      <line
+                        x1={0}
+                        y1={0}
+                        x2={offset.x}
+                        y2={offset.y}
+                        stroke={COLORS[customer.status]}
+                        strokeWidth={1}
+                        opacity={0.35}
+                      />
+                      <circle r={1.6} fill={COLORS[customer.status]} opacity={0.5} />
+                    </>
+                  ) : null}
+                  <g transform={`translate(${offset.x} ${offset.y})`}>
                   <circle
                     r="14"
                     fill={COLORS[customer.status]}
@@ -316,8 +398,21 @@ function CrisisMapScene({
                   <circle r="9" fill="var(--logo-plate)" />
                   <image href={customer.logo} x="-7" y="-7" width="14" height="14" />
                   {theater ? (
-                    <text x="14" y="4" fill="var(--foreground)" fontSize="10">{customer.shortName}</text>
+                    <text
+                      x={label.x + (label.anchor === "start" ? 2 : -2)}
+                      y={label.y + 4}
+                      textAnchor={label.anchor}
+                      fill="var(--foreground)"
+                      fontSize="10"
+                      paintOrder="stroke"
+                      stroke="var(--map-inset)"
+                      strokeWidth="3"
+                      strokeLinejoin="round"
+                    >
+                      {customer.shortName}
+                    </text>
                   ) : null}
+                  </g>
                 </MarkerLayer>
               </g>
             );

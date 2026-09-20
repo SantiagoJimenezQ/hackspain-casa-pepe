@@ -1,4 +1,6 @@
 import "server-only";
+import { cookies, headers as requestHeaders } from "next/headers";
+import { BROWSER_SESSION_COOKIE, BROWSER_SESSION_HEADER, validBrowserToken } from "@/lib/browser-session";
 import { normalizeCasaPepeAPIBaseURL } from "@/lib/casa-pepe-url";
 
 type BackendErrorBody = { message?: string | string[]; error?: string };
@@ -36,7 +38,20 @@ function apiKey() {
 }
 
 export async function backendFetch(path: string, init: RequestInit = {}) {
+  const token = (await cookies()).get(BROWSER_SESSION_COOKIE)?.value;
+  if (!validBrowserToken(token)) throw new BackendAPIError("Refresh the page to create a browser session.", 401);
+  // Browser identity is taken only from our HttpOnly cookie, never caller-provided headers.
+  if (init.method && !["GET", "HEAD"].includes(init.method.toUpperCase())) {
+    const incoming = await requestHeaders();
+    const origin = incoming.get("origin");
+    const host = incoming.get("host");
+    const fetchSite = incoming.get("sec-fetch-site");
+    if (fetchSite === "cross-site" || (origin && new URL(origin).host !== host)) {
+      throw new BackendAPIError("Cross-origin actions are not allowed.", 403);
+    }
+  }
   const headers = new Headers(init.headers);
+  headers.set(BROWSER_SESSION_HEADER, token);
   headers.set("Authorization", `API ${apiKey()}`);
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");

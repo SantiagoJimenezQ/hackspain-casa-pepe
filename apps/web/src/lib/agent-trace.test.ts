@@ -9,11 +9,13 @@ import {
   incidentClock,
   LIVE_REASONING_ID,
   mapToolState,
+  collapseDiscarded,
   mergedToolCalls,
   reasoningDefaultOpen,
   recoveryTimeline,
   toolTitle,
 } from "@/lib/agent-trace";
+import type { TranscriptItem } from "@/lib/agent-trace";
 import type { ActivityRecord, Overview, ToolCall } from "@/lib/casa-pepe-types";
 
 function tool(partial: Partial<ToolCall> & Pick<ToolCall, "identifier" | "name" | "status">): ToolCall {
@@ -706,6 +708,39 @@ describe("agent trace", () => {
     expect(mergedToolCalls(overview).map((item) => item.status)).toEqual(["running"]);
   });
 
+  it("folds a run of discarded turns into one row and leaves the rest alone", () => {
+    const thinking = (id: string, disposition?: "stale" | "rejected" | "accepted"): TranscriptItem => ({
+      kind: "thinking",
+      id,
+      text: "",
+      status: "complete",
+      occurredAt: "2026-09-19T10:00:00.000Z",
+      disposition,
+    });
+    const collapsed = collapseDiscarded([
+      thinking("kept", "accepted"),
+      thinking("stale-1", "stale"),
+      thinking("stale-2", "stale"),
+      thinking("rejected-1", "rejected"),
+      thinking("after", "accepted"),
+      thinking("lonely", "stale"),
+    ]);
+    expect(collapsed.map((item) => item.kind)).toEqual([
+      "thinking",
+      "discarded",
+      "thinking",
+      "thinking",
+    ]);
+    const group = collapsed[1];
+    expect(group.kind === "discarded" && group.items.map((item) => item.id)).toEqual([
+      "stale-1",
+      "stale-2",
+      "rejected-1",
+    ]);
+    // A single discard is cheaper to read inline than behind a disclosure.
+    expect(collapsed[3]).toMatchObject({ kind: "thinking", id: "lonely" });
+  });
+
   it("keeps thinking visible when the overview cycle flag flaps off mid-turn", () => {
     const overview = overviewWith([]);
     const events: ActivityRecord[] = [
@@ -730,5 +765,67 @@ describe("agent trace", () => {
       status: "streaming",
       title: "Pensando",
     });
+  });
+
+  it("keeps only the completed work once the incident is settled", () => {
+    const overview = overviewWith(
+      [tool({ identifier: "t1", name: "execute_recovery", status: "succeeded", startedAt: "2026-09-19T10:00:01.000Z" })],
+      [{ identifier: "orders-database", name: "Base de pedidos", status: "healthy", statusReason: "ok", lastChangedAt: "2026-09-19T10:01:00.000Z", recoveryCapacityUnits: 1 }],
+    );
+    const settled = {
+      ...overview,
+      incident: { ...overview.incident, status: "recovered", resolvedAt: "2026-09-19T10:02:00.000Z" },
+    } as Overview;
+    const events = [
+      activity({
+        identifier: "act-1",
+        occurredAt: "2026-09-19T10:00:30.000Z",
+        payload: { disposition: "accepted", text: "Reviewing the capacity" },
+        type: "agent.llm-decision",
+      }),
+    ];
+
+    expect(buildTranscript(overview, events).some((item) => item.kind === "thinking")).toBe(true);
+    expect(buildTranscript(settled, events).every((item) => item.kind !== "thinking")).toBe(true);
+    expect(buildTranscript(settled, events).map((item) => item.kind)).toEqual(["tool"]);
+  });
+
+  it("does not put a finished tool back on the line when a stale started event trails it", () => {
+    const overview = overviewWith([
+      tool({
+        identifier: "t_recover",
+        name: "execute_recovery",
+        status: "succeeded",
+        startedAt: "2026-09-19T10:00:01.000Z",
+        finishedAt: "2026-09-19T10:00:06.000Z",
+      }),
+    ]);
+    // The live buffer still carries the "started" event from five minutes earlier.
+    const events = [
+      activity({
+        identifier: "act-started",
+        type: "tool-call.started",
+        payload: {
+          toolCall: {
+            identifier: "t_recover",
+            name: "execute_recovery",
+            status: "running",
+            interaction: "test-environment",
+            simulated: true,
+            error: null,
+            startedAt: "2026-09-19T10:00:01.000Z",
+            finishedAt: "",
+            input: {},
+            output: null,
+          },
+        },
+      }),
+    ];
+
+    const merged = mergedToolCalls(overview, events);
+
+    expect(merged[0].status).toBe("succeeded");
+    expect(merged[0].finishedAt).toBe("2026-09-19T10:00:06.000Z");
+    expect(currentWork(overview, events).kind).not.toBe("tool");
   });
 });

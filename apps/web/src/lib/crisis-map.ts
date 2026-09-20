@@ -16,6 +16,10 @@ export const MIN_ARC_RISE = 28;
 const WORLD_CAMERA: Camera = { x: 0, y: 0, k: 1 };
 const IMPACT_PADDING = 28;
 const NEARBY_PADDING = 48;
+/** Room for a marker and its label, so nothing sits half outside the frame. */
+const CROWD_PADDING = 64;
+/** The topology card and the call banner float over the top of the map; markers keep clear. */
+const CROWD_TOP_PADDING = 108;
 const CAMERA_SNAP = { x: 2, y: 2, k: 0.02 };
 
 const topology = countries as unknown as Topology<{ countries: GeometryCollection }>;
@@ -62,6 +66,158 @@ export function spherePath(projection: GeoProjection) {
   return geoPath(projection)({ type: "Sphere" } as GeoPermissibleObjects) ?? "";
 }
 
+export type MapLabelAnchor = "start" | "end";
+/** Offsets are in screen units, ready to use inside the counter-scaled marker layer. */
+export type MapLabelPlacement = { anchor: MapLabelAnchor; x: number; y: number };
+export type MapLabelPoint = { identifier: string; x: number; y: number; lines: number };
+
+const LABEL_GAP = 12;
+const LABEL_WIDTH = 92;
+const LABEL_LINE = 13;
+const LABEL_RISE = 9;
+const MARKER_RADIUS = 15;
+const LABEL_STEPS = [0, -20, 20, -38, 38];
+const LABEL_ANCHORS: MapLabelAnchor[] = ["start", "end"];
+
+type Box = { left: number; right: number; top: number; bottom: number };
+
+function labelBox(point: MapLabelPoint, anchor: MapLabelAnchor, offsetY: number): Box {
+  const left = anchor === "start" ? point.x + LABEL_GAP : point.x - LABEL_GAP - LABEL_WIDTH;
+  const top = point.y + offsetY - LABEL_RISE;
+  return { left, right: left + LABEL_WIDTH, top, bottom: top + point.lines * LABEL_LINE };
+}
+
+function overlaps(left: Box, right: Box): boolean {
+  return left.left < right.right && right.left < left.right && left.top < right.bottom && right.top < left.bottom;
+}
+
+function coversMarker(box: Box, point: MapLabelPoint, points: ReadonlyArray<MapLabelPoint>): boolean {
+  return points.some((other) => {
+    if (other.identifier === point.identifier) return false;
+    const marker = {
+      left: other.x - MARKER_RADIUS,
+      right: other.x + MARKER_RADIUS,
+      top: other.y - MARKER_RADIUS,
+      bottom: other.y + MARKER_RADIUS,
+    };
+    return overlaps(box, marker);
+  });
+}
+
+/**
+ * Keeps map labels legible when markers cluster: each label takes the first free slot, trying the
+ * right of its marker, then the left, then progressively further above and below.
+ */
+export function placeMapLabels(points: ReadonlyArray<MapLabelPoint>): Map<string, MapLabelPlacement> {
+  const ordered = [...points].toSorted((left, right) => {
+    if (left.y !== right.y) return left.y - right.y;
+    if (left.x !== right.x) return left.x - right.x;
+    return left.identifier.localeCompare(right.identifier);
+  });
+  const taken: Box[] = [];
+  const placements = new Map<string, MapLabelPlacement>();
+
+  for (const point of ordered) {
+    let chosen: { anchor: MapLabelAnchor; offsetY: number; box: Box } | null = null;
+    for (const offsetY of LABEL_STEPS) {
+      for (const anchor of LABEL_ANCHORS) {
+        const box = labelBox(point, anchor, offsetY);
+        if (taken.some((other) => overlaps(box, other))) continue;
+        if (coversMarker(box, point, points)) continue;
+        chosen = { anchor, offsetY, box };
+        break;
+      }
+      if (chosen) break;
+    }
+    const placement = chosen ?? { anchor: "start" as const, offsetY: 0, box: labelBox(point, "start", 0) };
+    taken.push(placement.box);
+    placements.set(point.identifier, {
+      anchor: placement.anchor,
+      x: placement.anchor === "start" ? LABEL_GAP : -LABEL_GAP,
+      y: placement.offsetY,
+    });
+  }
+
+  return placements;
+}
+
+export type MapClusterPoint = { identifier: string; x: number; y: number };
+export type MapOffset = { x: number; y: number };
+
+/** Two markers closer than this on screen are unreadable, so the ring pulls them apart. */
+export const CLUSTER_MIN_DISTANCE = 30;
+const CLUSTER_BASE_RADIUS = 26;
+const CLUSTER_MARKER_SPAN = 27;
+const NO_OFFSET: MapOffset = { x: 0, y: 0 };
+
+/**
+ * Four of the six customers sit within a hundred kilometres of each other, so at world zoom they
+ * land on the same pixel and only one of them is readable. Each group of markers that collapses
+ * is opened onto a ring around the place they share: the geography is still where the ring is
+ * centred, and a leader line ties every marker back to it.
+ *
+ * Coordinates and offsets are both in screen units, which is what the counter-scaled marker layer
+ * draws in. A marker with nothing near it is left exactly where it belongs.
+ */
+export function spreadClusteredMarkers(
+  points: ReadonlyArray<MapClusterPoint>,
+  minimumDistance = CLUSTER_MIN_DISTANCE,
+): Map<string, MapOffset> {
+  const ordered = [...points].toSorted((left, right) =>
+    left.identifier.localeCompare(right.identifier),
+  );
+  const groups = groupByProximity(ordered, minimumDistance);
+  const offsets = new Map<string, MapOffset>();
+
+  for (const group of groups) {
+    if (group.length < 2) {
+      offsets.set(group[0].identifier, NO_OFFSET);
+      continue;
+    }
+    const centreX = group.reduce((total, point) => total + point.x, 0) / group.length;
+    const centreY = group.reduce((total, point) => total + point.y, 0) / group.length;
+    // The ring grows with the crowd so the markers on it never touch each other either.
+    const radius = Math.max(
+      CLUSTER_BASE_RADIUS,
+      (group.length * CLUSTER_MARKER_SPAN) / (2 * Math.PI),
+    );
+    group.forEach((point, index) => {
+      const angle = -Math.PI / 2 + (index * 2 * Math.PI) / group.length;
+      offsets.set(point.identifier, {
+        x: centreX + radius * Math.cos(angle) - point.x,
+        y: centreY + radius * Math.sin(angle) - point.y,
+      });
+    });
+  }
+
+  return offsets;
+}
+
+/** Single linkage: a marker joins a group when it is too close to any member of it. */
+function groupByProximity(
+  points: ReadonlyArray<MapClusterPoint>,
+  minimumDistance: number,
+): MapClusterPoint[][] {
+  const groups: MapClusterPoint[][] = [];
+  for (const point of points) {
+    const near = groups.filter((group) =>
+      group.some((member) => distance(member, point) < minimumDistance),
+    );
+    if (!near.length) {
+      groups.push([point]);
+      continue;
+    }
+    const merged = [...near.flat(), point];
+    for (const group of near) groups.splice(groups.indexOf(group), 1);
+    groups.push(merged);
+  }
+  return groups;
+}
+
+function distance(left: MapClusterPoint, right: MapClusterPoint): number {
+  return Math.hypot(left.x - right.x, left.y - right.y);
+}
+
 export function mapViewForTools(impacted: boolean, toolNames: readonly string[], settled = false): MapView {
   if (!impacted || settled) return "world";
   if (toolNames.includes("get_recovery_capacity")) return "nearby";
@@ -92,29 +248,48 @@ export function failoverTarget(overview: Overview) {
   return topologyView(overview).find((node) => node.region === overview.incident.backupRegion) ?? null;
 }
 
+export type MapPlace = { latitude: number; longitude: number };
+
+/**
+ * While the incident is open every affected company has to be on screen, wherever it is: a
+ * customer half a world away from the outage is still part of what the operator is looking at.
+ * The frame therefore fits the sites and the customers together, and leaves the top clear for the
+ * cards that float over the map.
+ */
 export function cameraForView(
   view: MapView,
   projection: GeoProjection,
   width: number,
   height: number,
   nodes: readonly MapPoint[],
+  customers: readonly MapPlace[] = [],
 ): Camera {
   if (view === "world" || width < 10 || height < 10) return WORLD_CAMERA;
   const primary = nodes.find((node) => node.role === "primary");
   const sites = nodes.filter((node) => node.role === "primary" || node.role === "backup");
   if (!sites.length) return WORLD_CAMERA;
-  const targets = view === "impact" && primary ? [primary] : sites;
+  const anchors: MapPlace[] =
+    view === "impact" && primary && !customers.length ? [primary] : sites;
+  const places = [...anchors, ...customers];
+  const crowded = customers.length > 0;
   return fitPoints(
-    targets.map((node) => projectPoint(projection, node.longitude, node.latitude)),
+    places.map((place) => projectPoint(projection, place.longitude, place.latitude)),
     width,
     height,
-    view === "nearby" ? NEARBY_PADDING : IMPACT_PADDING,
+    crowded ? CROWD_PADDING : view === "nearby" ? NEARBY_PADDING : IMPACT_PADDING,
+    crowded ? CROWD_TOP_PADDING : undefined,
   );
 }
 
-function fitPoints(points: ReadonlyArray<[number, number]>, width: number, height: number, padding: number): Camera {
+function fitPoints(
+  points: ReadonlyArray<[number, number]>,
+  width: number,
+  height: number,
+  padding: number,
+  topPadding = padding,
+): Camera {
   const innerWidth = width - 2 * padding;
-  const innerHeight = height - 2 * padding;
+  const innerHeight = height - padding - topPadding;
   if (innerWidth <= 0 || innerHeight <= 0) return WORLD_CAMERA;
   const xs = points.map((point) => point[0]);
   const ys = points.map((point) => point[1]);
@@ -129,7 +304,10 @@ function fitPoints(points: ReadonlyArray<[number, number]>, width: number, heigh
   const k = clamp(raw, MIN_CAMERA_K, MAX_CAMERA_K);
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
-  return { x: width / 2 - k * cx, y: height / 2 - k * cy, k };
+  // The usable band sits below the floating cards, so the centre of the frame is not the centre
+  // of the panel.
+  const centreY = topPadding + (height - padding - topPadding) / 2;
+  return { x: width / 2 - k * cx, y: centreY - k * cy, k };
 }
 
 function clamp(value: number, min: number, max: number) {

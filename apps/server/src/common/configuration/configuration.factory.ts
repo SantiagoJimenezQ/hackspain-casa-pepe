@@ -192,6 +192,8 @@ export function createApplicationConfiguration(
 		database: {
 			poolMaximum: variables.DATABASE_POOL_MAXIMUM,
 			queryLogging: variables.DATABASE_QUERY_LOGGING === "true",
+			sessionSchemaUpgrade:
+				variables.BROWSER_SESSION_SCHEMA_UPGRADE === "true",
 			url: variables.SUPABASE_DATABASE_URL,
 		},
 		demo: {
@@ -228,6 +230,8 @@ export function createApplicationConfiguration(
 					: "") ||
 				variables.HAPPYROBOT_API_KEY ||
 				variables.HAPPY_ROBOT_API_KEY,
+			inboundPhoneNumber: variables.HAPPYROBOT_INBOUND_PHONE_NUMBER,
+			inboundWebhookSecret: variables.CASA_PEPE_INBOUND_WEBHOOK_SECRET,
 			mode: variables.HAPPYROBOT_MODE as EngineerCallMode,
 			simulatedCallDelayMilliseconds:
 				variables.SIMULATED_CALL_DELAY_MILLISECONDS,

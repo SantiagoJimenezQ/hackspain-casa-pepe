@@ -4,7 +4,6 @@ import { insertEntity } from "@common/database/persistence.helper"
 import { nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
 import { ConfigurationService } from "@common/services/configuration.service"
-import { RunsService } from "@incidents/services/runs.service"
 import { Injectable } from "@nestjs/common"
 import { InjectRepository } from "@nestjs/typeorm"
 import { InboundEmailEntity } from "@webhooks/entities/inbound-email.entity"
@@ -41,7 +40,6 @@ export class InboundEmailsService {
 	constructor(
 		@InjectRepository(InboundEmailEntity)
 		private readonly repository: Repository<InboundEmailEntity>,
-		private readonly runs: RunsService,
 		private readonly configuration: ConfigurationService,
 	) {}
 
@@ -85,7 +83,7 @@ export class InboundEmailsService {
 			where: { emailId: event.data.email_id },
 		})
 		if (existing) return this.toRecord(existing)
-		const active = await this.runs.findActiveEntity()
+		// Uncorrelated mail stays unassigned; never infer a browser from the latest run.
 		const entity = this.repository.create({
 			emailId: event.data.email_id,
 			event,
@@ -93,7 +91,7 @@ export class InboundEmailsService {
 			identifier: createPrefixedIdentifier("email"),
 			messageId: event.data.message_id ?? "",
 			receivedAt: event.data.created_at ?? event.created_at ?? nowISO(),
-			runIdentifier: active?.runIdentifier ?? "unassigned",
+			runIdentifier: "unassigned",
 			subject: event.data.subject ?? "",
 			to: event.data.to ?? [],
 		})

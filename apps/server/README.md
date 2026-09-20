@@ -2,7 +2,7 @@
 
 Owner: harness and backend track, in coordination with the agent and integrations track.
 
-Backend of **Casa Pepe**, the AI incident coordinator for HackSpain. It implements the `apps/server/` process described in the [root README](../../README.md) and the use case in [MASTER.md](../../MASTER.md): a meteorite takes down the `eu-west-1` region of a delivery company and the agent decides what to recover first with the backup capacity available, coordinates people, asks the operator for approval, executes the recovery and verifies it.
+Backend of **Casa Pepe**, the AI incident coordinator for HackSpain. It implements the `apps/server/` process described in the [root README](../../README.md) and the use case in [MASTER.md](../../MASTER.md): a missile takes down the `eu-west-1` region of a delivery company and the agent decides what to recover first with the backup capacity available, coordinates people, asks the operator for approval, executes the recovery and verifies it.
 
 Built with NestJS and TypeScript, persisted in **Supabase (Postgres)** through TypeORM. The Next.js dashboard reads the authenticated API and proxied SSE activity stream; other consumers can subscribe through signed outbound webhooks.
 
@@ -41,7 +41,7 @@ The service persists in Postgres. Point it at the team Supabase project in `.env
 SUPABASE_DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
 ```
 
-The connection string is in Supabase under *Project settings > Database > Connection string (URI)*. Use the session pooler on port 5432; the transaction pooler (6543) does not support the prepared statements TypeORM uses, and the direct connection is IPv6 only on the free plan. Tables are created automatically on startup (`synchronize`), which is enough for the hackathon; a stable deployment should move to migrations. TLS is enabled automatically for Supabase hosts (and for any URL with `sslmode=require`); any other Postgres, such as a local install, connects without TLS.
+The connection string is in Supabase under *Project settings > Database > Connection string (URI)*. Use the session pooler on port 5432; the transaction pooler (6543) does not support the prepared statements TypeORM uses, and the direct connection is IPv6 only on the free plan. Schema creation/upgrade now requires the explicit one-time `BROWSER_SESSION_SCHEMA_UPGRADE=true` flag; ordinary startup performs no schema changes. TLS is enabled automatically for Supabase hosts (and for any URL with `sslmode=require`); any other Postgres, such as a local install, connects without TLS.
 
 Every environment variable is documented in [.env.example](.env.example). Set `DATABASE_QUERY_LOGGING=true` to print every SQL statement when diagnosing latency; against the Supabase pooler each round trip costs about 120 ms, so the service writes with single-statement inserts and updates and keeps webhook subscriptions cached.
 
@@ -65,7 +65,7 @@ Everything the operator reads follows the scenario language: service names, impa
 ```bash
 BASE=http://localhost:3000/api; AUTH="Authorization: API casa-pepe-local-api-key"
 curl -X POST $BASE/demo/start  -H "$AUTH" -H "Content-Type: application/json" -d '{"scenarioIdentifier":"meteorite-eu-west-1-es"}'   # 1. everything healthy (Spanish scenario)
-curl -X POST $BASE/demo/impact -H "$AUTH"      # 2. meteorite: the agent creates plan v1 and calls the engineer
+curl -X POST $BASE/demo/impact -H "$AUTH"      # 2. missile: the agent creates plan v1 and calls the engineer
 curl -X POST $BASE/demo/twist  -H "$AUTH"      # 5. backup capacity is insufficient: plan v2, approvals invalidated
 curl $BASE/approvals?status=pending -H "$AUTH"
 curl -X POST $BASE/approvals/<identifier>/decision -H "$AUTH" -H "Content-Type: application/json" \
@@ -153,7 +153,7 @@ src/
   common/          typed configuration, error filter, helpers, Postgres connection
   authentication/  API key guard
   health/          terminus
-  scenarios/       meteorite scenario definition
+  scenarios/       missile scenario definition
   incidents/       harness: incident state, runs, demo controls
   activity/        activity log and source of the webhooks
   plans/           plan versions and diff between versions
@@ -189,3 +189,29 @@ steps are unfinished, or tasks in the run are open/in progress. `completed` is
 reserved for settled plan work. An idle decision cycle does not mean the incident
 is resolved. The wait reason should identify the missing evidence, owner, and
 resuming event or operator action.
+
+## HappyRobot inbound company prioritization
+
+The initiation and outcome webhooks accept authenticated, idempotent company-priority requests bound to a specific live incident. See [configuration, payloads and verification](docs/HAPPYROBOT-INBOUND.md). These requests trigger assessment and do not alter capacity or bypass approvals.
+
+## Anonymous browser sessions
+
+Operator incident routes now require both `Authorization: API <API_KEY>` and
+`X-Casa-Pepe-Session: <64 lowercase hex characters>`. Generate a random 32-byte
+session token once per independent client; keep reusing it to resume its runs.
+The dashboard manages this automatically in an HttpOnly cookie. A run ID is not
+an ownership credential. Start/reset, history, approvals, tasks and learning are
+isolated to the session. Missing sessions never select a global incident.
+
+Standalone tool checks, model diagnostics and webhook administration are direct
+API-key-only administrator routes and reject browser-session headers. Provider
+callbacks retain their existing signed authentication and explicit record IDs.
+Public status now requires `?runIdentifier=...`. Uncorrelated incoming email
+stays unassigned.
+
+Deploy a single continuously running backend and matching frontend. The explicit `BROWSER_SESSION_SCHEMA_UPGRADE=true` startup runs
+the pending ownership and HappyRobot migrations plus schema synchronization. The ownership migration labels historical data legacy and stops active legacy runs when first applied. HappyRobot adds its private session table and backfills unique incident call codes.
+Set the flag back to false after the upgrade. Never enable it on PR previews using shared Supabase.
+Stop old servers before upgrading; do not mix old/new versions or roll back without
+a pre-migration database backup. See [Architecture.md](../../Architecture.md) for
+schema, scheduler limitations, integration boundaries and PostgreSQL test commands.

@@ -28,7 +28,7 @@ export class DemoController {
 	@Post("start")
 	@ApiOperation({
 		summary:
-			"Start a new independent run with every service healthy. Other active runs keep running",
+			"Start a healthy run for this browser, replacing its previous run. Other browsers keep running",
 	})
 	start(@Body() body: StartRunDTO): Promise<IncidentSnapshot> {
 		return this.incidentsService.startRun(body.scenarioIdentifier, body)
@@ -79,7 +79,7 @@ export class DemoController {
 	@Post("impact")
 	@HttpCode(HttpStatus.OK)
 	@ApiOperation({
-		summary: "Introduce the meteorite impact. The agent starts responding",
+		summary: "Introduce the missile impact. The agent starts responding",
 	})
 	async impact(@Query() query: RunScopedQueryDTO): Promise<IncidentSnapshot> {
 		return this.incidentsService.applyHarnessEvent(

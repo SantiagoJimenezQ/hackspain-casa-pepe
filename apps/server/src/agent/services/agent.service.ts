@@ -48,7 +48,7 @@ import {
 	IncidentSnapshot,
 } from "@incidents/types/incident.type"
 import { LearningService } from "@learning/services/learning.service"
-import { Injectable, Logger } from "@nestjs/common"
+import { Injectable, Logger, Optional } from "@nestjs/common"
 import { OnEvent } from "@nestjs/event-emitter"
 import { Interval } from "@nestjs/schedule"
 import { diffPlans } from "@plans/helpers/plan-diff.helper"
@@ -65,6 +65,10 @@ import {
 	ToolInvocation,
 } from "@tools/types/tool.type"
 import { EngineerCallAuthorizations } from "../../../../../packages/contracts/outbound-calls"
+import {
+	COMPANY_PRIORITY_RECEIVED,
+	CompanyCallService,
+} from "../../company-calls/company-call.service"
 
 /** Marks a fact the engineer settled by authorizing the work rather than by answering it. */
 const AUTHORIZED_BY_VOICE = "authorized by voice"
@@ -96,7 +100,23 @@ export class AgentService {
 		private readonly incomingCalls: IncomingCallsService,
 		private readonly llmLoop: LlmLoopService,
 		private readonly tasksService: TasksService,
+		@Optional() private readonly companyCalls?: CompanyCallService,
 	) {}
+
+	@OnEvent(COMPANY_PRIORITY_RECEIVED, { async: true, promisify: true })
+	async onCompanyPriority(event: {
+		runIdentifier: string
+		identifier: string
+	}) {
+		const result = await this.requestCycle(event.runIdentifier, {
+			description:
+				"A caller requested a company priority change. Assess the request with current capacity, dependencies and required approvals; receipt is not approval.",
+			harnessEventIdentifier: `priority_${event.identifier}`,
+			kind: "conditions-changed",
+		})
+		if (result.kind === "completed")
+			await this.companyCalls?.markObserved(event.identifier)
+	}
 
 	@OnEvent(DOMAIN_EVENTS.INCIDENT_RUN_DEACTIVATED)
 	onRunDeactivated(event: { runIdentifier: string }): void {
@@ -426,6 +446,20 @@ export class AgentService {
 		return this.incidentsService.getScenario(incident.scenarioIdentifier)
 	}
 
+	/** A step the agent still owes: proposed and dispatchable, running, or waiting on approval. */
+	private async planHasOpenWork(runIdentifier: string): Promise<boolean> {
+		const plan = await this.plansService.findActivePlan(runIdentifier)
+		if (!plan) {
+			return false
+		}
+		return plan.steps.some(
+			(step) =>
+				step.status === "proposed" ||
+				step.status === "running" ||
+				step.status === "awaiting-approval",
+		)
+	}
+
 	private messagesFor(incident: IncidentSnapshot): AgentMessages {
 		return AGENT_MESSAGES[this.scenarioOf(incident).language]
 	}
@@ -455,6 +489,23 @@ export class AgentService {
 			return {
 				kind: "skipped",
 				reason: "No impact has been detected yet",
+			}
+		}
+		// Every service is healthy again, so there is nothing left to investigate, plan or
+		// verify. The plan still gets to finish: a communication or a task the agent committed
+		// to outlives the last recovery, and leaving it open would strand the run showing work
+		// in progress on a closed incident. A service that breaks again moves the incident out
+		// of this status and the agent wakes up with it.
+		if (
+			incident.status === "recovered" &&
+			!(await this.planHasOpenWork(runIdentifier))
+		) {
+			this.logger.log(LOG_MESSAGES.AGENT.CYCLE_SKIPPED_RECOVERED, {
+				runIdentifier,
+			})
+			return {
+				kind: "skipped",
+				reason: "The incident is recovered and the plan is finished",
 			}
 		}
 		const messages = this.messagesFor(incident)
@@ -668,14 +719,20 @@ export class AgentService {
 				this.incomingCalls.list(runIdentifier),
 				this.engineersService.list(runIdentifier),
 				this.toolsService.list(runIdentifier),
-				this.learningService.list(this.scenarioOf(incident).family),
+				this.learningService.list(
+					this.scenarioOf(incident).family,
+					runIdentifier,
+				),
 				this.tasksService.list(runIdentifier),
 			])
+		const companyPriorityRequests =
+			(await this.companyCalls?.list(runIdentifier)) ?? []
 		return {
 			blocked: incomingCalls.some((call) => call.status === "pending"),
 			evidence: {
 				approvals,
 				calls,
+				companyPriorityRequests,
 				engineerCall: {
 					mode: this.engineersService.mode,
 					provider: this.engineersService.provider,
@@ -868,6 +925,7 @@ export class AgentService {
 			const insight = await this.learningService.findCapacityInsight(
 				scenario.family,
 				resource.identifier,
+				incident.runIdentifier,
 			)
 			if (!insight) {
 				continue

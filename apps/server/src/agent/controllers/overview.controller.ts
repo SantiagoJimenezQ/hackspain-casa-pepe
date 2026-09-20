@@ -3,6 +3,7 @@ import { RECENT_ACTIVITY_LIMIT } from "@agent/constants/agent.constant"
 import { AgentService } from "@agent/services/agent.service"
 import { Overview, OverviewPlan } from "@agent/types/agent.type"
 import { ApprovalsService } from "@approvals/services/approvals.service"
+import { ConfigurationService } from "@common/services/configuration.service"
 import { EngineersService } from "@engineers/services/engineers.service"
 import { RunsService } from "@incidents/services/runs.service"
 import { Controller, Get, Query } from "@nestjs/common"
@@ -28,6 +29,7 @@ export class OverviewController {
 		private readonly toolRegistry: ToolRegistryService,
 		private readonly activityService: ActivityService,
 		private readonly agentService: AgentService,
+		private readonly configuration: ConfigurationService,
 	) {}
 
 	@Get()
@@ -78,6 +80,10 @@ export class OverviewController {
 			agent,
 			deliveryProbes,
 			engineerCalls,
+			inboundCall: {
+				phoneNumber:
+					this.configuration.happyRobot.inboundPhoneNumber ?? "",
+			},
 			incident,
 			pendingApprovals: approvals.filter(
 				(approval) => approval.status === "pending",

@@ -93,7 +93,7 @@ export const ToolHeader = ({
   return (
     <CollapsibleTrigger
       className={cn(
-        "flex w-full items-center gap-2 py-1 text-left text-[13px] text-muted-foreground transition-colors hover:text-foreground",
+        "flex w-full items-center gap-2 py-1.5 text-left text-[13px] text-muted-foreground transition-colors hover:text-foreground",
         (state === "input-available" || state === "input-streaming") && "text-foreground",
         state === "output-error" && "text-status-down",
         className,

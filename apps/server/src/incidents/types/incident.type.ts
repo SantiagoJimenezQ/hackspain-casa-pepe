@@ -94,6 +94,8 @@ export interface AppliedHarnessEvent {
 }
 
 export interface IncidentSnapshot {
+	/** Stable spoken reference; older API versions may omit it. */
+	readonly callCode?: string
 	readonly identifier: string
 	readonly runIdentifier: string
 	readonly runKind: RunKind

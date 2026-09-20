@@ -43,8 +43,7 @@ export class ActivityStreamController {
 			const buffered: ActivityRecordedEvent[] = []
 			const delivered = new Set<string>()
 			const matches = (event: ActivityRecordedEvent) =>
-				(event.record.runIdentifier === resolvedRun ||
-					query.runIdentifier === undefined) &&
+				event.record.runIdentifier === resolvedRun &&
 				(!query.types.length || query.types.includes(event.record.type))
 			const emit = (event: ActivityRecordedEvent) => {
 				const key = `${event.record.runIdentifier}:${event.record.sequence}`

@@ -1,3 +1,4 @@
+import { SessionAdministration } from "@authentication/session/browser-session"
 import { HappyRobotCallResultDTO } from "@engineers/dtos/happyrobot-call-result.dto"
 import {
 	Body,
@@ -18,6 +19,7 @@ import {
 } from "../../../../../packages/contracts/tool-tests"
 
 @ApiTags("Tool tests")
+@SessionAdministration()
 @Controller("tools/tests")
 export class ToolTestsController {
 	constructor(private readonly toolTests: ToolTestsService) {}

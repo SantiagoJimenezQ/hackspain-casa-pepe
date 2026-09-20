@@ -48,7 +48,7 @@ describe('decision tree view', () => {
   it('discards the old run when the incident resets', async () => {
     fixture.events = [plan]; const view = render(<DecisionTreeView onClose={vi.fn()} />, { wrapper: LocaleProvider });
     await waitFor(() => expect(screen.getByText(/En directo/)).toBeVisible());
-    fixture.run = 'two'; view.rerender(<DecisionTreeView onClose={vi.fn()} />);
+    fixture.run = 'two'; view.rerender(<LocaleProvider><DecisionTreeView onClose={vi.fn()} /></LocaleProvider>);
     await screen.findByText('Esperando la primera decisión');
     expect(screen.queryByText('Reports')).not.toBeInTheDocument();
   });

@@ -49,8 +49,10 @@ import { StatusPublicationEntity } from "@tools/entities/status-publication.enti
 import { ToolCallEntity } from "@tools/entities/tool-call.entity"
 import { ToolTestEntity } from "@tools/testing/tool-test.entity"
 import { ToolsModule } from "@tools/tools.module"
+import { CompanyCallEntity } from "../company-calls/company-call.entity"
 
 const ENTITIES = [
+	CompanyCallEntity,
 	ToolTestEntity,
 	IncomingCallEntity,
 	StatusPublicationEntity,

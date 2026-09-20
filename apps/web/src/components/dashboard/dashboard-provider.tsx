@@ -24,6 +24,9 @@ type DashboardContextValue = {
   status: DashboardStatus;
   overview: Overview | null;
   insights: LearningInsight[];
+  learningLoading: boolean;
+  learningError: string | null;
+  refreshLearning: () => Promise<void>;
   report: RunReport | null;
   activity: ActivityRecord[];
   error: string | null;
@@ -52,7 +55,7 @@ const ACTIVITY_EVENTS = [
   "tool-call.started", "tool-call.completed", "tool-call.failed", "approval.requested",
   "approval.decided", "approval.superseded", "approval.expired", "task.assigned",
   "task.updated", "engineer-call.started", "engineer-call.completed",
-  "engineer-call.failed", "recovery.executed", "recovery.verified", "recovery.probed", "services.checked", "simulation.advanced",
+  "engineer-call.failed", "engineer-call.authorized", "recovery.executed", "recovery.verified", "services.checked", "simulation.advanced",
   "agent.cycle-finished", "agent.limit-reached", "replay.started", "replay.finished",
 ] as const;
 
@@ -107,6 +110,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [insights, setInsights] = useState<LearningInsight[]>([]);
   const [learningResetMessage, setLearningResetMessage] = useState<string | null>(null);
   const learningGeneration = useRef(0);
+  const [learningLoading, setLearningLoading] = useState(false);
+  const [learningError, setLearningError] = useState<string | null>(null);
   const [report, setReport] = useState<RunReport | null>(null);
   const [activity, setActivity] = useState<ActivityRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -146,12 +151,17 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const applyOverview = useCallback((next: Overview) => {
     const nextSequence = Math.max(0, ...next.recentActivity.map((item) => item.sequence));
     const runChanged = latestRunIdentifier.current !== next.incident.runIdentifier;
+    if (runChanged) {
+      learningGeneration.current += 1;
+      learningLoaded.current = false;
+    }
     latestRunIdentifier.current = next.incident.runIdentifier;
     latestSequence.current = runChanged
       ? nextSequence
       : Math.max(latestSequence.current, nextSequence);
     startTransition(() => {
       setOverview(next);
+      if (runChanged) setReport(null);
       setActivity((current) => runChanged ? next.recentActivity : mergeActivityList(current, next.recentActivity));
       setError(null);
       setStatus("active");
@@ -161,20 +171,26 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
   }, [loadLlmHistory]);
 
-  const loadLearning = useCallback(async () => {
-    if (learningLoaded.current) return;
+  const loadLearning = useCallback(async (force = false) => {
+    if (learningLoaded.current && !force) return;
     learningLoaded.current = true;
-    const generation = learningGeneration.current;
+    const generation = ++learningGeneration.current;
+    setLearningLoading(true);
+    setLearningError(null);
     const [insightsResult, reportResult] = await Promise.allSettled([
       casaPepeClient.insights(),
       casaPepeClient.report(),
     ]);
     if (generation !== learningGeneration.current) return;
     startTransition(() => {
+      setLearningLoading(false);
       if (insightsResult.status === "fulfilled") setInsights(insightsResult.value);
+      else setLearningError("No se pudieron cargar los aprendizajes. Vuelve a intentarlo.");
       if (reportResult.status === "fulfilled") setReport(reportResult.value);
     });
   }, []);
+
+  const refreshLearning = useCallback(() => loadLearning(true), [loadLearning]);
 
   const refreshOverview = useCallback(async () => {
     const generation = startGeneration.current;
@@ -224,8 +240,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void refreshOverview(), 0);
+    // Another tab may replace this browser's run; the old run's stream cannot announce
+    // the new run. Reconcile the cookie-scoped snapshot while this tab is visible.
+    const reconcile = () => { if (document.visibilityState === "visible") void refreshOverview(); };
+    const interval = window.setInterval(reconcile, 5000);
+    window.addEventListener("focus", reconcile);
     return () => {
       window.clearTimeout(initialLoad);
+      window.clearInterval(interval);
+      window.removeEventListener("focus", reconcile);
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
     };
   }, [refreshOverview]);
@@ -244,6 +267,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     const receive = (message: MessageEvent<string>) => {
       try {
         const event = JSON.parse(message.data) as ActivityRecord;
+        if (event.runIdentifier !== runIdentifier) return;
         latestSequence.current = Math.max(latestSequence.current, event.sequence);
         startTransition(() => setActivity((current) => mergeActivity(current, event)));
         if (event.type !== "agent.llm-output") scheduleRefresh();
@@ -339,10 +363,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     () => ({
-      status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact,
+      status, overview, insights, learningLoading, learningError, refreshLearning, report, activity, error, busyAction, retry, startDemo, triggerImpact,
       triggerTwist, resetDemo, switchLanguage, resetLearnings, learningResetMessage, runAgentCycle, decideApproval,
     }),
-    [status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact, triggerTwist, resetDemo, switchLanguage, resetLearnings, learningResetMessage, runAgentCycle, decideApproval],
+    [status, overview, insights, learningLoading, learningError, refreshLearning, report, activity, error, busyAction, retry, startDemo, triggerImpact, triggerTwist, resetDemo, switchLanguage, resetLearnings, learningResetMessage, runAgentCycle, decideApproval],
   );
 
   return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>;

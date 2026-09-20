@@ -216,6 +216,7 @@ export function toIncidentSnapshot(entity: IncidentEntity): IncidentSnapshot {
 		agentCycles: entity.agentCycles,
 		backupRegion: entity.backupRegion,
 		businessImpactSummary: entity.businessImpactSummary,
+		callCode: entity.callCode,
 		company: entity.company,
 		createdAt: entity.createdAt,
 		customers: entity.customers,

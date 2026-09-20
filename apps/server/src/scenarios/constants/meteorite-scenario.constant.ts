@@ -59,7 +59,7 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 			confirmed: true,
 			source: "Monitoring",
 			statement:
-				"A meteorite impact has taken the whole Dubai me-central-1 region offline",
+				"A missile impact has taken the whole Dubai me-central-1 region offline",
 		},
 		{
 			confirmed: true,
@@ -88,7 +88,7 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 	],
 	language: "en",
 	narrative:
-		"A meteorite has destroyed the AWS Dubai (me-central-1) data centers that host the delivery platform. The closest constrained backup is Oman Local Zone, then Bahrain and Riyadh.",
+		"A missile has destroyed the AWS Dubai (me-central-1) data centers that host the delivery platform. The closest constrained backup is Oman Local Zone, then Bahrain and Riyadh.",
 	region: IMPACT_REGION,
 	resources: meteoriteResources("en"),
 	services: [
@@ -241,7 +241,7 @@ export const METEORITE_SCENARIO: ScenarioDefinition = {
 		name: "Carlos Vega",
 		role: "Customer support lead",
 	},
-	title: "Meteorite impact on Dubai",
+	title: "Missile impact on Dubai",
 	topology: meteoriteTopology("en"),
 	twist: {
 		capacityAfterTwist: 1,

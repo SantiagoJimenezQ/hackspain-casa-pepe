@@ -423,6 +423,13 @@ function formatOutageTime(timestamp: string | undefined): string {
 	return `${date.toISOString().slice(11, 16)} UTC`
 }
 
+/**
+ * The permission an operator acts on came from the live report, so a contradicting analysis
+ * must not vanish: it usually means the contact changed their mind after the agent registered.
+ */
+const DISAGREEMENT_NOTE =
+	"Review needed: the live report and the post-call analysis disagree on the permissions."
+
 function buildResult(
 	body: ElevenLabsConversationResponse,
 	analysis: JSONRecord | null,
@@ -430,44 +437,81 @@ function buildResult(
 	questions: ReadonlyArray<EngineerQuestion>,
 	live: EngineerCallAuthorizations | undefined,
 ): ProviderCallResult {
+	const analysed: EngineerCallAuthorizations = {
+		notifyAllClients: authorizationFrom(
+			analysis?.data_collection_results,
+			"notify_all_clients",
+		),
+		trafficFailoverAuthorized: authorizationFrom(
+			analysis?.data_collection_results,
+			"traffic_failover_authorized",
+		),
+	}
+	const summary = conversationSummary(analysis, outcome)
 	return {
 		answers: answersFrom(analysis?.data_collection_results, questions),
 		authorizations: {
-			notifyAllClients: preferConclusive(
-				authorizationFrom(
-					analysis?.data_collection_results,
-					"notify_all_clients",
-				),
+			notifyAllClients: preferLive(
+				analysed.notifyAllClients,
 				live?.notifyAllClients,
 			),
-			trafficFailoverAuthorized: preferConclusive(
-				authorizationFrom(
-					analysis?.data_collection_results,
-					"traffic_failover_authorized",
-				),
+			trafficFailoverAuthorized: preferLive(
+				analysed.trafficFailoverAuthorized,
 				live?.trafficFailoverAuthorized,
 			),
 		},
 		outcome,
-		summary: conversationSummary(analysis, outcome),
+		summary: authorizationsDisagree(analysed, live)
+			? `${DISAGREEMENT_NOTE} ${summary}`
+			: summary,
 		transcript: conversationTranscript(body.transcript),
 	}
 }
 
 /**
- * Post-call analysis returns `null` whenever it cannot read a verdict from the transcript,
- * which is common when the contact answers over the agent. A permission the agent already
- * reported while on the line is better evidence than that silence, so it fills the gap. An
- * analysed verdict still wins: it saw the whole conversation.
+ * What the agent reported while on the line wins. It heard the answer in context and said so
+ * deliberately, and it lands seconds into the call instead of after it. Post-call analysis is
+ * the safety net: it only speaks when no live report arrived, which happens when the tool
+ * failed, the line dropped first, or the agent never called it.
+ *
+ * The trade-off is deliberate. Analysis reads the whole conversation, so it alone could catch
+ * a contact who says yes and takes it back moments later; preferring the live report gives that
+ * up for speed. `authorizationsDisagree` keeps such a case visible instead of silent.
  */
-function preferConclusive(
+function preferLive(
 	analysed: EngineerCallAuthorization,
 	live: EngineerCallAuthorization | undefined,
 ): EngineerCallAuthorization {
-	if (analysed.value !== null || !live || live.value === null) {
+	if (!live || live.value === null) {
 		return analysed
 	}
 	return live
+}
+
+/** True when both channels reached a verdict and they contradict each other. */
+export function authorizationsDisagree(
+	analysed: EngineerCallAuthorizations,
+	live: EngineerCallAuthorizations | undefined,
+): boolean {
+	if (!live) return false
+	return (
+		contradicts(analysed.notifyAllClients, live.notifyAllClients) ||
+		contradicts(
+			analysed.trafficFailoverAuthorized,
+			live.trafficFailoverAuthorized,
+		)
+	)
+}
+
+function contradicts(
+	analysed: EngineerCallAuthorization,
+	live: EngineerCallAuthorization,
+): boolean {
+	return (
+		analysed.value !== null &&
+		live.value !== null &&
+		analysed.value !== live.value
+	)
 }
 
 async function readJSON<T>(response: Response): Promise<T | null> {

@@ -1,8 +1,10 @@
+import { RunResource } from "@authentication/session/browser-session"
 import { ConfigurationService } from "@common/services/configuration.service"
 import {
 	ConfirmIncomingCallDTO,
 	IncomingCallDTO,
 } from "@engineers/dtos/incoming-call.dto"
+import { IncomingCallEntity } from "@engineers/entities/incoming-call.entity"
 import { IncomingCallsService } from "@engineers/services/incoming-calls.service"
 import { RunsService } from "@incidents/services/runs.service"
 import {
@@ -13,6 +15,7 @@ import {
 	Param,
 	Post,
 } from "@nestjs/common"
+@RunResource(IncomingCallEntity)
 @Controller("engineers/incoming-calls")
 export class IncomingCallsController {
 	constructor(

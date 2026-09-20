@@ -1,6 +1,9 @@
 import { ActivityService } from "@activity/services/activity.service"
 import { insertEntity, updateEntity } from "@common/database/persistence.helper"
-import { EntityNotFoundException } from "@common/exceptions/domain.exception"
+import {
+	ConcurrentPlanVersionException,
+	EntityNotFoundException,
+} from "@common/exceptions/domain.exception"
 import { nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
 import { Injectable } from "@nestjs/common"
@@ -16,7 +19,28 @@ import {
 	PlanStep,
 	StepUpdate,
 } from "@plans/types/plan.type"
-import { Repository } from "typeorm"
+import { QueryFailedError, Repository } from "typeorm"
+
+const UNIQUE_VIOLATION = "23505"
+
+async function insertPlanVersion(
+	repository: Repository<PlanEntity>,
+	entity: PlanEntity,
+	runIdentifier: string,
+): Promise<PlanEntity> {
+	try {
+		return await insertEntity(repository, entity)
+	} catch (error) {
+		if (
+			error instanceof QueryFailedError &&
+			(error as QueryFailedError & { readonly code?: string }).code ===
+				UNIQUE_VIOLATION
+		) {
+			throw new ConcurrentPlanVersionException(runIdentifier)
+		}
+		throw error
+	}
+}
 
 @Injectable()
 export class PlansService {
@@ -90,7 +114,14 @@ export class PlansService {
 			updatedAt: timestamp,
 			version: previous ? previous.version + 1 : 1,
 		})
-		const saved = await insertEntity(this.repository, entity)
+		// The version number is decided from a read, so two saves for the same run can both aim at
+		// it. The unique index on (runIdentifier, version) settles the race, and the loser is stale
+		// in exactly the way its caller already guards against.
+		const saved = await insertPlanVersion(
+			this.repository,
+			entity,
+			input.runIdentifier,
+		)
 		const record = toPlanRecord(saved)
 		await this.activityService.record({
 			correlation: {

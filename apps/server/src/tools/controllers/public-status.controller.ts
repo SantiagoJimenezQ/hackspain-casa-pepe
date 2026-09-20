@@ -1,5 +1,5 @@
 import { Authorization } from "@authentication/decorators/authorization.decorator"
-import { Controller, Get, Header } from "@nestjs/common"
+import { Controller, Get, Header, Query } from "@nestjs/common"
 import { CommunicationToolsService } from "@tools/implementations/communication-tools"
 import { renderStatusPage } from "@tools/views/status-page"
 @Controller("status")
@@ -13,13 +13,13 @@ export class PublicStatusController {
 		"Content-Security-Policy",
 		"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
 	)
-	async page() {
-		return renderStatusPage(await this.communications.latest())
+	async page(@Query("runIdentifier") runIdentifier?: string) {
+		return renderStatusPage(await this.communications.latest(runIdentifier))
 	}
 	@Get("public")
 	@Authorization("public")
 	@Header("Cache-Control", "no-store")
-	latest() {
-		return this.communications.latest()
+	latest(@Query("runIdentifier") runIdentifier?: string) {
+		return this.communications.latest(runIdentifier)
 	}
 }

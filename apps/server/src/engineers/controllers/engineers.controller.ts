@@ -1,4 +1,6 @@
+import { RunResource } from "@authentication/session/browser-session"
 import { ListEngineerCallsDTO } from "@engineers/dtos/list-engineer-calls.dto"
+import { EngineerCallEntity } from "@engineers/entities/engineer-call.entity"
 import { EngineersService } from "@engineers/services/engineers.service"
 import { EngineerCallRecord } from "@engineers/types/engineer.type"
 import { RunsService } from "@incidents/services/runs.service"
@@ -7,6 +9,7 @@ import { ApiOperation, ApiSecurity, ApiTags } from "@nestjs/swagger"
 
 @ApiTags("Engineer calls")
 @ApiSecurity("operator")
+@RunResource(EngineerCallEntity)
 @Controller("engineers/calls")
 export class EngineersController {
 	constructor(

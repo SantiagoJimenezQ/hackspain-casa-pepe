@@ -9,6 +9,10 @@ import {
 	CUSTOMER_RANKING_TOOL_NAME,
 } from "@customers/constants/customer-priority.constant"
 import {
+	companyRank,
+	sectorRank,
+} from "@customers/helpers/customer-priority.helper"
+import {
 	CustomerPriority,
 	CustomerPriorityReport,
 } from "@customers/types/customer-priority.type"
@@ -279,7 +283,14 @@ export class CustomerRankingLlmService {
 					rank: answer.rank,
 				}
 			})
-			.sort((left, right) => left.rank - right.rank)
+			.sort(
+				(left, right) =>
+					companyRank(left.identifier) -
+						companyRank(right.identifier) ||
+					sectorRank(left.sector) - sectorRank(right.sector) ||
+					left.rank - right.rank,
+			)
+			.map((customer, index) => ({ ...customer, rank: index + 1 }))
 		return {
 			...baseline,
 			customers,

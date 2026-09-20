@@ -4,7 +4,10 @@ import {
 	CUSTOMER_MINUTES_MAXIMUM_POINTS,
 	CUSTOMER_MINUTES_PER_POINT,
 	CUSTOMER_PRIORITY_CRITERIA,
+	CUSTOMER_PRIORITY_ORDER,
 	CUSTOMER_RECOVERY_IN_PROGRESS_PENALTY,
+	CUSTOMER_SECTOR_PRIORITY,
+	CUSTOMER_SECTOR_UNRANKED,
 	CUSTOMER_UNHEALTHY_SERVICE_WEIGHT,
 	CUSTOMER_USERS_MAXIMUM_POINTS,
 	CUSTOMER_USERS_PER_POINT,
@@ -28,6 +31,37 @@ const IMPACT_ORDER: ReadonlyArray<BusinessImpactLevel> = [
 	"medium",
 	"low",
 ]
+
+/**
+ * Where a company sits in the fixed head of the order. Everything the order does not name shares
+ * the place right behind it, and falls back to sector and score.
+ */
+export function companyRank(identifier: string): number {
+	const place = CUSTOMER_PRIORITY_ORDER.indexOf(identifier)
+	if (place === -1) {
+		return CUSTOMER_PRIORITY_ORDER.length
+	}
+	return place
+}
+
+/**
+ * The tier a sector belongs to. Scenarios name their sectors in their own language and with
+ * their own accents, so the name is compared stripped of both.
+ */
+export function sectorRank(sector: string): number {
+	const normalized = sector
+		.normalize("NFD")
+		.replace(/\p{Diacritic}/gu, "")
+		.trim()
+		.toLowerCase()
+	const tier = CUSTOMER_SECTOR_PRIORITY.findIndex((names) =>
+		names.includes(normalized),
+	)
+	if (tier === -1) {
+		return CUSTOMER_SECTOR_UNRANKED
+	}
+	return tier
+}
 
 const UNHEALTHY_STATUSES: ReadonlySet<string> = new Set([
 	"down",
@@ -268,6 +302,8 @@ export function prioritizeCustomers(
 		.map((customer) => prioritizeCustomer(customer, incident, actions, now))
 		.sort(
 			(left, right) =>
+				companyRank(left.identifier) - companyRank(right.identifier) ||
+				sectorRank(left.sector) - sectorRank(right.sector) ||
 				right.score - left.score ||
 				right.users - left.users ||
 				left.name.localeCompare(right.name),

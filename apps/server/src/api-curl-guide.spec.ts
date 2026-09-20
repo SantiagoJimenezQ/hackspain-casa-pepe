@@ -54,8 +54,10 @@ import { ToolCallEntity } from "@tools/entities/tool-call.entity"
 import { ToolTestEntity } from "@tools/testing/tool-test.entity"
 import { ToolsModule } from "@tools/tools.module"
 import { ToolDefinitionView } from "@tools/types/tool.type"
+import { CompanyCallEntity } from "./company-calls/company-call.entity"
 
 const ENTITIES = [
+	CompanyCallEntity,
 	ToolTestEntity,
 	IncomingCallEntity,
 	StatusPublicationEntity,

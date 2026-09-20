@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Radio, RefreshCcw, RotateCcw, Sparkles, Zap } from "lucide-react";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { LanguageSwitcher } from "@/components/dashboard/language-switcher";
+import { LearningPanel } from "@/components/dashboard/learning-panel";
 import { ThemeSwitcher } from "@/components/dashboard/theme-switcher";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -92,6 +93,7 @@ export function TopBar() {
             >
               <Sparkles /> <span className="hidden lg:inline">Twist</span>
             </Button>
+            <LearningPanel />
             <Separator orientation="vertical" className="mx-0.5 h-5 self-center" />
             <Button
               size="sm"

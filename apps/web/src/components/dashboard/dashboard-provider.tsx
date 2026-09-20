@@ -24,6 +24,9 @@ type DashboardContextValue = {
   status: DashboardStatus;
   overview: Overview | null;
   insights: LearningInsight[];
+  learningLoading: boolean;
+  learningError: string | null;
+  refreshLearning: () => Promise<void>;
   report: RunReport | null;
   activity: ActivityRecord[];
   error: string | null;
@@ -107,6 +110,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [insights, setInsights] = useState<LearningInsight[]>([]);
   const [learningResetMessage, setLearningResetMessage] = useState<string | null>(null);
   const learningGeneration = useRef(0);
+  const [learningLoading, setLearningLoading] = useState(false);
+  const [learningError, setLearningError] = useState<string | null>(null);
   const [report, setReport] = useState<RunReport | null>(null);
   const [activity, setActivity] = useState<ActivityRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -161,20 +166,26 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
   }, [loadLlmHistory]);
 
-  const loadLearning = useCallback(async () => {
-    if (learningLoaded.current) return;
+  const loadLearning = useCallback(async (force = false) => {
+    if (learningLoaded.current && !force) return;
     learningLoaded.current = true;
-    const generation = learningGeneration.current;
+    const generation = ++learningGeneration.current;
+    setLearningLoading(true);
+    setLearningError(null);
     const [insightsResult, reportResult] = await Promise.allSettled([
       casaPepeClient.insights(),
       casaPepeClient.report(),
     ]);
     if (generation !== learningGeneration.current) return;
     startTransition(() => {
+      setLearningLoading(false);
       if (insightsResult.status === "fulfilled") setInsights(insightsResult.value);
+      else setLearningError("No se pudieron cargar los aprendizajes. Vuelve a intentarlo.");
       if (reportResult.status === "fulfilled") setReport(reportResult.value);
     });
   }, []);
+
+  const refreshLearning = useCallback(() => loadLearning(true), [loadLearning]);
 
   const refreshOverview = useCallback(async () => {
     const generation = startGeneration.current;
@@ -339,10 +350,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     () => ({
-      status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact,
+      status, overview, insights, learningLoading, learningError, refreshLearning, report, activity, error, busyAction, retry, startDemo, triggerImpact,
       triggerTwist, resetDemo, switchLanguage, resetLearnings, learningResetMessage, runAgentCycle, decideApproval,
     }),
-    [status, overview, insights, report, activity, error, busyAction, retry, startDemo, triggerImpact, triggerTwist, resetDemo, switchLanguage, resetLearnings, learningResetMessage, runAgentCycle, decideApproval],
+    [status, overview, insights, learningLoading, learningError, refreshLearning, report, activity, error, busyAction, retry, startDemo, triggerImpact, triggerTwist, resetDemo, switchLanguage, resetLearnings, learningResetMessage, runAgentCycle, decideApproval],
   );
 
   return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>;

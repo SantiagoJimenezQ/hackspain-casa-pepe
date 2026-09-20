@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { TrendingDown } from "lucide-react";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -58,7 +58,7 @@ export function TwistButton({ disabled, onTrigger }: { disabled: boolean; onTrig
           if (!disabled) onTrigger();
         }}
       >
-        <Sparkles /> <span className="hidden lg:inline">{es ? "Recortar capacidad" : "Cut capacity"}</span>
+        <TrendingDown /> <span className="hidden lg:inline">{es ? "Recortar capacidad" : "Cut capacity"}</span>
       </TooltipTrigger>
       <TooltipContent id={helpId} role="tooltip" side="bottom" sideOffset={8}>
         <div className="flex flex-col gap-1">

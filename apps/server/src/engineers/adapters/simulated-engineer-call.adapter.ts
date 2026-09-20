@@ -22,6 +22,9 @@ export class SimulatedEngineerCallAdapter implements EngineerCallAdapter {
 		request: AdapterCallRequest,
 		deliverResult: DeliverCallResult,
 	): Promise<AdapterCallOutcome> {
+		const alwaysAuthorized =
+			this.configuration.engineerCall?.mode === "simulated" &&
+			this.configuration.engineerCall.simulatedAlwaysAuthorized === true
 		const delay =
 			this.configuration.happyRobot.simulatedCallDelayMilliseconds
 		this.logger.log(LOG_MESSAGES.ENGINEERS.SIMULATED_CALL_SCHEDULED, {
@@ -41,6 +44,22 @@ export class SimulatedEngineerCallAdapter implements EngineerCallAdapter {
 				}
 			})
 			deliverResult(request.call.identifier, {
+				...(alwaysAuthorized
+					? {
+							authorizations: {
+								notifyAllClients: {
+									value: true,
+									rationale:
+										"Simulated authorization: SIMULATED_CALL_ALWAYS_AUTHORIZED is enabled; no engineer was contacted.",
+								},
+								trafficFailoverAuthorized: {
+									value: true,
+									rationale:
+										"Simulated authorization: SIMULATED_CALL_ALWAYS_AUTHORIZED is enabled; no engineer was contacted.",
+								},
+							},
+						}
+					: {}),
 				answers,
 				outcome: "completed",
 				summary: answers.length
@@ -50,7 +69,9 @@ export class SimulatedEngineerCallAdapter implements EngineerCallAdapter {
 									`${answer.question}: ${answer.answer}`,
 							)
 							.join("\n")
-					: "Simulated call completed without questions; no technical facts or authorizations were obtained.",
+					: alwaysAuthorized
+						? "Simulated call completed without questions; authorizations were supplied by SIMULATED_CALL_ALWAYS_AUTHORIZED. No technical facts were obtained."
+						: "Simulated call completed without questions; no technical facts or authorizations were obtained.",
 				transcript: answers
 					.map(
 						(answer) =>

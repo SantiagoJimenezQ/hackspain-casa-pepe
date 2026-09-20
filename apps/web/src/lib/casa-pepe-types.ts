@@ -56,6 +56,8 @@ export type Service = {
 };
 
 export type Incident = {
+  /** Six-digit code a company reads out to reach this run; absent on runs created before it. */
+  callCode?: string;
   runKind?: "live" | "replay";
   simulation?: { mode: "manual" | "randomized" };
   runIdentifier: string;
@@ -246,6 +248,8 @@ export type Overview = {
   engineerCalls: EngineerCall[];
   toolCalls: ToolCall[];
   recentActivity: ActivityRecord[];
+  /** The line a company can ring to reach this run; absent until inbound calls are configured. */
+  inboundCall?: { phoneNumber: string };
   agent: {
     recoveryMode?: "simulated" | "http";
     engine?: "llm";

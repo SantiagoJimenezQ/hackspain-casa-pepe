@@ -91,15 +91,7 @@ export function TopBar() {
             >
               <Zap /> <span className="hidden lg:inline">{t("topbar.impact")}</span>
             </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => void triggerTwist()}
-              disabled={!live || busy}
-              title={t("topbar.twistHint")}
-            >
-              <Sparkles /> <span className="hidden lg:inline">{t("topbar.twist")}</span>
-            </Button>
+            <TwistButton disabled={!live || busy} onTrigger={() => void triggerTwist()} />
             <LearningPanel />
             <Separator orientation="vertical" className="mx-0.5 h-5 self-center" />
             <Button

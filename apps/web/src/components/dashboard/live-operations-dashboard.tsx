@@ -1,7 +1,7 @@
 "use client";
 
 import { DeliveryProbe } from "@/components/dashboard/delivery-probe";
-import { CircleDashed } from "lucide-react";
+import { CircleDashed, ListChecks } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { ActiveCallBanner } from "@/components/dashboard/active-call-banner";
 import { AgentPanel } from "@/components/dashboard/agent-panel";

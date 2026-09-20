@@ -146,12 +146,17 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const applyOverview = useCallback((next: Overview) => {
     const nextSequence = Math.max(0, ...next.recentActivity.map((item) => item.sequence));
     const runChanged = latestRunIdentifier.current !== next.incident.runIdentifier;
+    if (runChanged) {
+      learningGeneration.current += 1;
+      learningLoaded.current = false;
+    }
     latestRunIdentifier.current = next.incident.runIdentifier;
     latestSequence.current = runChanged
       ? nextSequence
       : Math.max(latestSequence.current, nextSequence);
     startTransition(() => {
       setOverview(next);
+      if (runChanged) setReport(null);
       setActivity((current) => runChanged ? next.recentActivity : mergeActivityList(current, next.recentActivity));
       setError(null);
       setStatus("active");
@@ -224,8 +229,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void refreshOverview(), 0);
+    // Another tab may replace this browser's run; the old run's stream cannot announce
+    // the new run. Reconcile the cookie-scoped snapshot while this tab is visible.
+    const reconcile = () => { if (document.visibilityState === "visible") void refreshOverview(); };
+    const interval = window.setInterval(reconcile, 5000);
+    window.addEventListener("focus", reconcile);
     return () => {
       window.clearTimeout(initialLoad);
+      window.clearInterval(interval);
+      window.removeEventListener("focus", reconcile);
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
     };
   }, [refreshOverview]);
@@ -244,6 +256,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     const receive = (message: MessageEvent<string>) => {
       try {
         const event = JSON.parse(message.data) as ActivityRecord;
+        if (event.runIdentifier !== runIdentifier) return;
         latestSequence.current = Math.max(latestSequence.current, event.sequence);
         startTransition(() => setActivity((current) => mergeActivity(current, event)));
         if (event.type !== "agent.llm-output") scheduleRefresh();

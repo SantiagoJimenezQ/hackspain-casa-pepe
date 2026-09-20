@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common"
 import { APP_GUARD } from "@nestjs/core"
 
 @Module({
-	providers: [{ provide: APP_GUARD, useClass: APIKeyGuard }],
+	exports: [APIKeyGuard],
+	providers: [APIKeyGuard, { provide: APP_GUARD, useExisting: APIKeyGuard }],
 })
 export class AuthenticationModule {}

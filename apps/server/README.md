@@ -189,3 +189,24 @@ steps are unfinished, or tasks in the run are open/in progress. `completed` is
 reserved for settled plan work. An idle decision cycle does not mean the incident
 is resolved. The wait reason should identify the missing evidence, owner, and
 resuming event or operator action.
+
+## Anonymous browser sessions
+
+Operator incident routes now require both `Authorization: API <API_KEY>` and
+`X-Casa-Pepe-Session: <64 lowercase hex characters>`. Generate a random 32-byte
+session token once per independent client; keep reusing it to resume its runs.
+The dashboard manages this automatically in an HttpOnly cookie. A run ID is not
+an ownership credential. Start/reset, history, approvals, tasks and learning are
+isolated to the session. Missing sessions never select a global incident.
+
+Standalone tool checks, model diagnostics and webhook administration are direct
+API-key-only administrator routes and reject browser-session headers. Provider
+callbacks retain their existing signed authentication and explicit record IDs.
+Public status now requires `?runIdentifier=...`. Uncorrelated incoming email
+stays unassigned.
+
+Deploy a single continuously running backend and matching frontend. Startup runs
+the ownership migration: existing data becomes legacy and active legacy runs stop.
+Stop old servers before upgrading; do not mix old/new versions or roll back without
+a pre-migration database backup. See [Architecture.md](../../Architecture.md) for
+schema, scheduler limitations, integration boundaries and PostgreSQL test commands.

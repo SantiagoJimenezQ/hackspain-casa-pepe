@@ -1,6 +1,8 @@
+import { currentSessionId } from "@authentication/session/browser-session"
 import { insertEntity, updateEntity } from "@common/database/persistence.helper"
 import { nowISO } from "@common/helpers/clock.helper"
 import { createPrefixedIdentifier } from "@common/helpers/identifier.helper"
+import { RunsService } from "@incidents/services/runs.service"
 import { LearningInsightEntity } from "@learning/entities/learning-insight.entity"
 import {
 	CapacityInsight,
@@ -15,6 +17,7 @@ export class LearningService {
 	constructor(
 		@InjectRepository(LearningInsightEntity)
 		private readonly repository: Repository<LearningInsightEntity>,
+		private readonly runs: RunsService,
 	) {}
 
 	async recordCapacityObservation(
@@ -27,8 +30,12 @@ export class LearningService {
 		if (confirmedCapacity >= reportedCapacity) {
 			return null
 		}
+		const browserSessionId = (
+			await this.runs.getEntityByRunIdentifier(runIdentifier)
+		).browserSessionId
 		const existing = await this.repository.findOne({
 			where: {
+				browserSessionId,
 				kind: "capacity-overstated",
 				scenarioIdentifier,
 				subject: resourceIdentifier,
@@ -42,6 +49,7 @@ export class LearningService {
 		const entity = existing
 			? existing
 			: this.repository.create({
+					browserSessionId,
 					createdAt: timestamp,
 					identifier: createPrefixedIdentifier("ins"),
 					kind: "capacity-overstated",
@@ -74,8 +82,12 @@ export class LearningService {
 		detail: string,
 		runIdentifier: string,
 	): Promise<LearningInsightRecord> {
+		const browserSessionId = (
+			await this.runs.getEntityByRunIdentifier(runIdentifier)
+		).browserSessionId
 		const existing = await this.repository.findOne({
 			where: {
+				browserSessionId,
 				kind: "recovery-outcome",
 				scenarioIdentifier,
 				subject: serviceIdentifier,
@@ -91,6 +103,7 @@ export class LearningService {
 		const entity = existing
 			? existing
 			: this.repository.create({
+					browserSessionId,
 					createdAt: timestamp,
 					identifier: createPrefixedIdentifier("ins"),
 					kind: "recovery-outcome",
@@ -118,9 +131,12 @@ export class LearningService {
 	async findCapacityInsight(
 		scenarioIdentifier: string,
 		resourceIdentifier: string,
+		runIdentifier?: string,
 	): Promise<CapacityInsight | null> {
+		const browserSessionId = await this.ownerFor(runIdentifier)
 		const entity = await this.repository.findOne({
 			where: {
+				browserSessionId,
 				kind: "capacity-overstated",
 				scenarioIdentifier,
 				subject: resourceIdentifier,
@@ -141,8 +157,11 @@ export class LearningService {
 
 	async list(
 		scenarioIdentifier?: string,
+		runIdentifier?: string,
 	): Promise<ReadonlyArray<LearningInsightRecord>> {
-		const where: FindOptionsWhere<LearningInsightEntity> = {}
+		const where: FindOptionsWhere<LearningInsightEntity> = {
+			browserSessionId: await this.ownerFor(runIdentifier),
+		}
 		if (scenarioIdentifier) {
 			where.scenarioIdentifier = scenarioIdentifier
 		}
@@ -153,8 +172,16 @@ export class LearningService {
 		return entities.map(toInsightRecord)
 	}
 
+	private async ownerFor(runIdentifier?: string): Promise<string> {
+		return runIdentifier
+			? (await this.runs.getEntityByRunIdentifier(runIdentifier))
+					.browserSessionId
+			: currentSessionId()
+	}
 	async clear(): Promise<number> {
-		const entities = await this.repository.find()
+		const entities = await this.repository.find({
+			where: { browserSessionId: currentSessionId() },
+		})
 		await this.repository.remove(entities)
 		return entities.length
 	}

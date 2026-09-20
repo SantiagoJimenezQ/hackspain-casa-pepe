@@ -126,7 +126,7 @@ export class CommunicationToolsService {
 			return {
 				output: {
 					channel,
-					detail: "Published demo service status to /api/status",
+					detail: `Published demo service status to /api/status?runIdentifier=${encodeURIComponent(context.runIdentifier)}`,
 					kind: "communication",
 					mode: "live",
 					reference: key,
@@ -148,13 +148,12 @@ export class CommunicationToolsService {
 			}
 		}
 	}
-	async latest() {
-		const run = await this.runs.findActiveEntity()
-		if (!run) return null
+	async latest(runIdentifier?: string) {
+		if (!runIdentifier) return null
 		const entries = await this.publications.find({
 			order: { createdAt: "DESC" },
 			take: 1,
-			where: { runIdentifier: run.runIdentifier },
+			where: { runIdentifier },
 		})
 		// Only deliberately published, customer-safe fields leave the authenticated API.
 		const entry = entries[0]

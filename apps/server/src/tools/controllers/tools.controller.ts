@@ -1,13 +1,16 @@
+import { RunResource } from "@authentication/session/browser-session"
 import { RunsService } from "@incidents/services/runs.service"
 import { Controller, Get, Param, Query } from "@nestjs/common"
 import { ApiOperation, ApiSecurity, ApiTags } from "@nestjs/swagger"
 import { ListToolCallsDTO } from "@tools/dtos/list-tool-calls.dto"
+import { ToolCallEntity } from "@tools/entities/tool-call.entity"
 import { ToolRegistryService } from "@tools/services/tool-registry.service"
 import { ToolsService } from "@tools/services/tools.service"
 import { ToolCallRecord, ToolDefinitionView } from "@tools/types/tool.type"
 
 @ApiTags("Tools")
 @ApiSecurity("operator")
+@RunResource(ToolCallEntity)
 @Controller("tools")
 export class ToolsController {
 	constructor(

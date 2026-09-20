@@ -665,7 +665,10 @@ export class AgentService {
 				this.incomingCalls.list(runIdentifier),
 				this.engineersService.list(runIdentifier),
 				this.toolsService.list(runIdentifier),
-				this.learningService.list(this.scenarioOf(incident).family),
+				this.learningService.list(
+					this.scenarioOf(incident).family,
+					runIdentifier,
+				),
 				this.tasksService.list(runIdentifier),
 			])
 		return {
@@ -865,6 +868,7 @@ export class AgentService {
 			const insight = await this.learningService.findCapacityInsight(
 				scenario.family,
 				resource.identifier,
+				incident.runIdentifier,
 			)
 			if (!insight) {
 				continue

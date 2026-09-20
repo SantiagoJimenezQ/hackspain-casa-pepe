@@ -1,12 +1,15 @@
+import { RunResource } from "@authentication/session/browser-session"
 import { RunsService } from "@incidents/services/runs.service"
 import { Controller, Get, Param, Query } from "@nestjs/common"
 import { ApiOperation, ApiSecurity, ApiTags } from "@nestjs/swagger"
 import { RunScopedQueryDTO } from "@plans/dtos/list-plans.dto"
+import { PlanEntity } from "@plans/entities/plan.entity"
 import { PlansService } from "@plans/services/plans.service"
 import { CurrentPlanResponse, PlanRecord } from "@plans/types/plan.type"
 
 @ApiTags("Plans")
 @ApiSecurity("operator")
+@RunResource(PlanEntity)
 @Controller("plans")
 export class PlansController {
 	constructor(

@@ -1,4 +1,8 @@
 import { ActivityService } from "@activity/services/activity.service"
+import {
+	currentSessionId,
+	LEGACY_SESSION,
+} from "@authentication/session/browser-session"
 import { DOMAIN_EVENTS } from "@common/constants/domain-events.constant"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
 import { insertEntity, updateEntity } from "@common/database/persistence.helper"
@@ -76,8 +80,7 @@ export class IncidentsService {
 			scenario,
 			simulation,
 		)
-		const entity = await insertEntity(
-			this.repository,
+		const entity = await this.insertRun(
 			this.buildBaselineEntity(runtimeScenario, "live", "", simulation),
 		)
 		const snapshot = toIncidentSnapshot(entity)
@@ -118,8 +121,7 @@ export class IncidentsService {
 			scenario,
 			replayCapacityState,
 		)
-		const entity = await insertEntity(
-			this.repository,
+		const entity = await this.insertRun(
 			this.buildBaselineEntity(
 				runtimeScenario,
 				"replay",
@@ -147,10 +149,11 @@ export class IncidentsService {
 			return this.runsService.getByRunIdentifier(current.runIdentifier)
 		}
 		if (current) {
-			await this.deactivateRun(
-				current,
-				"The operator changed the language; this run ends here",
-			)
+			if (currentSessionId() === LEGACY_SESSION)
+				await this.deactivateRun(
+					current,
+					"The operator changed the language",
+				)
 		}
 		return this.startRun(scenario.identifier)
 	}
@@ -163,10 +166,11 @@ export class IncidentsService {
 			? current.scenarioIdentifier
 			: this.scenariosService.list()[0].identifier
 		if (current) {
-			await this.deactivateRun(
-				current,
-				"The operator reset the scenario; this run ends here",
-			)
+			if (currentSessionId() === LEGACY_SESSION)
+				await this.deactivateRun(
+					current,
+					"The operator reset the scenario",
+				)
 			await this.activityService.record({
 				correlation: {},
 				incidentIdentifier: current.identifier,
@@ -848,6 +852,56 @@ export class IncidentsService {
 		})
 	}
 
+	/** Serialize replacement even when two tabs start together. No external work inside the transaction. */
+	private async insertRun(entity: IncidentEntity): Promise<IncidentEntity> {
+		// Internal fixtures and historical administration are not anonymous browser runs.
+		if (entity.browserSessionId === LEGACY_SESSION)
+			return insertEntity(this.repository, entity)
+		const previous = await this.repository.manager.transaction(
+			async (manager) => {
+				await manager.query(
+					"SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+					[entity.browserSessionId],
+				)
+				const repository = manager.getRepository(IncidentEntity)
+				const active = await repository.find({
+					where: {
+						active: true,
+						browserSessionId: entity.browserSessionId,
+					},
+				})
+				for (const run of active) {
+					run.active = false
+					run.status = "reset"
+					run.updatedAt = nowISO()
+					run.harnessEvents = [
+						...run.harnessEvents,
+						{
+							appliedAt: run.updatedAt,
+							event: {
+								source: "Harness",
+								statement:
+									"Replaced by a new run in this browser",
+								status: "confirmed",
+								type: "fact-reported",
+							},
+							identifier: createPrefixedIdentifier("hev"),
+							source: "Harness",
+						},
+					]
+					await updateEntity(repository, run)
+				}
+				await insertEntity(repository, entity)
+				return active
+			},
+		)
+		for (const run of previous)
+			this.eventEmitter.emit(DOMAIN_EVENTS.INCIDENT_RUN_DEACTIVATED, {
+				runIdentifier: run.runIdentifier,
+			})
+		return entity
+	}
+
 	private buildBaselineEntity(
 		scenario: ScenarioDefinition,
 		runKind: RunKind,
@@ -859,6 +913,7 @@ export class IncidentsService {
 			active: true,
 			agentCycles: 0,
 			backupRegion: scenario.backupRegion,
+			browserSessionId: currentSessionId(),
 			businessImpactSummary: scenario.businessImpactSummary,
 			company: scenario.company,
 			createdAt: timestamp,

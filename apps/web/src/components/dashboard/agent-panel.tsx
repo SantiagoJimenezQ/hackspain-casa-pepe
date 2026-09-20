@@ -3,7 +3,7 @@
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { GitBranch } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, Check, CheckCircleIcon, ChevronDownIcon, CircleIcon, Copy, Loader2, XCircleIcon } from "lucide-react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
@@ -111,20 +111,30 @@ function proposedToolState(
 }
 
 /**
- * Where each eye sits inside the 192x172 drawing, measured from the artwork itself. The pupils
- * are redrawn on top of a white patch so they can look around; the face underneath is white, so
- * the patch is invisible.
+ * Where each eye sits inside the 192x172 drawing, measured from the artwork itself. The patch is
+ * as wide as it can be without reaching the head outline or the other eye, and the face under it
+ * is white, so redrawing the pupil on top is invisible.
  */
 const PEPE_EYES = [
-  { key: "left", left: "36.9%", top: "48.2%" },
-  { key: "right", left: "51.0%", top: "48.6%" },
+  { key: "left", left: "36.7%", top: "48.3%" },
+  { key: "right", left: "50.8%", top: "48.5%" },
 ];
 
-/** A long dwell at each side, so he reads as watching the door rather than twitching. */
-const PUPIL_KEYFRAMES = ["0%", "-62%", "-62%", "62%", "62%", "0%"];
-const PUPIL_TIMES = [0, 0.16, 0.4, 0.56, 0.8, 1];
+const EYE_PATCH = { height: "12.5%", width: "12%" };
+/** The pupil is 30% of the patch, so 115% of its own width puts it flush against either end. */
+const PUPIL_KEYFRAMES = ["0%", "-115%", "-115%", "115%", "115%", "0%"];
+const PUPIL_TIMES = [0, 0.18, 0.38, 0.6, 0.8, 1];
+const EMPTY_VERBS = [
+  "empty.agent.verb1",
+  "empty.agent.verb2",
+  "empty.agent.verb3",
+  "empty.agent.verb4",
+  "empty.agent.verb5",
+  "empty.agent.verb6",
+] as const;
+const VERB_INTERVAL_MS = 2600;
 
-/** Pepe waiting for something to happen: he looks from side to side until the incident starts. */
+/** Pepe waiting for something to happen: he looks from one side to the other until it starts. */
 function WaitingPepe() {
   const stillness = useReducedMotion();
   return (
@@ -136,18 +146,51 @@ function WaitingPepe() {
             <span
               key={eye.key}
               className="absolute flex items-center justify-center rounded-full bg-white"
-              style={{ height: "12%", left: eye.left, top: eye.top, transform: "translate(-50%, -50%)", width: "7.5%" }}
+              style={{ ...EYE_PATCH, left: eye.left, top: eye.top, transform: "translate(-50%, -50%)" }}
             >
               <motion.span
                 className="rounded-full bg-[#141414]"
-                style={{ height: "66%", width: "36%" }}
+                style={{ height: "62%", width: "30%" }}
                 animate={stillness ? undefined : { x: PUPIL_KEYFRAMES }}
-                transition={{ duration: 5.5, ease: "easeInOut", repeat: Infinity, times: PUPIL_TIMES }}
+                transition={{ duration: 5.2, ease: "easeInOut", repeat: Infinity, times: PUPIL_TIMES }}
               />
             </span>
           ))}
         </span>
       </span>
+    </span>
+  );
+}
+
+/** One line at a time: what Pepe is ready to do, in the same verbs the transcript uses. */
+function WaitingVerbs() {
+  const { t } = useI18n();
+  const stillness = useReducedMotion();
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (stillness) return;
+    const timer = window.setInterval(
+      () => setIndex((current) => (current + 1) % EMPTY_VERBS.length),
+      VERB_INTERVAL_MS,
+    );
+    return () => window.clearInterval(timer);
+  }, [stillness]);
+
+  return (
+    <span className="relative block h-5 w-full max-w-[42ch] overflow-hidden">
+      <AnimatePresence mode="wait">
+        <motion.span
+          key={EMPTY_VERBS[index]}
+          className="absolute inset-0 truncate text-[12px] leading-5 text-muted-foreground"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.28, ease: "easeOut" }}
+        >
+          {t(EMPTY_VERBS[index])}
+        </motion.span>
+      </AnimatePresence>
     </span>
   );
 }
@@ -511,8 +554,8 @@ export function AgentPanel() {
       {items.length ? null : (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
           <WaitingPepe />
-          <p className="text-[14px] font-medium text-foreground">{t("empty.agent.title")}</p>
-          <p className="max-w-[38ch] text-[12px] leading-5 text-muted-foreground">{t("empty.agent.hint")}</p>
+          <p className="text-[15px] font-medium text-foreground">{t("empty.agent.title")}</p>
+          <WaitingVerbs />
         </div>
       )}
       <MessageScrollerProvider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={48}>

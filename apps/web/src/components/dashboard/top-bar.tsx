@@ -3,10 +3,11 @@
 import Image from "next/image";
 import { InboundCallDetails } from "@/components/dashboard/inbound-call-details";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Radio, RefreshCcw, RotateCcw, Sparkles, Zap } from "lucide-react";
+import { CheckCircle2, Radio, RefreshCcw, RotateCcw, Zap } from "lucide-react";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { LanguageSwitcher } from "@/components/dashboard/language-switcher";
 import { LearningPanel } from "@/components/dashboard/learning-panel";
+import { TwistButton } from "@/components/dashboard/twist-button";
 import { ThemeSwitcher } from "@/components/dashboard/theme-switcher";
 import { useI18n } from "@/components/i18n/locale-provider";
 import { Button } from "@/components/ui/button";

@@ -63,8 +63,19 @@ export function CapacityForm({ incident, refresh }: { incident: Incident; refres
         <p className="text-xs text-muted-foreground">{resource.region} · {resource.allocatedCapacity} {es ? "asignadas" : "allocated"} · {resource.totalCapacity - resource.allocatedCapacity} {es ? "libres" : "free"}</p>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex min-w-0 flex-1 flex-col gap-2 text-sm" htmlFor={`capacity-${resource.identifier}`}>
-            {es ? "Capacidad total" : "Total capacity"} · {resource.totalCapacity} →
-            <Input id={`capacity-${resource.identifier}`} aria-label={`${es ? "Capacidad total" : "Total capacity"}: ${resource.name}`} type="number" min={resource.allocatedCapacity} step={1} value={raw} aria-invalid={invalid} onChange={event => setDrafts(current => ({ ...current, [resource.identifier]: event.target.value }))} />
+            {es ? "Capacidad total" : "Total capacity"} · {es ? "ahora" : "now"} {resource.totalCapacity}
+            <Input
+              id={`capacity-${resource.identifier}`}
+              aria-label={`${es ? "Capacidad total" : "Total capacity"}: ${resource.name}`}
+              type="number"
+              min={resource.allocatedCapacity}
+              step={1}
+              value={raw}
+              aria-invalid={invalid}
+              // The value is typed and applied with the button, so the native stepper is noise.
+              className="[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              onChange={event => setDrafts(current => ({ ...current, [resource.identifier]: event.target.value }))}
+            />
           </label>
           <Button onClick={() => void apply(resource)} disabled={invalid || value === resource.totalCapacity || !reason.trim()}>
             {busy === resource.identifier ? (es ? "Aplicando…" : "Applying…") : (es ? "Aplicar cambio" : "Apply change")}

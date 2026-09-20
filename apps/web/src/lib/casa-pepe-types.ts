@@ -54,6 +54,8 @@ export type Service = {
 };
 
 export type Incident = {
+  callCode?: string;
+  runKind?: string;
   runIdentifier: string;
   title: string;
   company: string;
@@ -223,6 +225,7 @@ export type RunReport = {
 };
 
 export type Overview = {
+  inboundCall?: { phoneNumber: string };
   incident: Incident;
   plan: { kind: "none" } | { kind: "plan"; plan: Plan };
   pendingApprovals: Approval[];

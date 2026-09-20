@@ -17,6 +17,14 @@ import { Column, Entity, Index, PrimaryColumn } from "typeorm"
 
 @Entity({ name: "incidents" })
 export class IncidentEntity {
+	@Index({ unique: true })
+	@Column({
+		default: () =>
+			"nextval('casa_pepe_private.incident_call_code_seq')::text",
+		type: "text",
+	})
+	callCode: string
+
 	@PrimaryColumn({ type: "text" })
 	identifier: string
 

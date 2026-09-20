@@ -7,12 +7,13 @@ import {
 	resolveCompany,
 } from "./company-call.service"
 
-function setup(selected = "") {
+function setup() {
 	const sessions = new Map<string, CompanyCallEntity>()
 	const runs = new Map<string, IncidentEntity>()
 	const audits: unknown[] = []
 	const run = Object.assign(new IncidentEntity(), {
 		active: true,
+		callCode: "123456",
 		customers: [
 			{
 				identifier: "company-1",
@@ -38,7 +39,11 @@ function setup(selected = "") {
 		)
 	const repo = (map: Map<string, object>) => ({
 		find: async ({ where }: { where: object }) =>
-			[...map.values()].filter((r) => matches(r, where)),
+			[...map.values()].filter((r) =>
+				Array.isArray(where)
+					? where.some((w) => matches(r, w))
+					: matches(r, where),
+			),
 		findOne: async ({ where }: { where: object }) =>
 			[...map.values()].find((r) => matches(r, where)) ?? null,
 		findOneBy: async (where: object) =>
@@ -118,7 +123,6 @@ function setup(selected = "") {
 	const events = { emit: jest.fn() }
 	const service = new CompanyCallService(
 		{ ...sessionRepo, manager: { ...manager, transaction } } as never,
-		{ happyRobot: { inboundRunIdentifier: selected } } as never,
 		events as never,
 		{ reserveSequence: (_run: string, max: number) => max + 1 } as never,
 	)
@@ -148,8 +152,8 @@ describe("inbound company priority persistence", () => {
 		const h = setup()
 		const capacity = structuredClone(h.run.resources)
 		const bindings = await Promise.all([
-			h.service.initiate("provider-1"),
-			h.service.initiate("provider-1"),
+			h.service.initiate("provider-1", "incident-1"),
+			h.service.initiate("provider-1", "incident-1"),
 		])
 		expect(bindings[0]).toEqual(bindings[1])
 		expect(h.sessions.size).toBe(1)
@@ -177,7 +181,10 @@ describe("inbound company priority persistence", () => {
 	})
 	it("rejects changed payloads without overwriting original evidence", async () => {
 		const h = setup()
-		const { sessionReference } = await h.service.initiate("provider-1")
+		const { sessionReference } = await h.service.initiate(
+			"provider-1",
+			"incident-1",
+		)
 		await h.service.receive(h.input(sessionReference))
 		await expect(
 			h.service.receive(h.input(sessionReference, "Different company")),
@@ -186,44 +193,69 @@ describe("inbound company priority persistence", () => {
 			"Happy Robot",
 		)
 	})
-	it("rejects absent, replay-only and ambiguous incidents", async () => {
+	it("rejects unknown, inactive and replay incidents", async () => {
 		const h = setup()
-		h.run.active = false
-		await expect(h.service.initiate("a")).rejects.toMatchObject({
-			status: 409,
+		await expect(h.service.initiate("a", "missing")).rejects.toMatchObject({
+			status: 404,
 		})
-		const current = h.runs.get("incident-1")
-		if (!current) throw new Error("Missing fixture")
-		current.active = true
-		current.runKind = "replay"
-		await expect(h.service.initiate("a")).rejects.toMatchObject({
-			status: 409,
-		})
-		const live = h.runs.get("incident-1")
-		if (!live) throw new Error("Missing fixture")
-		live.runKind = "live"
-		h.runs.set("other", {
-			...live,
-			identifier: "other",
-			runIdentifier: "run-2",
-		})
-		await expect(h.service.initiate("a")).rejects.toMatchObject({
-			status: 409,
-		})
+		const run = h.runs.get("incident-1")
+		if (!run) throw new Error("Missing fixture")
+		run.active = false
+		await expect(
+			h.service.initiate("a", "incident-1"),
+		).rejects.toMatchObject({ status: 409 })
+		const replay = h.runs.get("incident-1")
+		if (!replay) throw new Error("Missing fixture")
+		replay.active = true
+		replay.runKind = "replay"
+		await expect(
+			h.service.initiate("a", "incident-1"),
+		).rejects.toMatchObject({ status: 409 })
 	})
-	it("uses the server-selected incident", async () => {
-		const h = setup("run-1")
+	it("selects only the caller's exact incident despite other active runs", async () => {
+		const h = setup()
 		h.runs.set("other", {
 			...h.run,
 			identifier: "other",
 			runIdentifier: "run-2",
 		})
-		await h.service.initiate("a")
-		expect([...h.sessions.values()][0].runIdentifier).toBe("run-1")
+		const result = await h.service.initiate("a", "other")
+		expect(result).toMatchObject({
+			incidentIdentifier: "other",
+			runIdentifier: "run-2",
+		})
+		expect(await h.service.initiate("a", "run-2")).toEqual(result)
+		await expect(
+			h.service.initiate("a", "incident-1"),
+		).rejects.toMatchObject({ status: 409 })
+		expect(h.sessions.size).toBe(1)
+	})
+	it("allows correcting an unknown ID before binding", async () => {
+		const h = setup()
+		await expect(h.service.initiate("a", "typo")).rejects.toMatchObject({
+			status: 404,
+		})
+		expect(h.sessions.size).toBe(0)
+		await expect(
+			h.service.initiate("a", "incident-1"),
+		).resolves.toMatchObject({ runIdentifier: "run-1" })
+	})
+	it("binds a spoken code and preserves the same session for canonical IDs", async () => {
+		const h = setup()
+		const binding = await h.service.initiate("a", "123 456")
+		expect(binding).toMatchObject({
+			callCode: "123456",
+			incidentIdentifier: "incident-1",
+		})
+		expect(await h.service.initiate("a", "123-456")).toEqual(binding)
+		expect(await h.service.initiate("a", "incident-1")).toEqual(binding)
+		await expect(h.service.initiate("b", "12345")).rejects.toMatchObject({
+			status: 404,
+		})
 	})
 	it("never rebinds after reset", async () => {
 		const h = setup()
-		const { sessionReference } = await h.service.initiate("a")
+		const { sessionReference } = await h.service.initiate("a", "incident-1")
 		h.run.active = false
 		h.runs.set("replacement", {
 			...h.run,
@@ -231,7 +263,9 @@ describe("inbound company priority persistence", () => {
 			identifier: "replacement",
 			runIdentifier: "run-2",
 		})
-		await expect(h.service.initiate("a")).rejects.toMatchObject({
+		await expect(
+			h.service.initiate("a", "incident-1"),
+		).rejects.toMatchObject({
 			status: 409,
 		})
 		await expect(
@@ -244,7 +278,7 @@ describe("inbound company priority persistence", () => {
 		await expect(
 			h.service.receive(h.input("unknown")),
 		).rejects.toMatchObject({ status: 404 })
-		const { sessionReference } = await h.service.initiate("a")
+		const { sessionReference } = await h.service.initiate("a", "incident-1")
 		await h.service.receive(h.input(sessionReference, "Hapy Robot"))
 		expect((await h.service.list("run-1"))[0]).toMatchObject({
 			customerIdentifier: null,
@@ -254,7 +288,7 @@ describe("inbound company priority persistence", () => {
 	})
 	it("rolls back the receipt if audit persistence fails", async () => {
 		const h = setup()
-		const { sessionReference } = await h.service.initiate("a")
+		const { sessionReference } = await h.service.initiate("a", "incident-1")
 		h.auditRepo.insert.mockRejectedValueOnce(
 			new Error("database unavailable"),
 		)
@@ -266,7 +300,7 @@ describe("inbound company priority persistence", () => {
 	})
 	it("recovers pending work and stops after observation", async () => {
 		const h = setup()
-		const { sessionReference } = await h.service.initiate("a")
+		const { sessionReference } = await h.service.initiate("a", "incident-1")
 		await h.service.receive(h.input(sessionReference))
 		h.events.emit.mockClear()
 		await h.service.dispatchPending()

@@ -2,7 +2,6 @@ import { createHash, randomUUID } from "node:crypto"
 import { ActivityEventEntity } from "@activity/entities/activity-event.entity"
 import { ActivityService } from "@activity/services/activity.service"
 import { DOMAIN_EVENTS } from "@common/constants/domain-events.constant"
-import { ConfigurationService } from "@common/services/configuration.service"
 import { IncidentEntity } from "@incidents/entities/incident.entity"
 import {
 	ConflictException,
@@ -74,11 +73,10 @@ export class CompanyCallService {
 	constructor(
 		@InjectRepository(CompanyCallEntity)
 		private readonly sessions: Repository<CompanyCallEntity>,
-		private readonly configuration: ConfigurationService,
 		private readonly events: EventEmitter2,
 		private readonly activity: ActivityService,
 	) {}
-	async initiate(conversationId: string) {
+	async initiate(conversationId: string, incidentIdentifier: string) {
 		const identifier = hash(`happyrobot:${conversationId}`)
 		return this.sessions.manager.transaction(async (manager) => {
 			// Serializes initiation retries, including before the first row exists.
@@ -89,36 +87,37 @@ export class CompanyCallService {
 			const sessions = manager.getRepository(CompanyCallEntity)
 			const existing = await sessions.findOneBy({ identifier })
 			const runs = manager.getRepository(IncidentEntity)
-			if (existing) {
-				active(
-					await runs.findOne({
-						lock: { mode: "pessimistic_read" },
-						where: { runIdentifier: existing.runIdentifier },
-					}),
-				)
-				return { sessionReference: existing.sessionReference }
-			}
-			const selected = this.configuration.happyRobot.inboundRunIdentifier
+			const callCode = /^\d{3}[\s-]?\d{3}$/.test(incidentIdentifier)
+				? incidentIdentifier.replace(/[\s-]/g, "")
+				: incidentIdentifier
 			const candidates = await runs.find({
-				where: {
-					active: true,
-					...(selected ? { runIdentifier: selected } : {}),
-				},
+				where: [
+					{ identifier: incidentIdentifier },
+					{ runIdentifier: incidentIdentifier },
+					{ callCode },
+				],
 			})
-			const eligible = candidates.filter(
-				(r) =>
-					r.runKind !== "replay" &&
-					!["normal", "reset", "recovered"].includes(r.status),
-			)
-			if (eligible.length !== 1)
-				throw new ConflictException(
-					"Select exactly one active incident with HAPPYROBOT_INBOUND_RUN_IDENTIFIER",
-				)
+			if (!candidates.length)
+				throw new NotFoundException("Unknown incident identifier")
+			if (candidates.length !== 1)
+				throw new ConflictException("Ambiguous incident identifier")
 			const run = await runs.findOne({
 				lock: { mode: "pessimistic_read" },
-				where: { identifier: eligible[0].identifier },
+				where: { identifier: candidates[0].identifier },
 			})
 			active(run)
+			if (existing) {
+				if (existing.runIdentifier !== run.runIdentifier)
+					throw new ConflictException(
+						"This conversation is already bound to another incident",
+					)
+				return {
+					callCode: run.callCode,
+					incidentIdentifier: run.identifier,
+					runIdentifier: run.runIdentifier,
+					sessionReference: existing.sessionReference,
+				}
+			}
 			const sessionReference = randomUUID()
 			await sessions.insert({
 				createdAt: new Date().toISOString(),
@@ -131,7 +130,12 @@ export class CompanyCallService {
 				serviceIdentifiers: [],
 				sessionReference,
 			})
-			return { sessionReference }
+			return {
+				callCode: run.callCode,
+				incidentIdentifier: run.identifier,
+				runIdentifier: run.runIdentifier,
+				sessionReference,
+			}
 		})
 	}
 	async receive(input: CallOutcomeDTO): Promise<CallOutcomeReceipt> {

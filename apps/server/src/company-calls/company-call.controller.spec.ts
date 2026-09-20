@@ -69,8 +69,13 @@ describe("company call HTTP boundary", () => {
 	it("returns the specified initiation and receipt statuses", async () => {
 		const r = await post("/webhooks/happyrobot/initiation", {
 			conversationId: "happyrobot:run-1",
+			incidentIdentifier: " incident-1 ",
 		})
 		expect(r.status).toBe(200)
+		expect(service.initiate).toHaveBeenCalledWith(
+			"happyrobot:run-1",
+			"incident-1",
+		)
 		expect(await r.json()).toEqual({ sessionReference: "opaque" })
 		expect(
 			(
@@ -125,6 +130,20 @@ describe("company call HTTP boundary", () => {
 		).toBe(400)
 		expect(service.receive).not.toHaveBeenCalled()
 	})
+	it.each([undefined, "", "   ", 123, "x".repeat(201)])(
+		"requires an explicit valid incident ID",
+		async (incidentIdentifier) => {
+			expect(
+				(
+					await post("/webhooks/happyrobot/initiation", {
+						conversationId: "provider-1",
+						incidentIdentifier,
+					})
+				).status,
+			).toBe(400)
+			expect(service.initiate).not.toHaveBeenCalled()
+		},
+	)
 	it("protects the operator route", async () => {
 		expect(
 			(await fetch(`${base}/call-outcomes?runIdentifier=run-1`)).status,

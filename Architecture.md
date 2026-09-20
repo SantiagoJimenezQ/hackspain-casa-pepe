@@ -4,7 +4,9 @@ The Next.js operator dashboard calls the NestJS API through server-side authenti
 
 ## Inbound company priority calls
 
-HappyRobot's inbound workflow first posts its conversation identifier to `/api/webhooks/happyrobot/initiation`. `CompanyCallsModule` binds that conversation to exactly one active, unresolved, non-replay run and returns an opaque session reference. `HAPPYROBOT_INBOUND_RUN_IDENTIFIER` optionally selects the run on the server when several are active. A reset never transfers an existing conversation to another run.
+The dashboard shows each incident's six-digit `callCode` next to the inbound phone number from `HAPPYROBOT_INBOUND_PHONE_NUMBER`. HappyRobot answers first and asks the caller for this code. Its `vincular_incidente` tool posts the exact supplied code and the provider conversation identifier to `/api/webhooks/happyrobot/initiation`. `CompanyCallsModule` resolves the code (or a full incident/run ID), validates an active, unresolved, non-replay run and returns its canonical IDs and an opaque session reference. Unknown IDs can be corrected before binding; an existing conversation cannot switch incidents. There is no automatic selection or server-selected default run.
+
+The submission tool repeats initiation with the same conversation and incident before using the returned session reference. This is an idempotent binding check, so the voice model never handles session credentials and a mismatched incident cannot redirect an outcome. HappyRobot's HTTP bodies use field tokens with `#` paths rather than interpolating a whole object.
 
 After collecting the caller's request, HappyRobot posts the reference and a versioned `priority-request` outcome to `/api/webhooks/happyrobot/call-outcomes`. Both endpoints require the dedicated `x-casa-pepe-webhook-secret` header, configured with `CASA_PEPE_INBOUND_WEBHOOK_SECRET`. This is separate from HappyRobot's API key and outbound callback secret.
 
@@ -14,7 +16,7 @@ After commit, an event asks `AgentService` to reassess the owning run. Every LLM
 
 ## Persistence and deployment
 
-`company_call_sessions` lives in the backend-only `casa_pepe_private` schema. A TypeORM migration creates that schema before the existing entity synchronization creates the table; the database role needs schema-creation permissions. Do not add this schema to Supabase's exposed Data API schemas. A rollback retains the schema and evidence rather than dropping data.
+`company_call_sessions` lives in the backend-only `casa_pepe_private` schema. TypeORM migrations create that schema and a non-cycling sequence before entity synchronization creates tables/columns; the database role needs schema-creation permissions. Do not add this schema to Supabase's exposed Data API schemas. The new incident `callCode` column has a sequence-backed database default and a unique index. Adding it backfills existing incidents; new incidents and replays receive new numbers. Six-digit codes accept a space or hyphen between the two groups of three. Codes are lookup references, never authorization. The sequence fails at exhaustion rather than recycling an old code. Rollbacks must preserve the sequence and issued codes; disable destructive entity synchronization when reverting to an older application schema.
 
 Conversation binding uses PostgreSQL transaction-scoped advisory locks. Receipt, audit and pending work are committed together. Activity sequence reservation coordinates with existing writers in one process; the application's existing sequence cache and coordinator still assume one active process and do not provide distributed ordering.
 

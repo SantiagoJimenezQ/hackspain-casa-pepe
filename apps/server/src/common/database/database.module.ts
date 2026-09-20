@@ -3,6 +3,7 @@ import { ConfigurationService } from "@common/services/configuration.service"
 import { Module } from "@nestjs/common"
 import { TypeOrmModule } from "@nestjs/typeorm"
 import { PrivateCallSchema1789860000000 } from "./migrations/1789860000000-private-call-schema"
+import { IncidentCallCode1789889000000 } from "./migrations/1789889000000-incident-call-code"
 
 @Module({
 	imports: [
@@ -18,7 +19,10 @@ import { PrivateCallSchema1789860000000 } from "./migrations/1789860000000-priva
 				logging: configuration.database.queryLogging
 					? ["query"]
 					: false,
-				migrations: [PrivateCallSchema1789860000000],
+				migrations: [
+					PrivateCallSchema1789860000000,
+					IncidentCallCode1789889000000,
+				],
 				migrationsRun: true,
 				ssl: requiresTLS(configuration.database.url)
 					? { rejectUnauthorized: false }

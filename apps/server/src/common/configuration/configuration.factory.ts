@@ -228,7 +228,7 @@ export function createApplicationConfiguration(
 					: "") ||
 				variables.HAPPYROBOT_API_KEY ||
 				variables.HAPPY_ROBOT_API_KEY,
-			inboundRunIdentifier: variables.HAPPYROBOT_INBOUND_RUN_IDENTIFIER,
+			inboundPhoneNumber: variables.HAPPYROBOT_INBOUND_PHONE_NUMBER,
 			inboundWebhookSecret: variables.CASA_PEPE_INBOUND_WEBHOOK_SECRET,
 			mode: variables.HAPPYROBOT_MODE as EngineerCallMode,
 			simulatedCallDelayMilliseconds:

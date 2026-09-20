@@ -25,6 +25,15 @@ export class CallInitiationDTO implements CallInitiationInput {
 	@MaxLength(200)
 	@Transform(trim)
 	conversationId: string
+	@ApiProperty({
+		description:
+			"Six-digit call code, exact incident identifier, or run identifier provided by the caller",
+	})
+	@IsString()
+	@IsNotEmpty()
+	@MaxLength(200)
+	@Transform(trim)
+	incidentIdentifier: string
 }
 export class CompanyPriorityDTO implements CompanyPriorityRequest {
 	@ApiProperty({ enum: ["priority-request"] })

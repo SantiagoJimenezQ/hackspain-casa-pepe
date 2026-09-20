@@ -35,3 +35,7 @@ The dashboard renders the backend’s actual incident, services, capacity, plan,
 The top bar’s **Borrar aprendizajes** button deletes all saved learning insights through the authenticated API and shows the number removed. It leaves the current incident and its existing plans intact. Use **Reiniciar** afterwards to start a fresh run without prior learning; the run may accumulate new lessons as it progresses.
 
 The top bar’s **Aprendizajes** button opens a read-only panel with saved lesson summaries, subjects, observation counts, and update dates. It reloads on opening; **Actualizar** fetches lessons recorded during the current run. Loading failures are shown separately from an empty memory. The list uses the same Spanish scenario filter as the existing learning endpoint; **Borrar aprendizajes** still clears all scenarios.
+
+## Inbound incident calls
+
+The incident header displays the persisted six-digit call code beside a dial link for the configured HappyRobot inbound number. Read that code to the voice agent to select the exact incident before requesting a company priority. Old API responses without a code or number show an unavailable state rather than inventing values.

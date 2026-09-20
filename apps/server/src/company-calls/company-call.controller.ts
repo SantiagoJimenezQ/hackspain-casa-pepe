@@ -26,7 +26,10 @@ export class CompanyCallController {
 		summary: "Bind an inbound provider conversation to one active incident",
 	})
 	initiate(@Body() input: CallInitiationDTO) {
-		return this.calls.initiate(input.conversationId)
+		return this.calls.initiate(
+			input.conversationId,
+			input.incidentIdentifier,
+		)
 	}
 	@Post("webhooks/happyrobot/call-outcomes")
 	@HttpCode(202)

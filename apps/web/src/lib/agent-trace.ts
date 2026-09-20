@@ -304,6 +304,19 @@ export function agentSettled(overview: Pick<Overview, "incident" | "plan" | "age
   return !overview.agent?.cycleInProgress && (overview.agent?.runningToolCalls ?? 0) === 0;
 }
 
+/** How far along its life a tool call is; every terminal status shares the last place. */
+const TOOL_STATUS_RANK: Record<string, number> = {
+  cancelled: 3,
+  failed: 3,
+  pending: 1,
+  running: 2,
+  succeeded: 3,
+};
+
+function toolStatusRank(status: string): number {
+  return TOOL_STATUS_RANK[status] ?? 0;
+}
+
 export function mergedToolCalls(overview: Overview, activity: ReadonlyArray<ActivityRecord> = []) {
   const byId = new Map<string, ToolCall>();
   for (const tool of overview.toolCalls) {
@@ -314,14 +327,23 @@ export function mergedToolCalls(overview: Overview, activity: ReadonlyArray<Acti
     const tool = toolFromActivity(event);
     if (!tool) continue;
     const existing = byId.get(tool.identifier);
-    byId.set(tool.identifier, existing ? {
-      ...existing,
-      ...tool,
+    if (!existing) {
+      byId.set(tool.identifier, tool);
+      continue;
+    }
+    // The live buffer holds a tool's whole life, and the last event in the array used to win
+    // whatever it said. A "started" that arrives after the overview already reported the tool
+    // finished would put it back on the screen as running, sometimes for minutes. The record
+    // that is further along its life wins; the other one only fills in what it is missing.
+    const advancing = toolStatusRank(tool.status) >= toolStatusRank(existing.status);
+    const base = advancing ? { ...existing, ...tool } : { ...tool, ...existing };
+    byId.set(tool.identifier, {
+      ...base,
       input: tool.input ?? existing.input,
       output: tool.output ?? existing.output,
       parentIdentifier: tool.parentIdentifier ?? existing.parentIdentifier,
       subagent: tool.subagent ?? existing.subagent,
-    } : tool);
+    });
   }
   const merged = [...byId.values()];
   if (agentSettled(overview)) {

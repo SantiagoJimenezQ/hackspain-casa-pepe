@@ -789,4 +789,43 @@ describe("agent trace", () => {
     expect(buildTranscript(settled, events).every((item) => item.kind !== "thinking")).toBe(true);
     expect(buildTranscript(settled, events).map((item) => item.kind)).toEqual(["tool"]);
   });
+
+  it("does not put a finished tool back on the line when a stale started event trails it", () => {
+    const overview = overviewWith([
+      tool({
+        identifier: "t_recover",
+        name: "execute_recovery",
+        status: "succeeded",
+        startedAt: "2026-09-19T10:00:01.000Z",
+        finishedAt: "2026-09-19T10:00:06.000Z",
+      }),
+    ]);
+    // The live buffer still carries the "started" event from five minutes earlier.
+    const events = [
+      activity({
+        identifier: "act-started",
+        type: "tool-call.started",
+        payload: {
+          toolCall: {
+            identifier: "t_recover",
+            name: "execute_recovery",
+            status: "running",
+            interaction: "test-environment",
+            simulated: true,
+            error: null,
+            startedAt: "2026-09-19T10:00:01.000Z",
+            finishedAt: "",
+            input: {},
+            output: null,
+          },
+        },
+      }),
+    ];
+
+    const merged = mergedToolCalls(overview, events);
+
+    expect(merged[0].status).toBe("succeeded");
+    expect(merged[0].finishedAt).toBe("2026-09-19T10:00:06.000Z");
+    expect(currentWork(overview, events).kind).not.toBe("tool");
+  });
 });

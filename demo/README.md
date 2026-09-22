@@ -8,7 +8,7 @@ Aquí guardaremos el guion, las instrucciones de ensayo, la presentación y los 
 
 1. Reiniciar el escenario.
 2. Introducir la caída y mostrar su impacto en la UI.
-3. Mostrar el plan del agente y una interacción real con HappyRobot.
+3. Mostrar el plan del agente y una llamada simulada, identificada como tal.
 4. Introducir una restricción que obligue a cambiar el plan.
 5. Aprobar o rechazar una acción desde la interfaz.
 6. Ejecutar la acción autorizada en el entorno de pruebas.

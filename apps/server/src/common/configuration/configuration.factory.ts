@@ -2,7 +2,6 @@ import { EnvironmentVariables } from "@common/configuration/environment-variable
 import { LLM_PROVIDER_DEFAULT_BASE_URLS } from "@common/constants/application.constant"
 import {
 	ApplicationConfiguration,
-	EngineerCallMode,
 	EngineerCallProvider,
 	Environment,
 	LlmProviderCredentials,
@@ -219,8 +218,8 @@ export function createApplicationConfiguration(
 		engineerCall: {
 			fallbackToSimulated:
 				variables.ENGINEER_CALL_FALLBACK_TO_SIMULATED === "true",
-			mode: (variables.ENGINEER_CALL_MODE ??
-				variables.HAPPYROBOT_MODE) as EngineerCallMode,
+			// Voice subscriptions are inactive. Legacy environment settings must not dial.
+			mode: "simulated",
 			provider: variables.ENGINEER_CALL_PROVIDER as EngineerCallProvider,
 			simulatedAlwaysAuthorized:
 				variables.SIMULATED_CALL_ALWAYS_AUTHORIZED === "true",
@@ -232,9 +231,9 @@ export function createApplicationConfiguration(
 					: "") ||
 				variables.HAPPYROBOT_API_KEY ||
 				variables.HAPPY_ROBOT_API_KEY,
-			inboundPhoneNumber: variables.HAPPYROBOT_INBOUND_PHONE_NUMBER,
+			inboundPhoneNumber: "",
 			inboundWebhookSecret: variables.CASA_PEPE_INBOUND_WEBHOOK_SECRET,
-			mode: variables.HAPPYROBOT_MODE as EngineerCallMode,
+			mode: "simulated",
 			simulatedCallDelayMilliseconds:
 				variables.SIMULATED_CALL_DELAY_MILLISECONDS,
 			triggerURL: variables.HAPPYROBOT_TRIGGER_URL,

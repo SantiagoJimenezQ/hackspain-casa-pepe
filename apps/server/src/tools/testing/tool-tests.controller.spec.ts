@@ -3,6 +3,7 @@ import { AuthenticationModule } from "@authentication/authentication.module"
 import { CommonModule } from "@common/common.module"
 import { API_PREFIX } from "@common/constants/application.constant"
 import { HTTPExceptionFilter } from "@common/filters/http-exception.filter"
+import { ConfigurationService } from "@common/services/configuration.service"
 import { INestApplication, ValidationPipe } from "@nestjs/common"
 import { Test } from "@nestjs/testing"
 import { ToolTestsController } from "@tools/testing/tool-tests.controller"
@@ -128,6 +129,11 @@ describe("tool tests HTTP controller", () => {
 			],
 		}).compile()
 
+		const configuration = moduleReference.get(ConfigurationService)
+		jest.spyOn(configuration, "happyRobot", "get").mockReturnValue({
+			...configuration.happyRobot,
+			mode: "live",
+		})
 		application = moduleReference.createNestApplication()
 		application.setGlobalPrefix(API_PREFIX)
 		application.useGlobalPipes(

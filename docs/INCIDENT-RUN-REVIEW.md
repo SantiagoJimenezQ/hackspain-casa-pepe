@@ -25,13 +25,13 @@ latency, not proof that all of it was model computation.
 | --- | --- | --- |
 | P1 | Human follow-up could leave the agent stranded. | `TasksService` emitted `TASK_UPDATED`, but `AgentService` did not subscribe, and its model evidence omitted task records. Added subscription and current task status/notes to every observation. Task notes remain untrusted reports; they do not directly change capacity or authorize recovery. |
 | P1 | Finishing investigation tools looked like a completed response plan. | Snapshot v2 is completed while all priorities remain unresolved. Both runtime completion checks previously considered only proposed, approved, awaiting-approval and running steps. They now also require settled priorities, completed steps and no outstanding human tasks in the run. Existing partial-recovery integration assertions now expect an active plan. |
-| P1 | The call objective did not match the provider capability. | The plan promised snapshot/readiness/capacity answers, passed `questions: []`, and received permissions with zero confirmed technical facts. Main already documents the ElevenLabs limitation for the commander, but the caller specialist still instructed technical question design without provider context. Added provider/mode/capability evidence and caller guidance for the permissions-only flow. This is model guidance, not a guarantee of the wording of every future plan. |
+| P1 | The call objective did not match the provider capability. | The plan promised snapshot/readiness/capacity answers, passed `questions: []`, and received permissions with zero confirmed technical facts. Main already documents the permissions-only provider limitation for the commander, but the caller specialist still instructed technical question design without provider context. Added provider/mode/capability evidence and caller guidance for the permissions-only flow. This is model guidance, not a guarantee of the wording of every future plan. |
 | P2 | Avoidable schema errors delayed the first external action. | Four rejected attempts are visible. Added explicit one-priority-per-service and service-dependencies-only blocker guidance, plus uniqueness and explanatory schema metadata for `blockedBy`. Validation remains strict; no invented facts or silently accepted invalid blockers. Main already repairs postponed-capacity bookkeeping. |
 | P2 | Waiting and delegation were overclaimed. | v2 assigns platform coordination to the configured customer-support contact, then waits without visible delivery. Added guidance that task creation is only a persisted assignment, to reuse outstanding tasks, respect role limits, and identify the owner and resumption path in wait explanations. |
 
 ## Improvements still requiring implementation or live proof
 
-1. **Obtain technical evidence through a working channel.** The current ElevenLabs
+1. **Obtain technical evidence through a working channel.** The current permissions-only provider
    flow cannot answer technical questions. Add an authenticated platform report or
    telemetry adapter for available capacity, snapshot age/usability, and service
    readiness, with source, timestamp and confirmation status. Do not turn voice
@@ -110,7 +110,7 @@ Three blockers are visible:
   canned summary claimed snapshot/readiness confirmation. Simulation now
   summarizes only the answers it actually generated, and explicitly reports an
   empty call as no evidence. Commander guidance now distinguishes simulated
-  keyed technical questions from the live ElevenLabs permissions-only flow.
+  keyed technical questions from the live permissions-only provider permissions-only flow.
 
 The repeated capacity reads returned unconfirmed resources each time. Oman was
 reported as four units, reduced to a one-unit planning assumption from historical
@@ -141,5 +141,5 @@ reconfigured or redeployed during diagnosis.
 
 Before opening the follow-up PR, main's new nonempty-question validation was
 merged. Commander and caller guidance now require a keyed question for new
-plans while distinguishing simulated technical answers from live ElevenLabs
+plans while distinguishing simulated technical answers from live permissions-only provider
 permissions. Already completed empty-question calls remain immutable history.

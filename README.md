@@ -1,164 +1,118 @@
 # Casa Pepe
 
-When a cloud region goes down, what do you recover first?
+**An AI incident coordinator that revises its plan when the facts change.**
 
-Casa Pepe is an incident coordination prototype built for HackSpain 2026. It models a changing outage, prioritizes recovery with limited resources, coordinates the response, and keeps an operator in control.
+Built for HackSpain 2026, Casa Pepe explores a practical question: when a cloud region fails and backup capacity is scarce, what should recover first—and who should authorize it?
 
-**Live demo: https://hackspain-casa-pepe.vercel.app**
+The system investigates a changing incident, proposes recovery priorities, coordinates people and tools, and verifies results. An operator can inspect the evidence, compare plan versions and approve or reject recovery actions.
 
-## The scenario
+[Architecture](Architecture.md) · [Run locally](#run-locally) · [Demo walkthrough](#see-the-response-change) · [API reference](apps/server/docs/API.md)
 
-A fictional missile takes down the AWS region serving a delivery company. Route assignment stops, package tracking becomes unavailable, and several services need recovery.
+## See the response change
 
-The initial plan assumes enough backup capacity to restore everything. Then new information arrives: there is less capacity than expected.
+The fictional scenario takes Dubai (`me-central-1`) offline. A delivery platform loses its orders database, route assignment, package tracking and event stream. The nearest backup initially reports four compute units. A later report reduces that capacity to one.
 
-The coordinator must revise its plan, explain what gets recovered first, and make clear what has to wait.
+1. **Observe:** inspect affected services, dependencies, customer impact and available resources.
+2. **Plan:** review the model's priorities, assumptions, selected backup and proposed actions.
+3. **Challenge the plan:** use **Cut capacity** or the capacity controls to change the environment while work is pending.
+4. **Reassess:** compare the revised plan with its predecessor, including what changed and why. Superseded approvals no longer authorize old work.
+5. **Intervene:** approve or reject a current recovery proposal. Track ownership and pending human tasks.
+6. **Verify:** check the recovery result independently. In HTTP mode, submit a synthetic delivery to the included recovery application and inspect the returned route.
 
-## The response loop
+The model chooses the response; the walkthrough is not a fixed action script. Scenario names, customer examples and resource figures are demonstration data, not claims about real companies or cloud infrastructure.
 
-1. **Observe:** collect service health, dependencies, available capacity, and updates from engineers.
-2. **Prioritize:** rank recovery work by business impact and dependencies, within the available resources.
-3. **Coordinate:** assign owners, contact the on-call engineer, and request operator approval for risky actions.
-4. **Execute and verify:** run recovery actions and check their results before reporting success.
-5. **Adapt:** revise the plan when conditions change and supersede approvals tied to an outdated plan.
+## Engineering decisions worth inspecting
 
-Events, decisions, tool calls, approvals, and results are recorded so the response can be reconstructed.
-
-## Current status
-
-This is a hackathon prototype under active development.
-
-| Component | Status |
-|---|---|
-| Operations dashboard | Live Next.js dashboard backed by `/api/overview` and the activity SSE stream |
-| Backend | NestJS API with incident state, simulation controls, recovery planning, approvals, and activity records |
-| Simulation | Manual and seeded randomized runs in NestJS, with the seed and draw state persisted per run |
-| Engineer contact | Simulated mode, ElevenLabs/HappyRobot adapters, and operator-confirmed incoming reports |
-| Standalone tool checks | Authenticated synthetic email and engineer-call checks with durable results, idempotency, and isolated provider results |
-| Recovery | Simulated mode and an HTTP adapter for a test environment |
-| Learning | Persisted capacity and recovery-outcome insights, plus per-run reports |
-| Dashboard–backend integration | Implemented through authenticated Next.js server-side proxy routes |
-| Run ownership | Each browser session owns its runs; a session token scopes every request and hides other sessions' incidents |
-| Resilience | Bounded retries and a relief LLM provider on rate limits, plus a simulated fallback when the voice provider refuses to dial |
-
-The backend uses an LLM for investigation, recovery priorities, action selection and mid-plan reassessment. Model configuration is required. A rate-limited provider is retried and then relieved by the secondary provider, so a quota does not strand a run; a provider that fails for any other reason visibly pauses autonomous decisions. Engineer calls and recovery actions default to simulated mode; live integrations require configuration and end-to-end validation.
+| Decision | Why it matters | Implementation |
+|---|---|---|
+| Validate model proposals before execution | Service dependencies, capacity and required approvals remain runtime constraints | [Plans](apps/server/src/plans), [recovery](apps/server/src/recovery) |
+| Bind approvals to versioned plans | New evidence can invalidate previously reasonable actions | [Approvals](apps/server/src/approvals), [agent](apps/server/src/agent) |
+| Persist evidence and outcomes | Refreshing the dashboard preserves the response history and plan comparison | [Activity](apps/server/src/activity), [overview](apps/server/src/agent) |
+| Isolate runs by browser session | Independent visitors can run the scenario without sharing incident ownership | [Session boundary](apps/server/src/authentication) |
+| Keep integrations behind adapters | Calls are simulated; email and recovery retain explicit simulated/live modes | [Engineers](apps/server/src/engineers), [tools](packages/tools) |
+| Separate execution from verification | An accepted request or completed task is not proof that service recovered | [Recovery](apps/server/src/recovery), [demo target](demo/recovery-environment) |
+| Retain lessons across runs | Observed capacity discrepancies and recovery outcomes can inform later decisions | [Learning](apps/server/src/learning) |
 
 ## Architecture
 
-Casa Pepe is a pnpm monorepo. `apps/server` is the only runtime backend: it owns the NestJS API, incident harness, agent cycle, persistence, authorization, tool execution, and integration callbacks. `apps/web` is the Next.js operator dashboard. Its server-side routes add the backend API key and proxy JSON requests and the activity stream, so the key is never sent to the browser.
-
-The runtime response path is:
-
-```text
-harness event or provider callback
-        -> persisted incident state
-        -> domain event
-        -> AgentService decision cycle
-        -> versioned plan and tool calls
-        -> approval, communication, engineer call, or recovery adapter
-        -> activity log and updated state
-        -> SSE stream and signed webhooks
-        -> operations dashboard
+```mermaid
+flowchart LR
+    Operator[Operator dashboard] <-->|JSON and SSE| Web[Next.js server proxy]
+    Web <-->|API key and session token| API[NestJS coordinator]
+    API <--> DB[(PostgreSQL / Supabase)]
+    API <--> LLM[Tool-calling LLM]
+    API <--> Voice[Simulated engineer calls]
+    API <--> Email[Resend]
+    API <--> Recovery[Recovery adapter and verification]
 ```
 
-The main backend boundaries are:
+**Next.js + React + TypeScript** provide the operator interface. **NestJS + TypeORM + PostgreSQL** own the simulation, agent cycle, plans, approvals, audit history and integration callbacks. The server proxy keeps credentials out of browser code. Shared payload declarations live in `packages/contracts`.
 
-- `scenarios` and `incidents`: scenario definitions, live runs, manual controls, and seeded randomized simulation.
-- `agent`, `plans`, `approvals`, and `tasks`: LLM investigation and prioritization, validated plan versions, human gates, ownership, and replanning.
-- `tools`, `engineers`, and `recovery`: the tool registry, idempotent tool-call records, simulated/live adapters, asynchronous callbacks, and independent verification.
-- `activity`, `webhooks`, `learning`, and `replays`: audit history, live delivery, cross-run insights, reports, and reproducible replays.
-
-PostgreSQL/Supabase is accessed through TypeORM. The incident snapshot and simulation state are persisted with each run; plans, approvals, tasks, tool calls, activities, calls, recoveries, insights, and webhook deliveries have their own entities. Schema changes run as TypeORM migrations followed by entity synchronization, both gated by `BROWSER_SESSION_SCHEMA_UPGRADE`; with the flag off the schema is left untouched, which is what keeps a shared database safe from a stale checkout. The declarations in `packages/contracts` describe consumer-facing payloads. `packages/tools` contains server-only HTTP/email adapters, while `packages/agent` and `packages/harness` document ownership boundaries rather than starting separate runtimes.
+Read [Architecture.md](Architecture.md) for execution boundaries, persistence, browser ownership and deployment tradeoffs.
 
 ## Run locally
 
-### Dashboard
-
-From the repository root:
+You need **Node.js 22+**, **pnpm 11.7.0**, a dedicated PostgreSQL database and credentials for a compatible tool-calling LLM. No voice subscription is required. A live email account is optional.
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
+cp apps/server/.env.example apps/server/.env.local
 cp apps/web/.env.example apps/web/.env.local
+```
+
+Configure the ignored files:
+
+| File | Settings |
+|---|---|
+| `apps/server/.env.local` | `API_KEY`, `SUPABASE_DATABASE_URL`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` |
+| `apps/web/.env.local` | `CASA_PEPE_API_BASE_URL=http://localhost:3000`, `CASA_PEPE_API_KEY` matching the backend key |
+
+Use a unique random API key. Leave `LLM_PROVIDER` empty to use the generic `LLM_*` settings, or follow the [LLM guide](apps/server/docs/LLM-AGENT.md) for provider presets. No shared model credentials are distributed with the project. The API can start without them, but autonomous decisions require a working model connection.
+
+**Initialize a fresh database once:** set `BROWSER_SESSION_SCHEMA_UPGRADE=true` in the server environment and start the API. After successful initialization, stop it, restore the flag to `false`, and restart. Ordinary startup does not create tables. For an existing database, back it up and stop older backends before an upgrade. Never enable the upgrade flag on previews sharing another deployment's database.
+
+In separate terminals:
+
+```bash
+pnpm --filter @casa-pepe/server develop
+```
+
+```bash
 pnpm --filter web dev --port 3001
 ```
 
-Open http://localhost:3001.
+Open the [dashboard](http://localhost:3001), [API health](http://localhost:3000/api/health) or [interactive API documentation](http://localhost:3000/documentation). The dashboard manages its session cookie automatically and shows an explicit connection state if the API is unavailable.
 
-Set `CASA_PEPE_API_BASE_URL` and `CASA_PEPE_API_KEY` in `apps/web/.env.local`. The dashboard has no mock-data fallback: if the API is not configured or reachable, it shows a connection state.
+Engineer calls are always simulated. Live voice requests and provider callbacks are disabled, even if legacy environment variables still contain credentials or request live mode. Keep email and recovery simulated for the first run; see [backend setup](apps/server/README.md) and [Supabase setup](apps/server/docs/SUPABASE.md) when connecting your own services.
 
-The controls live in the top bar: **Capacity** edits the backup capacity by hand, **Impact** starts the outage, **Cut capacity** delivers the platform report that leaves the backup region with a single compute unit, **Learnings** opens the saved memory and can clear it, and **Reset** starts a fresh run. Each browser session owns its own run, so two people can demo side by side against the same database without seeing each other's incidents.
-
-### Backend
-
-In a separate terminal:
+## Validation and scope
 
 ```bash
-cd apps/server
-pnpm install
-cp .env.example .env.local
+pnpm run ci
+pnpm --filter @casa-pepe/server build
+node --test demo/recovery-environment/server.test.mjs
 ```
 
-Configure `API_KEY` and `SUPABASE_DATABASE_URL` in `.env.local`, then start the API:
+CI checks the dashboard and backend with scripted model responses and controlled integrations. A live provider rehearsal remains a separate check. The HTTP recovery target operates on the included demo application; it does not provision AWS resources.
 
-```bash
-pnpm develop
-```
+This is a **hackathon prototype** designed for one continuously running coordinator. Scheduling, cycle locks and SSE are process-local. Anonymous session ownership separates visitors' runs, but does not provide user accounts, usage quotas or protection against public model spend. Protect hosted operator access before sharing a live demo broadly. Model failures and rate-limit fallback are visible in the runtime. Simulated calls are labelled as such and do not dial a phone.
 
-The API runs at http://localhost:3000/api, with interactive documentation at http://localhost:3000/documentation.
-
-See the [backend setup guide](apps/server/README.md) for authentication, environment variables, integration modes, and demo commands.
-
-## Demo flow
-
-The intended end-to-end demonstration follows this sequence:
-
-1. Start with healthy services.
-2. Trigger the regional outage.
-3. Inspect the recovery plan and its reasoning.
-4. Contact an engineer to confirm recovery constraints.
-5. Cut the backup capacity with **Cut capacity**: platform reports that only one compute unit is really free.
-6. Compare the revised priorities with the original plan.
-7. Approve or reject a proposed recovery action.
-8. Verify the result and review what remains unavailable.
-
-The simulation controls are separate from operator decisions. Simulated actions and replayed events are explicitly identified.
-
-## Repository structure
+## Explore the repository
 
 ```text
-apps/
-  web/          Next.js operations dashboard
-  server/       NestJS API, simulation, planning, and execution
-packages/
-  contracts/    Shared payload definitions
-  harness/      Reusable simulation boundary
-  agent/        Decision-making package boundary
-  tools/        Integration adapter package boundary
-demo/           Demo planning and presentation materials
+apps/web/             Operator dashboard and server-side API proxy
+apps/server/          Incident simulation, agent, persistence and adapters
+packages/contracts/   Shared payload declarations
+packages/tools/       Server-only integration helpers
+packages/agent/       Agent package boundary documentation
+packages/harness/     Simulation package boundary documentation
+demo/                 Rehearsal guides and HTTP recovery target
+docs/                 Design notes and implementation history
 ```
 
-The incident coordination runtime lives in `apps/server`, including the persisted simulation state and seeded environment behavior. `packages/harness` documents the reusable simulation boundary; it does not start a second server. The agent and tools package folders document the intended separation of responsibilities.
-
-The dashboard integrates through Next.js server routes, the authenticated NestJS API, and its SSE activity stream. Credentials and external integrations belong on the server.
-
-## Development
-
-- Agree on shared contracts before connecting components.
-- Make priorities, ownership, resource constraints, and plan changes visible.
-- Test changes to prioritization, replanning, and human intervention.
-- Keep external actions behind adapters with deterministic simulation modes.
-- Never commit credentials. Use ignored local environment files and placeholder-only examples.
-
-## Project documentation
-
-- [Master plan](MASTER.md)
-- [Dashboard guide](apps/web/README.md)
-- [Backend guide](apps/server/README.md)
-- [API reference](apps/server/docs/API.md)
-- [Shared contracts](packages/contracts/)
-- [Demo planning](demo/README.md)
-- [Official HackSpain 2026 challenge](https://hackspain2026.happyrobot.ai/)
-
-The canonical API is NestJS. It exposes `/documentation`, supports reproducible manual and randomized runs through `POST /api/demo/start`, and provides `/api/demo/pause`, `/api/demo/resume`, and `/api/demo/advance` for simulation control.
-
-Outbound voice setup and provider switching: [ElevenLabs guide](apps/server/docs/ELEVENLABS.md).
+- [Architecture and tradeoffs](Architecture.md)
+- [Backend setup](apps/server/README.md) and [dashboard guide](apps/web/README.md)
+- [API reference](apps/server/docs/API.md) and [curl walkthrough](apps/server/docs/API-CURL-TEST-GUIDE.md)
+- [Demo rehearsal](demo/README.md) and [integration walkthrough](demo/MVP-TOOLS.md)
+- [Contributing](CONTRIBUTING.md) and [security](SECURITY.md)
+- [Original project plan](MASTER.md) and [official HackSpain challenge](https://hackspain2026.happyrobot.ai/)

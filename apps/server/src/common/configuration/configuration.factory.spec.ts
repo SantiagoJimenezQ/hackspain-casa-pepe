@@ -51,7 +51,7 @@ describe("validateEnvironmentVariables", () => {
 		).toThrow(/not the https Project URL/)
 	})
 
-	it("uses the provider-independent call mode and provider settings", () => {
+	it("forces simulated calls even when legacy settings request a live provider", () => {
 		const variables = validateEnvironmentVariables({
 			...VALID,
 			ELEVENLABS_AGENT_ID: "agent_test",
@@ -65,7 +65,7 @@ describe("validateEnvironmentVariables", () => {
 
 		expect(configuration.engineerCall).toEqual({
 			fallbackToSimulated: true,
-			mode: "live",
+			mode: "simulated",
 			provider: "elevenlabs",
 			simulatedAlwaysAuthorized: false,
 		})
@@ -77,20 +77,20 @@ describe("validateEnvironmentVariables", () => {
 		})
 	})
 
-	it("keeps HAPPYROBOT_MODE as the compatibility fallback", () => {
+	it("ignores the legacy live call mode", () => {
 		const variables = validateEnvironmentVariables({
 			...VALID,
 			HAPPYROBOT_MODE: "live",
 		})
 		expect(createApplicationConfiguration(variables).engineerCall).toEqual({
 			fallbackToSimulated: true,
-			mode: "live",
+			mode: "simulated",
 			provider: "happyrobot",
 			simulatedAlwaysAuthorized: false,
 		})
 	})
 
-	it("loads ENGINEER_CALL_MODE through ConfigurationService", () => {
+	it("forces simulation through ConfigurationService as well", () => {
 		const defaults = new EnvironmentVariables()
 		const configService = new ConfigService({
 			...defaults,
@@ -106,7 +106,7 @@ describe("validateEnvironmentVariables", () => {
 
 		expect(configuration.engineerCall).toEqual({
 			fallbackToSimulated: true,
-			mode: "live",
+			mode: "simulated",
 			provider: "elevenlabs",
 			simulatedAlwaysAuthorized: false,
 		})

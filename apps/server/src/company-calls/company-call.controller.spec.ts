@@ -35,6 +35,7 @@ describe("company call HTTP boundary", () => {
 		jest.spyOn(config, "happyRobot", "get").mockReturnValue({
 			...config.happyRobot,
 			inboundWebhookSecret: secret,
+			mode: "live",
 		})
 		app = module.createNestApplication()
 		app.setGlobalPrefix("api")

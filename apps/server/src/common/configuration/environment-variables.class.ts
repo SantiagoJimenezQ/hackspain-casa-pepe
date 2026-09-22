@@ -98,7 +98,7 @@ export class EnvironmentVariables {
 	@IsString()
 	HAPPYROBOT_TRIGGER_URL: string = ""
 
-	@IsString() HAPPYROBOT_INBOUND_PHONE_NUMBER: string = "+12603688621"
+	@IsString() HAPPYROBOT_INBOUND_PHONE_NUMBER: string = ""
 
 	@IsString() CASA_PEPE_INBOUND_WEBHOOK_SECRET: string = ""
 

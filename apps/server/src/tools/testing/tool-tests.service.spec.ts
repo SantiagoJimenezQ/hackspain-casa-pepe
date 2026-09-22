@@ -1,4 +1,8 @@
 import "reflect-metadata"
+import {
+	createApplicationConfiguration,
+	validateEnvironmentVariables,
+} from "@common/configuration/configuration.factory"
 import { Logger } from "@nestjs/common"
 import { ToolTestEntity } from "@tools/testing/tool-test.entity"
 import { ToolTestsService } from "@tools/testing/tool-tests.service"
@@ -579,5 +583,84 @@ describe("ToolTestsService", () => {
 			status: "accepted",
 		})
 		expect(adapter.start).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("disabled voice providers", () => {
+	it.each(["happyrobot", "elevenlabs"])(
+		"rejects live %s tests despite legacy credentials",
+		async (provider) => {
+			const configuration = createApplicationConfiguration(
+				validateEnvironmentVariables({
+					API_KEY: "test-key",
+					ELEVENLABS_AGENT_ID: "test-agent",
+					ELEVENLABS_API_KEY: "test-key",
+					ELEVENLABS_PHONE_NUMBER_ID: "test-phone",
+					ENGINEER_CALL_MODE: "live",
+					ENGINEER_CALL_PROVIDER: provider,
+					HAPPYROBOT_API_KEY: "test-key",
+					HAPPYROBOT_MODE: "live",
+					HAPPYROBOT_TRIGGER_URL: "https://example.com/hooks/test",
+					HAPPYROBOT_WEBHOOK_SECRET: "test-secret",
+					RECOVERY_WEBHOOK_SECRET: "test-secret",
+					SUPABASE_DATABASE_URL: "postgresql://localhost/test",
+				}),
+			)
+			const { instance, adapter } = service(configuration)
+			expect(
+				instance
+					.catalog()
+					.find((entry) => entry.tool === "call_engineer"),
+			).toMatchObject({
+				liveAvailable: false,
+				modes: ["simulated"],
+			})
+			await expect(
+				instance.execute({
+					engineer: { name: "Test engineer", phone: "+34600000000" },
+					idempotencyKey: `disabled-${provider}`,
+					mode: "live",
+					tool: "call_engineer",
+				}),
+			).rejects.toThrow("use simulated mode")
+			expect(adapter.start).not.toHaveBeenCalled()
+			const simulated = await instance.execute({
+				idempotencyKey: `simulated-${provider}`,
+				mode: "simulated",
+				tool: "call_engineer",
+			})
+			expect(simulated).toMatchObject({
+				mode: "simulated",
+				status: "succeeded",
+			})
+			expect(adapter.start).not.toHaveBeenCalled()
+		},
+	)
+
+	it("reads a persisted live call without contacting its former provider", async () => {
+		const repository = new ConditionalRepository()
+		const lookup = jest.fn()
+		const instance = new ToolTestsService(
+			repository as never,
+			config(),
+			{ start: jest.fn() } as never,
+			{ getResult: lookup } as never,
+		)
+		await repository.insert(
+			repository.create({
+				idempotencyKey: "legacy",
+				identifier: "legacy-call",
+				mode: "live",
+				provider: "elevenlabs",
+				providerReference: "old-conversation",
+				status: "accepted",
+				timeoutAt: new Date(Date.now() + 60_000).toISOString(),
+				tool: "call_engineer",
+			}),
+		)
+		expect(await instance.get("legacy-call")).toMatchObject({
+			status: "accepted",
+		})
+		expect(lookup).not.toHaveBeenCalled()
 	})
 })

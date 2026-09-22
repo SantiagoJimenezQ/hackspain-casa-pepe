@@ -1,5 +1,5 @@
 # Casa Pepe API for a long-running host (Railway, Render, Fly, any Docker VM).
-# The agent, the simulation clock and the ElevenLabs call polling need a process
+# The agent, the simulation clock and asynchronous call handling need a process
 # that stays alive between requests, which serverless functions do not provide.
 FROM node:22-alpine AS build
 WORKDIR /workspace

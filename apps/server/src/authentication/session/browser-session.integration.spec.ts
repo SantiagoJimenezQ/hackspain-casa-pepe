@@ -77,6 +77,11 @@ describeDatabase("anonymous browser isolation against PostgreSQL", () => {
 				}),
 			),
 		)
+		// Exercise the retained callback ownership contract only in this isolated test.
+		jest.spyOn(config, "happyRobot", "get").mockReturnValue({
+			...config.happyRobot,
+			mode: "live",
+		})
 		const module = await Test.createTestingModule({ imports: [AppModule] })
 			.overrideProvider(ConfigurationService)
 			.useValue(config)

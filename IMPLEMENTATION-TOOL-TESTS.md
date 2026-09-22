@@ -8,7 +8,7 @@ Test outbound email and engineer-call integrations through authenticated HTTP wi
 - `POST /api/tools/tests`: `{ tool: "send_incident_email" | "call_engineer", mode?: "simulated" | "live", idempotencyKey: string, engineer?: { name: string, phone: string } }`. Mode defaults to simulated. Live email uses configured sender/recipient; call requires an explicit engineer with E.164 phone. Fixed synthetic test purpose/question/content avoids incident dependencies. Live mode requires corresponding configured live mode and provider configuration.
 - `GET /api/tools/tests/:identifier`: fetch durable standalone result.
 - `POST /api/tools/tests/callbacks/happyrobot`: same HappyRobot result DTO and shared-secret authentication as existing callback. Only updates standalone records, never incident services/events.
-- Result: `{ identifier, tool, mode, status: "running" | "accepted" | "succeeded" | "failed", createdAt, finishedAt, provider, providerReference, providerCallSid, detail, error: { code, message } | null, result: unknown | null }`. Email acceptance is explicitly not inbox delivery. Live calls use the shared configured adapter and remain accepted until an ElevenLabs lookup or HappyRobot callback completes them; overdue calls become failed on read. Simulated tests finish immediately and never contact providers.
+- Result: `{ identifier, tool, mode, status: "running" | "accepted" | "succeeded" | "failed", createdAt, finishedAt, provider, providerReference, providerCallSid, detail, error: { code, message } | null, result: unknown | null }`. Email acceptance is explicitly not inbox delivery. Live calls use the shared configured adapter and remain accepted until a provider result or HappyRobot callback completes them; overdue calls become failed on read. Simulated tests finish immediately and never contact providers.
 - Dedicated database table, unique idempotency key, normalized request fingerprint. Repeated matching requests return original result, conflicting reuse returns 409. Reserve record before provider invocation; do not automatically retry ambiguous outcomes. No incident/plan foreign keys or activity events.
 
 ## Implementation subtasks (Luna Max)
@@ -34,10 +34,10 @@ Implemented on `codex/tool-test-api` in the isolated `tool-test-api` worktree us
 - No live provider messages/calls were sent. Real provider delivery and deployed database behavior remain unverified; persistence uses the repository's existing TypeORM entity auto-loading/schema synchronization setup.
 - Usage examples are in `apps/server/docs/API-CURL-TEST-GUIDE.md`, under standalone tool checks.
 
-## ElevenLabs compatibility update
+## Provider compatibility update
 
 - Integrate main's provider-neutral call adapter and supply explicit synthetic incident context.
-- Persist selected provider and telephony references. Poll ElevenLabs on result GET, retain its complete evidence, and keep HappyRobot callbacks restricted to HappyRobot tests.
-- Verify the actual ElevenLabs adapter with mocked provider HTTP responses; keep live credentials and delivery outside automated tests.
+- Persist selected provider and telephony references. Refresh polling-based providers on result GET, retain its complete evidence, and keep HappyRobot callbacks restricted to HappyRobot tests.
+- Verify the actual call adapter with mocked provider HTTP responses; keep live credentials and delivery outside automated tests.
 
-Validation after integrating main `e603231`: 107 tests across 23 suites, Biome, TypeScript, NestJS build and diff checks pass. A Luna Max subtask added real-adapter ElevenLabs tests with mocked HTTP; root added unified-mode and simulated-default regression checks.
+Validation after integrating main `e603231`: 107 tests across 23 suites, Biome, TypeScript, NestJS build and diff checks pass. A Luna Max subtask added real-adapter voice tests with mocked HTTP; root added unified-mode and simulated-default regression checks.

@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useDashboard } from "@/components/dashboard/dashboard-provider";
 import { TopBar } from "@/components/dashboard/top-bar";
@@ -148,11 +148,65 @@ class FakeEventSource {
 }
 
 describe("live dashboard provider", () => {
+  it("uses lightweight reconciliation while keeping the stream and current snapshot", async () => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    let changed = false;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes("knownRevision=")) return Response.json(changed
+        ? { ...idleSnapshot, revision: "v2", incident: { ...idleSnapshot.incident, runIdentifier: "run_2" } }
+        : { unchanged: true, revision: "v1" });
+      if (isOverview(url)) return Response.json({ ...idleSnapshot, revision: "v1" });
+      if (isLlmHistory(url)) return Response.json({ items: [], nextBeforeSequence: null });
+      return Response.json([]);
+    });
+    function RunProbe() {
+      const { overview } = useDashboard();
+      return <p>{overview?.incident.runIdentifier ?? "loading"}</p>;
+    }
+    renderWithProviders(<RunProbe />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(screen.getByText("run_1")).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+    expect(calls.filter((url) => url.includes("knownRevision=v1"))).toHaveLength(3);
+    expect(calls.filter((url) => url.endsWith("/overview"))).toHaveLength(1);
+    expect(screen.getByText("run_1")).toBeInTheDocument();
+    // Another tab's replacement or a missed event on another API instance is still detected.
+    changed = true;
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(screen.getByText("run_2")).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(calls.some((url) => url.includes("knownRevision=v2"))).toBe(true);
+  });
+
+  it("does not overlap slow reconciliation requests", async () => {
+    vi.useFakeTimers();
+    let resolvePoll: ((response: Response) => void) | undefined;
+    const poll = vi.fn(() => new Promise<Response>((resolve) => { resolvePoll = resolve; }));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("knownRevision=")) return poll();
+      if (isOverview(url)) return Response.json({ ...idleSnapshot, revision: "v1" });
+      if (isLlmHistory(url)) return Response.json({ items: [], nextBeforeSequence: null });
+      return Response.json([]);
+    });
+    renderWithProviders(<Probe />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(16000); });
+    expect(poll).toHaveBeenCalledTimes(1);
+    await act(async () => { resolvePoll?.(Response.json({ unchanged: true, revision: "v1" })); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(poll).toHaveBeenCalledTimes(2);
+    await act(async () => { resolvePoll?.(Response.json({ unchanged: true, revision: "v1" })); });
+  });
+
   afterEach(() => {
     FakeEventSource.instances = [];
     casaPepeClient.forgetRun();
     vi.stubGlobal("EventSource", MockEventSource);
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it.each([true, false])("resets saved learning with truthful feedback (success=%s)", async (succeeds) => {

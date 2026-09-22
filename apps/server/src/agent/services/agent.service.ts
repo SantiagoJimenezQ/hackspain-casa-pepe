@@ -420,6 +420,30 @@ export class AgentService {
 			"pending",
 		)
 		const toolCalls = await this.toolsService.list(runIdentifier)
+		return this.statusFromSnapshot(
+			incident,
+			plan,
+			pendingApprovals.length,
+			toolCalls.filter((call) => call.status === "running").length,
+		)
+	}
+
+	statusVersion(runIdentifier: string): string {
+		const state = this.cycleState.get(runIdentifier)
+		return JSON.stringify([
+			state.inProgress,
+			state.lastCycleAt,
+			state.lastOutcome,
+		])
+	}
+
+	statusFromSnapshot(
+		incident: IncidentSnapshot,
+		plan: PlanRecord | null,
+		pendingApprovals: number,
+		runningToolCalls: number,
+	): AgentStatus {
+		const runIdentifier = incident.runIdentifier
 		const state = this.cycleState.get(runIdentifier)
 		return {
 			cycleInProgress: state.inProgress,
@@ -432,13 +456,11 @@ export class AgentService {
 			lastCycleOutcome: state.lastOutcome,
 			maximumCycles: this.configuration.agent.maximumCyclesPerRun,
 			model: this.configuration.llm.model,
-			pendingApprovals: pendingApprovals.length,
+			pendingApprovals,
 			planVersion: plan ? plan.version : 0,
 			recoveryMode: this.recoveryService.mode,
 			runIdentifier,
-			runningToolCalls: toolCalls.filter(
-				(toolCall) => toolCall.status === "running",
-			).length,
+			runningToolCalls,
 		}
 	}
 

@@ -191,7 +191,10 @@ Runs, newest first: `runIdentifier`, `incidentIdentifier`, `runKind`, `status`, 
 
 ## Overview for the UI
 
-### `GET /overview?runIdentifier=`
+### `GET /overview?runIdentifier=&knownRevision=`
+
+The default response remains a full overview and now includes an opaque `revision`. Reconciliation callers may send that value as `knownRevision` (maximum 64 characters). If the same browser-owned run, its update time, activity count and agent cycle status are unchanged, the endpoint returns HTTP 200 with only `{ "unchanged": true, "revision": "..." }`. Otherwise it returns the full current overview with a new revision. A run replaced by another tab invalidates the revision. Omit `knownRevision` to force a complete snapshot; ownership checks still run before any revision comparison.
+
 
 The full initial state in one call.
 

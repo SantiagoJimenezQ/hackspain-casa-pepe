@@ -119,6 +119,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestRunIdentifier = useRef<string | null>(null);
   const latestSequence = useRef(0);
+  const overviewRevision = useRef<string | undefined>(undefined);
+  const reconciliationPending = useRef(false);
   const startGeneration = useRef(0);
   const ensuringRun = useRef(false);
   const learningLoaded = useRef(false);
@@ -149,6 +151,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const applyOverview = useCallback((next: Overview) => {
+    overviewRevision.current = next.revision;
     const nextSequence = Math.max(0, ...next.recentActivity.map((item) => item.sequence));
     const runChanged = latestRunIdentifier.current !== next.incident.runIdentifier;
     if (runChanged) {
@@ -192,11 +195,20 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const refreshLearning = useCallback(() => loadLearning(true), [loadLearning]);
 
-  const refreshOverview = useCallback(async () => {
+  const refreshOverview = useCallback(async (onlyIfChanged = false) => {
     const generation = startGeneration.current;
+    if (onlyIfChanged && reconciliationPending.current) return;
+    if (onlyIfChanged) reconciliationPending.current = true;
     try {
-      const next = await casaPepeClient.overview();
+      const next = onlyIfChanged
+        ? await casaPepeClient.overviewIfChanged(overviewRevision.current)
+        : await casaPepeClient.overview();
       if (generation !== startGeneration.current) return;
+      if (!next) {
+        setError(null);
+        setStatus("active");
+        return;
+      }
       applyOverview(next);
       void loadLearning();
     } catch (cause) {
@@ -235,6 +247,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       }
       setError(known?.message ?? "No se pudo contactar con el backend de Casa Pepe.");
       setStatus((current) => (current === "active" ? current : "error"));
+    } finally {
+      if (onlyIfChanged) reconciliationPending.current = false;
     }
   }, [applyOverview, loadLearning]);
 
@@ -242,7 +256,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     const initialLoad = window.setTimeout(() => void refreshOverview(), 0);
     // Another tab may replace this browser's run; the old run's stream cannot announce
     // the new run. Reconcile the cookie-scoped snapshot while this tab is visible.
-    const reconcile = () => { if (document.visibilityState === "visible") void refreshOverview(); };
+    const reconcile = () => { if (document.visibilityState === "visible") void refreshOverview(true); };
     const interval = window.setInterval(reconcile, 5000);
     window.addEventListener("focus", reconcile);
     return () => {
@@ -255,7 +269,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const scheduleRefresh = useCallback(() => {
     if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    refreshTimer.current = setTimeout(() => void refreshOverview(), 350);
+    refreshTimer.current = setTimeout(() => void refreshOverview(true), 350);
   }, [refreshOverview]);
 
   useEffect(() => {

@@ -2,6 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { casaPepeClient } from "@/lib/casa-pepe-client";
 
 describe("Casa Pepe browser client", () => {
+  it("handles unchanged snapshots without replacing the current run", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ runIdentifier: "run_1" }));
+    await casaPepeClient.start();
+    fetchMock.mockResolvedValue(Response.json({ unchanged: true, revision: "abc" }));
+    expect(await casaPepeClient.overviewIfChanged("abc")).toBeNull();
+    expect(casaPepeClient.currentRunIdentifier()).toBe("run_1");
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/casa-pepe/overview?knownRevision=abc", expect.anything());
+  });
+
   afterEach(() => {
     casaPepeClient.forgetRun();
     vi.restoreAllMocks();

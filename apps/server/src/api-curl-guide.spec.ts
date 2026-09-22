@@ -347,12 +347,31 @@ describe("API curl walkthrough contract", () => {
 		)
 
 		const overview = await request<{
+			readonly revision: string
 			readonly incident: IncidentSnapshot
 			readonly plan: { readonly kind: string }
 		}>(baseURL, `/api/overview?runIdentifier=${runIdentifier}`)
 		expect(overview.status).toBe(200)
 		expect(overview.body.incident.runIdentifier).toBe(runIdentifier)
 		expect(overview.body.plan.kind).toBe("none")
+		expect(overview.body.revision).toMatch(/^[a-f0-9]{64}$/)
+		const unchanged = await request(
+			baseURL,
+			`/api/overview?runIdentifier=${runIdentifier}&knownRevision=${overview.body.revision}`,
+		)
+		expect(unchanged.status).toBe(200)
+		expect(unchanged.body).toEqual({
+			revision: overview.body.revision,
+			unchanged: true,
+		})
+		expect(
+			(
+				await request(
+					baseURL,
+					`/api/overview?knownRevision=${"x".repeat(65)}`,
+				)
+			).status,
+		).toBe(400)
 
 		const initialPlan = await request<CurrentPlanResponse>(
 			baseURL,

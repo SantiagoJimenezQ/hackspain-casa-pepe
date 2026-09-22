@@ -219,3 +219,7 @@ Set the flag back to false after the upgrade. Never enable it on PR previews usi
 Stop old servers before upgrading; do not mix old/new versions or roll back without
 a pre-migration database backup. See [Architecture.md](../../Architecture.md) for
 schema, scheduler limitations, integration boundaries and PostgreSQL test commands.
+
+### Avoiding repeated database transfers
+
+Background queries filter the 30-minute idle cutoff, run kind and eligible status in Postgres. Automatic simulation additionally filters randomized/unpaused state and selects only identifiers. `/overview` supports the additive `knownRevision` protocol documented in [API.md](docs/API.md): unchanged browser polls read small reference/count results, while full snapshots reuse loaded data for agent status. No database migration or environment change is needed. Scheduling remains process-local; use one continuously running coordinator as described in [Architecture.md](../../Architecture.md).

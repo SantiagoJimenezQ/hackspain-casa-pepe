@@ -60,6 +60,11 @@ export class ActivityService {
 		return this.persist(input, true, input.replayOfEventIdentifier)
 	}
 
+	/** Append-only events: a count detects inserts even across process-local sequence collisions. */
+	async countForRun(runIdentifier: string): Promise<number> {
+		return this.repository.count({ where: { runIdentifier } })
+	}
+
 	async list(query: ActivityQuery): Promise<Page<ActivityRecord>> {
 		const where: FindOptionsWhere<ActivityEventEntity> = {
 			runIdentifier: query.runIdentifier,

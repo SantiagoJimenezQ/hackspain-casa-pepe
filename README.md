@@ -1,93 +1,141 @@
 # Casa Pepe
 
-**An AI incident coordinator that revises its plan when the facts change.**
+**An AI coordinator that helps manage a service outage—and changes its plan when the situation changes.**
 
-Built for HackSpain 2026, Casa Pepe explores a practical question: when a cloud region fails and backup capacity is scarce, what should recover first—and who should authorize it?
+Built over a weekend for **HackSpain 2026**, Casa Pepe explores a simple question: if several services go down and there isn't enough backup capacity to restore everything, what should recover first?
 
-The system investigates a changing incident, proposes recovery priorities, coordinates people and tools, and verifies results. An operator can inspect the evidence, compare plan versions and approve or reject recovery actions.
+Pepe investigates the incident, weighs the impact on customers, coordinates recovery work and checks the result. You are the operator: you can follow its decisions, introduce new problems, and approve or reject actions that need your permission.
 
-[Architecture](Architecture.md) · [Run locally](#run-locally) · [Demo walkthrough](#see-the-response-change) · [API reference](apps/server/docs/API.md)
+**[Try the live demo →](https://casa-pepe-web.vercel.app/)**
 
-## See the response change
+![Casa Pepe dashboard showing the world map, customer status, all six services recovered, and the agent's decision history.](docs/images/dashboard.png)
 
-The fictional scenario takes Dubai (`me-central-1`) offline. A delivery platform loses its orders database, route assignment, package tracking and event stream. The nearest backup initially reports four compute units. A later report reduces that capacity to one.
+*All six services recovered, with customer status and the agent’s decision history visible alongside.*
 
-Customers use fictional identities and original logos: Mova Energy, Mirage Air, Meridian Bank, Dasharoo and Clarity Health. HappyRobot retains its name and logo. See [demo branding](packages/demo-brands/README.md) for saved-run compatibility.
+[How to try it](#try-it-in-your-browser) · [How it works](#how-it-works) · [Run locally](#run-locally) · [Architecture](Architecture.md)
 
-1. **Observe:** inspect affected services, dependencies, customer impact and available resources.
-2. **Plan:** review the model's priorities, assumptions, selected backup and proposed actions.
-3. **Challenge the plan:** use **Cut capacity** or the capacity controls to change the environment while work is pending.
-4. **Reassess:** compare the revised plan with its predecessor, including what changed and why. Superseded approvals no longer authorize old work.
-5. **Intervene:** approve or reject a current recovery proposal. Track ownership and pending human tasks.
-6. **Verify:** check the recovery result independently. In HTTP mode, submit a synthetic delivery to the included recovery application and inspect the returned route.
+## The scenario
 
-The model chooses the response; the walkthrough is not a fixed action script. Scenario names, customer examples and resource figures are demonstration data, not claims about real companies or cloud infrastructure.
+A fictional delivery company loses its cloud region in Dubai. Its order database, delivery routing, package tracking and other services are affected. Customers need different things back online, but the backup region has limited capacity.
 
-## Engineering decisions worth inspecting
+Then the situation gets worse: the backup capacity drops from **four units to one**. Pepe has to reconsider its priorities, explain what can still be recovered and revise work already in progress.
 
-| Decision | Why it matters | Implementation |
-|---|---|---|
-| Validate model proposals before execution | Service dependencies, capacity and required approvals remain runtime constraints | [Plans](apps/server/src/plans), [recovery](apps/server/src/recovery) |
-| Bind approvals to versioned plans | New evidence can invalidate previously reasonable actions | [Approvals](apps/server/src/approvals), [agent](apps/server/src/agent) |
-| Persist evidence and outcomes | Refreshing the dashboard preserves the response history and plan comparison | [Activity](apps/server/src/activity), [overview](apps/server/src/agent) |
-| Isolate runs by browser session | Independent visitors can run the scenario without sharing incident ownership | [Session boundary](apps/server/src/authentication) |
-| Keep integrations behind adapters | Calls are simulated; email and recovery retain explicit simulated/live modes | [Engineers](apps/server/src/engineers), [tools](packages/tools) |
-| Separate execution from verification | An accepted request or completed task is not proof that service recovered | [Recovery](apps/server/src/recovery), [demo target](demo/recovery-environment) |
-| Retain lessons across runs | Observed capacity discrepancies and recovery outcomes can inform later decisions | [Learning](apps/server/src/learning) |
+The customers use fictional names and original logos; HappyRobot keeps its name and logo. The incident, customer impact and capacity figures are demonstration data. See [customer branding](packages/demo-brands/README.md) for details.
 
-## Architecture
+## Try it in your browser
+
+No local installation is needed to explore the [hosted demo](https://casa-pepe-web.vercel.app/).
+
+1. **Open the dashboard.** A new browser session starts with the system healthy. If you are returning to an old run, use **Reiniciar / Reset** for a fresh start. Choose **ES / EN** before triggering the outage; switching language starts a new run.
+2. **Trigger the outage.** Click **Impacto / Impact**. Watch the map, affected companies and activity panel as Pepe investigates and proposes a response.
+3. **Change the conditions.** While recovery work is still pending, use **Recortar capacidad / Cut capacity**. The backup now has less room than the original plan assumed.
+4. **Inspect the new plan.** Follow what changed, which customers take priority and what has to wait. An approval for an outdated plan cannot authorize its replacement.
+5. **Make a decision.** When an approval is requested, review the proposed action and its consequences. Approve or reject it, then follow the recovery and verification results.
+
+The model chooses its next actions, so each run can unfold differently. Refreshing the page preserves your session's incident history; **Aprendizajes** (learnings) shows lessons retained from previous runs in that browser session.
+
+## What is real, and what is simulated?
+
+| Part | What happens |
+|---|---|
+| AI decisions | A connected language model chooses investigations, proposes plans and selects actions. The server checks whether those actions are allowed. |
+| Dashboard and history | Plans, approvals, tool results and activity are stored in PostgreSQL and shown in the interface. |
+| On-call engineer | Calls are always simulated and labelled as such. No phone is dialled and no voice subscription is needed. |
+| Recovery | Simulated by default. An optional HTTP mode acts on the included test application; it does not create or repair real cloud infrastructure. |
+| Email | Simulated by default. Sending real email requires explicitly configuring the Resend integration. |
+
+With the example configuration, the simulated engineer authorizes notifications and traffic failover. That permission is separate from any plan-specific approval required from you.
+
+## How it works
+
+Pepe repeats a loop: **observe → prioritize → act → verify → reassess**.
+
+The language model chooses what to do next. The backend enforces service dependencies, available capacity and required approvals before executing an action. For example, a service that depends on the order database must wait for that database to recover. New evidence can invalidate a plan and its pending approvals.
 
 ```mermaid
 flowchart LR
-    Operator[Operator dashboard] <-->|JSON and SSE| Web[Next.js server proxy]
-    Web <-->|API key and session token| API[NestJS coordinator]
+    User[You in the dashboard] <--> Web[Next.js frontend]
+    Web <--> API[NestJS backend]
+    API <--> Model[Language model]
     API <--> DB[(PostgreSQL / Supabase)]
-    API <--> LLM[Tool-calling LLM]
-    API <--> Voice[Simulated engineer calls]
-    API <--> Email[Resend]
-    API <--> Recovery[Recovery adapter and verification]
+    API <--> Tools[Calls, email and recovery tools]
 ```
 
-**Next.js + React + TypeScript** provide the operator interface. **NestJS + TypeORM + PostgreSQL** own the simulation, agent cycle, plans, approvals, audit history and integration callbacks. The server proxy keeps credentials out of browser code. Shared payload declarations live in `packages/contracts`.
+The frontend uses **Next.js, React and TypeScript**. The backend uses **NestJS and TypeORM**, with **PostgreSQL** for persistence. The model connects through an OpenAI-compatible API; the [example configuration](apps/server/.env.example) includes a Helmcode endpoint. Provider credentials stay on the server.
 
-Read [Architecture.md](Architecture.md) for execution boundaries, persistence, browser ownership and deployment tradeoffs.
+For the design decisions, approval rules and deployment assumptions, read [Architecture.md](Architecture.md).
 
 ## Run locally
 
-You need **Node.js 22+**, **pnpm 11.7.0**, a dedicated PostgreSQL database and credentials for a compatible tool-calling LLM. No voice subscription is required. A live email account is optional.
+You need **Node.js 22+**, **pnpm 11.7.0**, a dedicated **PostgreSQL database** (local or Supabase) and credentials for a language model that supports tool calling. A working model connection is required for autonomous decisions; voice and email accounts are not required.
+
+### 1. Get the code and install dependencies
 
 ```bash
+git clone https://github.com/SantiagoJimenezQ/hackspain-casa-pepe.git
+cd hackspain-casa-pepe
 pnpm install --frozen-lockfile
 cp apps/server/.env.example apps/server/.env.local
 cp apps/web/.env.example apps/web/.env.local
 ```
 
-Configure the ignored files:
+### 2. Configure the backend and frontend
 
-| File | Settings |
+In `apps/server/.env.local`, fill in:
+
+| Variable | Value |
 |---|---|
-| `apps/server/.env.local` | `API_KEY`, `SUPABASE_DATABASE_URL`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` |
-| `apps/web/.env.local` | `CASA_PEPE_API_BASE_URL=http://localhost:3000`, `CASA_PEPE_API_KEY` matching the backend key |
+| `API_KEY` | A random secret you generate for communication between the frontend and backend. This is separate from your model provider's key. |
+| `SUPABASE_DATABASE_URL` | Your PostgreSQL connection string. Despite the name, a local PostgreSQL database also works. |
+| `LLM_BASE_URL` | Your model provider's OpenAI-compatible API base URL. |
+| `LLM_MODEL` | The provider's model identifier. |
+| `LLM_API_KEY` | Your model provider's API key. |
 
-Use a unique random API key. Leave `LLM_PROVIDER` empty to use the generic `LLM_*` settings, or follow the [LLM guide](apps/server/docs/LLM-AGENT.md) for provider presets. No shared model credentials are distributed with the project. The API can start without them, but autonomous decisions require a working model connection.
+Leave `LLM_PROVIDER` empty when using these generic `LLM_*` settings. For the alternative Helmcode/provider preset configuration, follow the [model setup guide](apps/server/docs/LLM-AGENT.md). Keep email and recovery in their default simulated modes for your first run.
 
-**Initialize a fresh database once:** set `BROWSER_SESSION_SCHEMA_UPGRADE=true` in the server environment and start the API. After successful initialization, stop it, restore the flag to `false`, and restart. Ordinary startup does not create tables. For an existing database, back it up and stop older backends before an upgrade. Never enable the upgrade flag on previews sharing another deployment's database.
+In `apps/web/.env.local`, set `CASA_PEPE_API_BASE_URL=http://localhost:3000` and set `CASA_PEPE_API_KEY` to the **same value as the backend's `API_KEY`**. Both `.env.local` files are ignored by Git; keep credentials there.
 
-In separate terminals:
+### 3. Initialize the database and start the backend
+
+For a **new, empty database**, temporarily set `BROWSER_SESSION_SCHEMA_UPGRADE=true` in the backend environment file, then run:
 
 ```bash
 pnpm --filter @casa-pepe/server develop
 ```
 
+Once initialization succeeds and the API starts, stop it with **Ctrl+C**, change the flag back to `false`, and run the same command again. Leave this terminal running. Later starts use `false`; ordinary startup does not create tables.
+
+For an existing database or a Supabase connection, follow the [database setup guide](apps/server/docs/SUPABASE.md). Do not initialize or upgrade a database shared with another running deployment or a PR preview.
+
+### 4. Start the dashboard
+
+In a second terminal, from the repository root:
+
 ```bash
 pnpm --filter web dev --port 3001
 ```
 
-Open the [dashboard](http://localhost:3001), [API health](http://localhost:3000/api/health) or [interactive API documentation](http://localhost:3000/documentation). The dashboard manages its session cookie automatically and shows an explicit connection state if the API is unavailable.
+Open **[localhost:3001](http://localhost:3001)** and follow the browser walkthrough above. You can also inspect [API health](http://localhost:3000/api/health) and the [interactive API documentation](http://localhost:3000/documentation).
 
-Engineer calls are always simulated. Live voice requests and provider callbacks are disabled, even if legacy environment variables still contain credentials or request live mode. Keep email and recovery simulated for the first run; see [backend setup](apps/server/README.md) and [Supabase setup](apps/server/docs/SUPABASE.md) when connecting your own services.
+If the dashboard cannot connect, check that the backend is running and both API keys match. If the dashboard loads but Pepe cannot make decisions, check your model settings and provider access. More detail is in the [backend guide](apps/server/README.md) and [frontend guide](apps/web/README.md).
 
-## Validation and scope
+## Explore the code
+
+| Location | Start here to understand… |
+|---|---|
+| [`apps/web`](apps/web) | The dashboard, live activity and operator controls. |
+| [`apps/server/src/agent`](apps/server/src/agent) | How the model observes the incident and chooses actions. |
+| [`apps/server/src/plans`](apps/server/src/plans) and [`approvals`](apps/server/src/approvals) | Plan validation, revisions and human approval. |
+| [`apps/server/src/recovery`](apps/server/src/recovery) | Recovery execution and the separate verification step. |
+| [`apps/server/src/learning`](apps/server/src/learning) | Lessons retained across runs. |
+| [`packages`](packages) | Shared data contracts, customer branding and integration helpers. |
+| [`demo`](demo) | Rehearsal guides and the optional HTTP recovery test application. |
+
+For endpoint details, see the [API reference](apps/server/docs/API.md) and [curl walkthrough](apps/server/docs/API-CURL-TEST-GUIDE.md). For changes, start with [Contributing](CONTRIBUTING.md) and [Security](SECURITY.md).
+
+## Checks and project scope
+
+Run these from the repository root:
 
 ```bash
 pnpm run ci
@@ -95,26 +143,8 @@ pnpm --filter @casa-pepe/server build
 node --test demo/recovery-environment/server.test.mjs
 ```
 
-CI checks the dashboard and backend with scripted model responses and controlled integrations. A live provider rehearsal remains a separate check. The HTTP recovery target operates on the included demo application; it does not provision AWS resources.
+These checks cover the frontend, backend and test recovery application using controlled model responses and integrations. Testing against a live model or provider is a separate step.
 
-This is a **hackathon prototype** designed for one continuously running coordinator. Scheduling, cycle locks and SSE are process-local. Anonymous session ownership separates visitors' runs, but does not provide user accounts, usage quotas or protection against public model spend. Protect hosted operator access before sharing a live demo broadly. Model failures and rate-limit fallback are visible in the runtime. Simulated calls are labelled as such and do not dial a phone.
+Casa Pepe is a **weekend hackathon project**, not a production incident-management service. It is designed around one continuously running backend; background scheduling and active execution locks are held by that process. Browser sessions separate visitors' runs, but there are no user accounts or model-usage quotas. A public deployment therefore needs its own access and spending controls.
 
-## Explore the repository
-
-```text
-apps/web/             Operator dashboard and server-side API proxy
-apps/server/          Incident simulation, agent, persistence and adapters
-packages/contracts/   Shared payload declarations
-packages/tools/       Server-only integration helpers
-packages/agent/       Agent package boundary documentation
-packages/harness/     Simulation package boundary documentation
-demo/                 Rehearsal guides and HTTP recovery target
-docs/                 Design notes and implementation history
-```
-
-- [Architecture and tradeoffs](Architecture.md)
-- [Backend setup](apps/server/README.md) and [dashboard guide](apps/web/README.md)
-- [API reference](apps/server/docs/API.md) and [curl walkthrough](apps/server/docs/API-CURL-TEST-GUIDE.md)
-- [Demo rehearsal](demo/README.md) and [integration walkthrough](demo/MVP-TOOLS.md)
-- [Contributing](CONTRIBUTING.md) and [security](SECURITY.md)
-- [Original project plan](MASTER.md) and [official HackSpain challenge](https://hackspain2026.happyrobot.ai/)
+The [original project plan](MASTER.md) and [HackSpain challenge brief](https://hackspain2026.happyrobot.ai/) provide the project context. Some integration guides describe retained live-provider contracts; the current demo's phone calls remain simulated.

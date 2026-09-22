@@ -4,7 +4,7 @@
 
 Set `CASA_PEPE_INBOUND_WEBHOOK_SECRET` on the backend and use the same value as the workflow HTTP nodes' `x-casa-pepe-webhook-secret` header. Keep the value in secret configuration. It is not the HappyRobot trigger API key.
 
-The incident header shows a six-digit call code and the inbound number (configured by `HAPPYROBOT_INBOUND_PHONE_NUMBER`, currently +12603688621). Callers can read the code digit by digit, for example “uno, dos, tres, cuatro, cinco, seis”. Existing incidents receive codes during schema synchronization; new runs receive their own unique codes. A reset never reuses a code. Codes are identifiers, not passwords or approvals.
+The legacy incident header showed a six-digit call code and the inbound number configured by `HAPPYROBOT_INBOUND_PHONE_NUMBER`. Callers could read the code digit by digit, for example “uno, dos, tres, cuatro, cinco, seis”. Existing incidents receive codes during schema synchronization; new runs receive their own unique codes. A reset never reuses a code. Codes are identifiers, not passwords or approvals.
 
 ## 1. Ask for the code, then bind
 

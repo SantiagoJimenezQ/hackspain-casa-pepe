@@ -1,7 +1,7 @@
 # Deploying the API on Railway
 
 The API must run as a long-lived process: the agent cycles take up to a few minutes, the
-simulation clock and the ElevenLabs call polling run on intervals, and approvals expire on a
+simulation clock and asynchronous call handling run on intervals, and approvals expire on a
 timer. Serverless functions freeze between requests, so the impact appears to hang there.
 Railway (or Render, Fly, any Docker host) keeps the process alive. The web app can stay on
 Vercel; only its `CASA_PEPE_API_BASE_URL` changes.
@@ -25,19 +25,16 @@ SUPABASE_DATABASE_URL=<Supabase session pooler URI, port 5432>
 DATABASE_POOL_MAXIMUM=5
 API_KEY=<long random string, same value as the web app's CASA_PEPE_API_KEY>
 
-# Engineer calls through ElevenLabs
-ENGINEER_CALL_PROVIDER=elevenlabs
-ENGINEER_CALL_MODE=live
-ELEVENLABS_API_KEY=<key>
-ELEVENLABS_AGENT_ID=<agent id>
-ELEVENLABS_PHONE_NUMBER_ID=<phone number id>
+# Calls are always simulated; live voice is disabled in runtime configuration.
+ENGINEER_CALL_PROVIDER=happyrobot
+ENGINEER_CALL_MODE=simulated
+ENGINEER_CALL_FALLBACK_TO_SIMULATED=false
 DEMO_ENGINEER_NAME=Marta Ruiz
 DEMO_ENGINEER_ROLE=Platform on-call engineer
 DEMO_ENGINEER_PHONE=+34<verified number>
 
-# HappyRobot stays configured for the inbound line
+# Legacy voice mode is also forced to simulation
 HAPPYROBOT_MODE=simulated
-HAPPYROBOT_WEBHOOK_SECRET=<long random string>
 RECOVERY_MODE=simulated
 RECOVERY_WEBHOOK_SECRET=<long random string>
 
@@ -67,14 +64,14 @@ and `CASA_PEPE_API_KEY=<same API_KEY>`. Redeploy the web app.
 curl https://<your-railway-domain>/api/health
 ```
 
-must return `"database": {"status": "up"}` and `"engineerCallProvider": "elevenlabs"`.
-Then open the web app, press Start and Impact: the plan appears within about a minute and the
-call to `DEMO_ENGINEER_PHONE` follows.
+must return `"database": {"status": "up"}` and `"engineerCallProvider": "happyrobot"`.
+Then open the web app, press Start and Impact: the plan appears within about a minute and a
+simulated call follows. No voice subscription or callback configuration is required.
 
 ## Model requirements
 
 `LLM_PROVIDER` chooses between the `LLM_OPENAI_*` and `LLM_DEEPSEEK_*` blocks, so both providers
-can stay configured and switching needs no redeploy.
+can stay configured and switching takes effect after the process restarts.
 
 Against OpenAI, gpt-5 models require `reasoning_effort=none` to accept function tools on
 `/chat/completions`, and the client sends `max_completion_tokens` automatically. Through Helmcode

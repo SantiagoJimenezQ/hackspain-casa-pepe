@@ -1,6 +1,8 @@
 # `call_engineer`: input, outcome, and next actions
 
-This is the agent-facing contract for the current ElevenLabs emergency agent.
+> Current runtime: voice calls are simulated only. Live call tests, provider polling and inbound voice webhooks are disabled regardless of legacy environment settings. Live-provider details below document retained historical contracts.
+
+This is the agent-facing contract for outbound engineer calls.
 `contact_engineer` is the legacy alias. Calls are asynchronous and collect voice
 authorizations; they do not send notifications or execute recovery.
 
@@ -36,17 +38,13 @@ all three identity fields must match exactly.
 | `engineerPhone` | nonempty string | Trusted configured destination in E.164 format. |
 | `engineerRole` | nonempty string | Trusted configured role. |
 | `purpose` | nonempty string | Why this plan needs a call; not a replacement for the hosted voice prompt. |
-| `questions` | array of `{key, question}` | Required, nonempty. Live ElevenLabs still needs at least one stable keyed permission question such as `traffic-failover-authorized`; the hosted agent asks its own combined permission prompt and does not return technical answers. Simulated and HappyRobot providers use keyed technical questions from the scenario briefing. |
+| `questions` | array of `{key, question}` | Required, nonempty. Use stable keys and questions that the configured workflow can actually answer. Permission-only workflows do not establish technical readiness. |
 
 No extra input keys are accepted. Do not put credentials, `outage_time`, location,
 incident IDs, provider IDs, or invented contact details in this object. The server
 supplies trusted execution context and the incident snapshot.
 
-The hosted ElevenLabs agent asks one combined question: “¿Autoriza avisar a todos
-los clientes y desviar el tráfico al respaldo?” It does **not** receive the
-`questions` array or collect answers about backup capacity, snapshot age or
-service readiness. Do not schedule it expecting those technical facts to be
-confirmed.
+A permission workflow can collect notification and failover permissions. Do not schedule it expecting backup capacity, snapshot age or service readiness to be confirmed unless the configured workflow explicitly supports those questions.
 
 After the plan is accepted, the native LLM function arguments are:
 
@@ -58,56 +56,11 @@ Use that object with `execute_step`, not with `call_engineer`. While a call is
 running, do independent work or call `wait_for_input` with a concrete reason.
 Do not execute the same step again or schedule another call merely to poll.
 
-## 2. What the server sends to ElevenLabs
+## 2. What the server sends to HappyRobot
 
-`POST https://api.elevenlabs.io/v1/convai/twilio/outbound-call`
+The adapter supplies the trusted call identifier, configured engineer, incident summary, affected services, outage time, keyed questions and callback URL. Direct webhook triggers receive a flat JSON object; workflow run API requests wrap it in `payload`. Credentials stay server-side.
 
-Headers: `xi-api-key: <server secret>` and `Content-Type: application/json`.
-
-```json
-{
-  "agent_id": "<configured emergency agent ID>",
-  "agent_phone_number_id": "<configured outbound line ID>",
-  "to_number": "+34600000000",
-  "conversation_initiation_client_data": {
-    "dynamic_variables": {
-      "contact_name": "Configured on-call engineer",
-      "location": "Dubái, me-central-1",
-      "outage_time": "14:30 UTC",
-      "incident_description": "The delivery platform is unavailable. Orders and deliveries are blocked.",
-      "services_down": "Orders database, route assignment, package tracking"
-    }
-  }
-}
-```
-
-- `outage_time` comes from persisted `incident.impactedAt`, passed as optional
-  `incidentContext.outageStartedAt` and formatted `HH:mm UTC`. Missing, invalid,
-  or timezone-less values become `""`; never substitute the call start time.
-- `location` is retained for compatibility, but the hosted prompt must not speak
-  region, city, country or region codes. It speaks the supplied outage time.
-- The incident description comes from the run (scenario fallback), capped at two
-  sentences. `services_down` joins the names of currently non-healthy services.
-- Voice, prompt, and extraction schemas belong to the hosted agent. Credentials
-  and provider IDs are server configuration, not model-selected arguments.
-
-An accepted start response looks like this:
-
-```json
-{
-  "success": true,
-  "message": "Success",
-  "conversation_id": "conv_example",
-  "callSid": "CA_example"
-}
-```
-
-This means **accepted**, not answered or authorized. The server records
-`conversation_id` as `providerReference` and `callSid` as `providerCallSid`.
-Conversation results are retrieved with authenticated
-`GET /v1/convai/conversations/<conversation_id>`; incident calls use server
-polling, while standalone tool tests refresh on GET. No ElevenLabs public
-callback is needed.
+A valid provider run ID means the call was accepted, not answered or authorized. The authenticated callback reports the final outcome. See [HappyRobot setup](HAPPYROBOT.md) for headers, payloads and rehearsal steps. The adapter never automatically redials an ambiguous start failure.
 
 ## 3. What the incident agent receives
 
@@ -117,7 +70,7 @@ At the tool implementation boundary, initial acceptance returns:
 {"status": "in-progress", "externalReference": "call_example"}
 ```
 
-`externalReference` here is the **internal engineer-call ID**, not the ElevenLabs
+`externalReference` here is the **internal engineer-call ID**, not a provider
 conversation ID. The persisted tool-call record has `status: "running"`,
 `output: null`, and `error: null`. The agent runtime wraps plan-step execution
 separately; do not confuse this internal result with the native `execute_step`
@@ -154,21 +107,8 @@ fields (other audit fields are omitted in this example):
 `{status: "succeeded", output: ...}`. Asynchronous completion persists it and
 notifies the incident loop, which receives fresh call/tool evidence.
 
-The current ElevenLabs adapter always returns `answers: []`. Each authorization
-has a `value: true | false | null` and a string `rationale` (possibly empty).
-The `authorizations` property is optional in the provider-neutral contract;
-missing authorization evidence is unknown, not approved. The raw provider fields
-map as follows:
-
-| ElevenLabs analysis field | Casa Pepe output field |
-| --- | --- |
-| `data_collection_results.notify_all_clients` | `authorizations.notifyAllClients` |
-| `data_collection_results.traffic_failover_authorized` | `authorizations.trafficFailoverAuthorized` |
-| `transcript_summary` | `summary` |
-
-Only literal booleans are accepted. Text such as `"true"`, absent values and
-malformed entries map to `null`. `call_successful: "success"`, `status: "done"`,
-HTTP 200, and the summary are never substitutes for explicit authorization.
+Each authorization has a `value: true | false | null` and a string `rationale`.
+The `authorizations` property is optional in the shared contract; missing evidence is unknown, not approved. Preserve keyed technical `answers` separately. Only literal booleans are valid permission values. A successful call status, HTTP 200 or summary does not substitute for explicit permission.
 The full transcript and provider IDs are retained on the engineer-call record,
 not duplicated in this compact tool output. Inspect authenticated
 `GET /api/engineers/calls` and `GET /api/tools/calls/:identifier` for audit details;
@@ -220,16 +160,9 @@ before a timeout or lost response. Inspect existing call/provider references and
 use operator-coordinated follow-up rather than silently redialing. Stale-run
 results must not authorize actions in a newer run.
 
-## Verified example: 2026-09-19
+## Source of truth
 
-A direct-provider call supplied `outage_time: "14:30 UTC"`. The agent spoke the
-time, omitted the region and asked one combined question. The recipient answered
-“Sí, lo autorizo.” Both boolean results were `true`; the agent said “Queda
-registrado. Gracias.” and invoked `end_call`. Duration: 18 seconds. No email,
-customer notification or recovery action was executed by that call. This verifies
-the voice/provider contract; it was not an end-to-end production incident run.
-
-Sources of truth: `packages/contracts/tools.d.ts`,
-`packages/contracts/outbound-calls.d.ts`, `src/tools/types/tool.type.ts`,
-`src/tools/implementations/contact-engineer.tool.ts`, and the ElevenLabs adapter.
-See [provider setup](ELEVENLABS.md) and [hosted prompt](ELEVENLABS-AGENT-PROMPT.md).
+See the [shared tool contract](../../../packages/contracts/tools.d.ts),
+[outbound call contract](../../../packages/contracts/outbound-calls.d.ts),
+[tool implementation](../src/tools/implementations/contact-engineer.tool.ts)
+and [HappyRobot setup](HAPPYROBOT.md). Automated adapter checks and live provider rehearsals establish different levels of evidence.

@@ -1,5 +1,7 @@
 # API reference
 
+> Current runtime: voice calls are simulated only. Live call tests, provider polling and inbound voice webhooks are disabled regardless of legacy environment settings. Live-provider details below document retained historical contracts.
+
 Base URL: `http://localhost:3000/api`. Interactive OpenAPI documentation at `http://localhost:3000/documentation`.
 
 Every response is JSON. Identifiers carry a prefix: `run_`, `inc_`, `plan_`, `apr_`, `task_`, `tool_`, `call_`, `rec_`, `act_`, `whs_`, `whd_`, `hev_`, `fact_`, `dec_`.
@@ -63,7 +65,7 @@ Checks the Postgres (Supabase) connection and returns the integration modes.
 
 ### `GET /scenarios`
 
-`[{ identifier, language ("en" | "es"), title, company, region, backupRegion, serviceCount, reportedCapacity, capacityAfterTwist }]`. Two identifiers exist today: `meteorite-eu-west-1` (English, default) and `meteorite-eu-west-1-es` (Spanish). The scenario language drives every operator-facing text produced by the agent.
+`[{ identifier, language ("en" | "es"), title, company, region, backupRegion, serviceCount, reportedCapacity, capacityAfterTwist }]`. Two identifiers exist today: `meteorite-me-south-1` (English, default) and `meteorite-me-south-1-es` (Spanish). The scenario language drives every operator-facing text produced by the agent.
 
 ### `GET /scenarios/:identifier`
 
@@ -77,7 +79,7 @@ Separate from the operator controls. Each call returns the resulting `IncidentSn
 
 ### `POST /demo/start`
 
-Optional body `{ "scenarioIdentifier": "meteorite-eu-west-1" }` (or `meteorite-eu-west-1-es` for Spanish). Deactivates the previous run (it ends in `reset` state) and creates a new one with every service healthy. Events: `incident.run-started`.
+Optional body `{ "scenarioIdentifier": "meteorite-me-south-1" }` (or `meteorite-me-south-1-es` for Spanish). Deactivates the previous run (it ends in `reset` state) and creates a new one with every service healthy. Events: `incident.run-started`.
 
 ### `POST /demo/impact`
 
@@ -410,7 +412,7 @@ These routes exercise the outbound email and engineer-call integrations without 
 
 ### `GET /tools/tests`
 
-Returns one catalog entry per supported test. Each entry has `tool` (`send_incident_email` or `call_engineer`), `modes` (`simulated` and/or `live`), `liveAvailable`, the configured call `provider` (`elevenlabs` or `happyrobot`; `null` for email), and a description. The catalog never includes credentials or provider URLs.
+Returns one catalog entry per supported test. Each entry has `tool` (`send_incident_email` or `call_engineer`), `modes` (`simulated` and/or `live`), `liveAvailable`, the configured call `provider` (`happyrobot` in the documented setup; `null` for email), and a description. The catalog never includes credentials or provider URLs.
 
 ### `POST /tools/tests`
 
@@ -435,7 +437,7 @@ For an engineer-call test, include an E.164 phone number. The engineer is requir
 }
 ```
 
-`mode` defaults to `simulated`. Simulated tests finish immediately and never contact a provider. Live email uses the configured `RESEND_API_KEY`, `INCIDENT_EMAIL_FROM` and `INCIDENT_EMAIL_TO`; the caller cannot choose recipients. Live calls use `ENGINEER_CALL_PROVIDER` with `ENGINEER_CALL_MODE=live`. ElevenLabs requires `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID` and `ELEVENLABS_PHONE_NUMBER_ID`; HappyRobot requires its trigger, API key, webhook secret and public callback base URL. Calls remain `accepted` until provider completion. For ElevenLabs, each result GET queries conversation details; HappyRobot completes through its dedicated test callback. A live request is rejected when its integration mode or required configuration is unavailable. Reusing an idempotency key with the same normalized request returns the original result; a different request with that key returns `409`.
+`mode` defaults to `simulated`. Simulated tests finish immediately and never contact a provider. Live email uses the configured `RESEND_API_KEY`, `INCIDENT_EMAIL_FROM` and `INCIDENT_EMAIL_TO`; the caller cannot choose recipients. Live calls use `ENGINEER_CALL_PROVIDER` with `ENGINEER_CALL_MODE=live`. HappyRobot requires its trigger, API key, webhook secret and public callback base URL. Calls remain `accepted` until provider completion. HappyRobot completes through its dedicated test callback. A live request is rejected when its integration mode or required configuration is unavailable. Reusing an idempotency key with the same normalized request returns the original result; a different request with that key returns `409`.
 
 ### `GET /tools/tests/:identifier`
 
@@ -458,11 +460,11 @@ Returns the durable standalone result:
 }
 ```
 
-Call results are `accepted` while the provider is processing them. Reading an overdue accepted call marks it `failed` with a timeout error. A completed ElevenLabs conversation lookup or HappyRobot callback changes it to `succeeded` or `failed`; duplicate and late results leave the terminal result unchanged. ElevenLabs results retain `providerReference` (conversation ID), `providerCallSid`, transcript, summary and `result.authorizations`. These authorization values are test evidence only. Standalone ElevenLabs tests poll on GET rather than the incident scheduler; poll every five seconds until terminal. Transient provider errors leave the call pending until a later lookup or timeout.
+Call results are `accepted` while the provider is processing them. Reading an overdue accepted call marks it `failed` with a timeout error. A completed provider result or HappyRobot callback changes it to `succeeded` or `failed`; duplicate and late results leave the terminal result unchanged. Call results retain provider references, transcript, summary and `result.authorizations` when supplied. These authorization values are test evidence only. Poll every five seconds until terminal. Transient provider errors leave the call pending until a later lookup or timeout.
 
 ### `POST /tools/tests/callbacks/happyrobot`
 
-Public route protected by `x-happyrobot-signature: <HAPPYROBOT_WEBHOOK_SECRET>`, separately from the operator API key. It accepts the same `HappyRobotCallResultDTO` as `/webhooks/happyrobot`, including `callIdentifier`, `outcome`, `summary`, `transcript` and `answers`. The callback rejects ElevenLabs test IDs and only completes a standalone HappyRobot `call_engineer` result and never updates incident state, engineer-call records or the agent.
+Public route protected by `x-happyrobot-signature: <HAPPYROBOT_WEBHOOK_SECRET>`, separately from the operator API key. It accepts the same `HappyRobotCallResultDTO` as `/webhooks/happyrobot`, including `callIdentifier`, `outcome`, `summary`, `transcript` and `answers`. The callback rejects test IDs belonging to another provider and only completes a standalone HappyRobot `call_engineer` result and never updates incident state, engineer-call records or the agent.
 
 ---
 
@@ -476,9 +478,9 @@ Public route protected by `x-happyrobot-signature: <HAPPYROBOT_WEBHOOK_SECRET>`,
 
 ### Voice provider results
 
-Outbound records also carry `provider` (`elevenlabs` or `happyrobot`), `providerCallSid`, and `incidentContext { location, incidentDescription, servicesDown }`. For ElevenLabs, `providerReference` is the conversation ID and `providerCallSid` is Twilio's call SID. Legacy records may not have the new optional fields.
+Outbound records also carry `provider` (the configured adapter identifier), `providerCallSid`, and `incidentContext { location, incidentDescription, servicesDown }`. Provider reference fields retain the external identifiers supplied by the configured adapter. Legacy records may not have the new optional fields.
 
-`result.authorizations` contains `notifyAllClients` and `trafficFailoverAuthorized`, each with `{ value: boolean | null, rationale: string }`. These are voice evidence and never automatically change plan-specific approvals or incident capacity facts. They are also retained in the completed tool output. Missing extraction remains unknown. See [provider configuration and rehearsal](ELEVENLABS.md).
+`result.authorizations` contains `notifyAllClients` and `trafficFailoverAuthorized`, each with `{ value: boolean | null, rationale: string }`. These are voice evidence and never automatically change plan-specific approvals or incident capacity facts. They are also retained in the completed tool output. Missing extraction remains unknown. See [provider configuration and rehearsal](HAPPYROBOT.md).
 
 ## Recovery (`/recovery/actions`)
 

@@ -66,7 +66,7 @@ test "$HTTP_CODE" = 401
 
 # Authenticated, run-independent discovery: expect JSON arrays.
 curl "${CURL[@]}" "$BASE_URL/scenarios" | jq -e 'type == "array"'
-curl "${CURL[@]}" "$BASE_URL/scenarios/meteorite-eu-west-1" | jq .
+curl "${CURL[@]}" "$BASE_URL/scenarios/meteorite-me-south-1" | jq .
 curl "${CURL[@]}" "$BASE_URL/tools" | jq .
 ```
 
@@ -74,7 +74,7 @@ The scheme is `Authorization: API …`, not `Bearer …`. These commands do not 
 
 ## Optional: standalone tool checks
 
-These checks run without starting or changing an incident. They use a dedicated result table and synthetic content. Simulated requests finish immediately and never contact Resend, ElevenLabs or HappyRobot.
+These checks run without starting or changing an incident. They use a dedicated result table and synthetic content. Simulated requests finish immediately and never contact Resend or HappyRobot.
 
 ```bash
 # Discover the available test tools and whether live mode is configured.
@@ -102,48 +102,9 @@ curl "${ADMIN_CURL[@]}" "$BASE_URL/tools/tests/$EMAIL_ID" | jq .
 curl "${ADMIN_CURL[@]}" "$BASE_URL/tools/tests/$CALL_ID" | jq .
 ```
 
-Set `ENGINEER_CALL_MODE=live` and `ENGINEER_CALL_PROVIDER=elevenlabs` with the three `ELEVENLABS_*` credentials described in [voice setup](ELEVENLABS.md), or select `happyrobot` with its configuration. The POST body is the same for either call provider.
+Calls support simulated tests only. An explicit live call request is rejected; legacy pending results can be inspected without contacting the former provider. Inbound voice callbacks are disabled. Use the simulated request above for call checks.
 
-Live mode is opt-in and can contact external providers. Run these commands only with a test recipient and engineer number, and only after confirming `liveAvailable` in the catalog:
-
-```bash
-# Live email reports provider acceptance; it does not prove inbox delivery.
-LIVE_EMAIL=$(curl "${ADMIN_CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
-  "tool":"send_incident_email",
-  "mode":"live",
-  "idempotencyKey":"curl-tool-test-live-email-1"
-}')
-jq -e '.tool == "send_incident_email" and .mode == "live" and (.status == "accepted" or .status == "succeeded")' <<<"$LIVE_EMAIL"
-
-# Calls use ENGINEER_CALL_PROVIDER. ElevenLabs needs GET polling; HappyRobot uses its callback.
-LIVE_CALL=$(curl "${ADMIN_CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
-  "tool":"call_engineer",
-  "mode":"live",
-  "idempotencyKey":"curl-tool-test-live-call-1",
-  "engineer":{"name":"Test engineer","phone":"+34600000000"}
-}')
-LIVE_CALL_ID=$(jq -er '.identifier' <<<"$LIVE_CALL")
-# Keep polling until ElevenLabs analysis is ready or HappyRobot posts its callback; the server marks
-# the accepted call as failed after its configured timeout.
-wait_for "/tools/tests/$LIVE_CALL_ID" '.status == "succeeded" or .status == "failed"' 5 72 | jq .
-```
-
-For `ENGINEER_CALL_PROVIDER=happyrobot` only, if you need to exercise the callback route itself, start a separate live check and immediately post a provider-signed synthetic callback. This verifies authentication and result handling; it does not prove that a phone call was answered:
-
-```bash
-CALLBACK_TEST=$(curl "${ADMIN_CURL[@]}" -X POST "$BASE_URL/tools/tests" --data '{
-  "tool":"call_engineer",
-  "mode":"live",
-  "idempotencyKey":"curl-tool-test-live-callback-1",
-  "engineer":{"name":"Test engineer","phone":"+34600000000"}
-}')
-CALLBACK_ID=$(jq -er '.identifier' <<<"$CALLBACK_TEST")
-CALLBACK='{"callIdentifier":"'"$CALLBACK_ID"'","outcome":"completed","summary":"Synthetic callback received","transcript":"","answers":[]}'
-curl --silent --show-error --fail-with-body --max-time 60 --header "x-happyrobot-signature: ${HAPPYROBOT_WEBHOOK_SECRET:?Set the callback secret}" --header 'Content-Type: application/json' -X POST "$BASE_URL/tools/tests/callbacks/happyrobot" --data "$CALLBACK" | jq -e '.accepted == true'
-curl "${ADMIN_CURL[@]}" "$BASE_URL/tools/tests/$CALLBACK_ID" | jq -e '.status == "succeeded"'
-```
-
-Polling an ElevenLabs result performs a read-only conversation lookup; polling never starts or retries an outbound call. The returned `provider`, `providerReference`, and `providerCallSid` identify the external call, and `result.authorizations` retains the hosted agent's answers without applying them to an incident. Reusing an idempotency key with identical normalized input returns the same identifier; changing the tool, mode or engineer under that key returns `409`.
+Live email remains separately available when configured; check `liveAvailable` for `send_incident_email` before sending a test to your configured recipient. Matching idempotent retries return the original result; conflicting reuse returns `409`.
 
 ## 3. Start a clean manual run
 
@@ -153,7 +114,7 @@ The learning deletion below is intentional and global. Omitting it preserves pri
 curl "${CURL[@]}" -X DELETE "$BASE_URL/learning/insights" | jq .
 
 START=$(curl "${CURL[@]}" -X POST "$BASE_URL/demo/start" --data '{
-  "scenarioIdentifier":"meteorite-eu-west-1",
+  "scenarioIdentifier":"meteorite-me-south-1",
   "mode":"manual",
   "seed":42,
   "automaticEvents":false
@@ -319,7 +280,7 @@ This starts a different active run. Repeating the seed, difficulty, event option
 
 ```bash
 curl "${CURL[@]}" -X POST "$BASE_URL/demo/start" --data '{
-  "scenarioIdentifier":"meteorite-eu-west-1", "mode":"randomized",
+  "scenarioIdentifier":"meteorite-me-south-1", "mode":"randomized",
   "seed":42, "difficulty":"medium", "automaticEvents":false,
   "maxConcurrentDisruptions":2
 }' | jq .

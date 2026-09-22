@@ -1,12 +1,14 @@
 # HappyRobot outbound permission calls
 
-The HappyRobot adapter supports the EU v2 API and existing trigger URLs. Calls use the same `call_engineer` tool and operator dashboard as ElevenLabs. Provider changes do not authorize recovery or send customer notifications.
+> Current runtime: voice calls are simulated only. Live call tests, provider polling and inbound voice webhooks are disabled regardless of legacy environment settings. Live-provider details below document retained historical contracts.
+
+The HappyRobot adapter supports the EU v2 API and existing trigger URLs. Calls use the `call_engineer` tool and operator dashboard. Provider changes do not authorize recovery or send customer notifications.
 
 ## Workflow
 
-[Open the workflow](https://platform.eu.happyrobot.ai/hackspainteam4/workflows/x1dasevgnmnv/editor/s5d81c2jj3ue).
+Create or select an outbound workflow in your own HappyRobot workspace.
 
-The original empty `CasaPepe` workflow is preserved. The outbound workflow is `CasaPepe - Autorizaciones de emergencia`, workflow `01a0bb6b-9b3f-76c7-ae9b-0793fefa5e27`, version `01a0bb6b-9b4b-73c5-a067-d33516c637c3`.
+The reference workflow is an emergency-permission call. Configure your own workflow identifiers and callback secret.
 
 The workflow uses a Spanish (Spain) voice, a short combined permission question, one clarification at most, and explicit handling of partial or missing permissions. An unequivocal early yes approves both actions, including before the permission question is complete or during an interrupted opening. Explicit limits override a general yes and remain separate for each action. Silence, greetings without affirmation and unclear answers remain unknown. It does not invent a missile strike from unrelated or synthetic input. It preserves the supplied outage timezone rather than applying a hardcoded summer-time offset.
 
@@ -27,7 +29,7 @@ The workflow uses Daniel HR in Spanish (Spain). A direct authenticated webhook r
 ENGINEER_CALL_PROVIDER=happyrobot
 ENGINEER_CALL_MODE=live
 ENGINEER_CALL_FALLBACK_TO_SIMULATED=false
-HAPPYROBOT_TRIGGER_URL=https://workflows.platform.eu.happyrobot.ai/hooks/x1dasevgnmnv
+HAPPYROBOT_TRIGGER_URL=https://workflows.platform.eu.happyrobot.ai/hooks/<your-workflow-trigger>
 HAPPY_ROBOT_API_KEY_WEBHOOK=<key copied from the webhook enhanced-security UI>
 HAPPYROBOT_WEBHOOK_SECRET=<matching backend callback secret>
 PUBLIC_BASE_URL=<public origin of the deployed API>
@@ -66,7 +68,7 @@ Permission values must be literal JSON booleans or null, never strings. Keep bot
 
 Check the voice node's output: `status`, `failure_reason`, SIP response and duration. HappyRobot may mark a workflow successful even when its call failed. The normalizer must deliver `failed` or `no-answer` through the callback; do not stop execution before that callback. Verify failed calls as well as completed conversations.
 
-Use `POST /api/tools/tests` with `tool: "call_engineer"`, `mode: "live"`, a fresh idempotency key and an intended recipient. Do this only when the recipient is ready. Poll its result until terminal; HappyRobot callbacks complete it without ElevenLabs polling. Test acceptance, refusal, partial permission, interruption, unknown answers and an unanswered call. Confirm the result, transcript and operator approval boundary before switching the incident demo.
+Use `POST /api/tools/tests` with `tool: "call_engineer"`, `mode: "live"`, a fresh idempotency key and an intended recipient. Do this only when the recipient is ready. Poll its result until terminal; HappyRobot callbacks complete it through the authenticated callback. Test acceptance, refusal, partial permission, interruption, unknown answers and an unanswered call. Confirm the result, transcript and operator approval boundary before switching the incident demo.
 
 Never retry an ambiguous start failure automatically: the provider may already have dialed. This integration retains the existing single-coordinator and provider-acceptance/persistence crash-window limitations.
 

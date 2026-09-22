@@ -23,3 +23,11 @@ coverage/
 .expo/
 .vercel/
 *.log
+
+# Local browser/test artifacts and downloaded demo recordings
+.playwright-cli/
+playwright-report/
+test-results/
+/output/
+/*.webm
+/*.mp4

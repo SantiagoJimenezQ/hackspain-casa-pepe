@@ -8,7 +8,7 @@ This implementation adds the eight agreed agent tools and an inbound phone-repor
 2. Follow `apps/server/README.md` to configure the ignored local environment, a Postgres/Supabase connection, and start the API.
 3. Keep `HAPPYROBOT_MODE=simulated`, `INCIDENT_EMAIL_MODE=simulated`, and `RECOVERY_MODE=simulated` for a deterministic rehearsal.
 4. For real email, set `INCIDENT_EMAIL_MODE=live`, a Resend sending key, a verified `INCIDENT_EMAIL_FROM`, and the intended operator's `INCIDENT_EMAIL_TO` in the ignored local environment. The API reports provider acceptance, not inbox delivery.
-5. For real phone calls, configure the existing HappyRobot outbound workflow and credentials. Provision an inbound number/workflow in HappyRobot to collect the run identifier, caller name, summary and structured numeric capacity. Have it POST the payload below using `x-happyrobot-signature` with the configured shared secret. The provider workflow must map its fields to this contract; this is not a claim that HappyRobot's native webhook payload matches it automatically. Never treat caller ID or a transcript as operator authorization.
+5. Calls are simulated only. Use the authenticated incoming-call simulation endpoint below; live voice subscriptions and provider webhooks are disabled.
 
 ## Rehearse
 
@@ -16,7 +16,7 @@ All routes except the public status feed and provider callbacks use the existing
 
 1. `POST /api/demo/start`, then `POST /api/demo/impact`. Read the returned/current run ID. The agent observes the incident, saves plan v1, emails the operator (simulated by default), and calls the engineer.
 2. Review `GET /api/tools/calls`, `GET /api/engineers/calls`, and `GET /api/plans/current` for actual outcomes and mode labels.
-3. Call the configured inbound number. In simulation, POST this body to `/api/engineers/incoming-calls/simulate`; the live workflow uses `/api/webhooks/happyrobot/incoming` instead:
+3. POST this body to `/api/engineers/incoming-calls/simulate` to create an explicitly simulated incoming report:
 
 ```json
 {

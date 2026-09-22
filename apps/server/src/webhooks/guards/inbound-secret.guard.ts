@@ -9,6 +9,7 @@ import {
 	applyDecorators,
 	CanActivate,
 	ExecutionContext,
+	ForbiddenException,
 	Injectable,
 	Logger,
 	UseGuards,
@@ -23,6 +24,9 @@ export class HappyRobotSecretGuard implements CanActivate {
 	constructor(private readonly configuration: ConfigurationService) {}
 
 	canActivate(context: ExecutionContext): boolean {
+		if (this.configuration.happyRobot.mode !== "live") {
+			throw new ForbiddenException("Live voice integrations are disabled")
+		}
 		const request = context.switchToHttp().getRequest<Request>()
 		const provided = readHeader(request, HTTP_HEADERS.HAPPYROBOT_SIGNATURE)
 		if (

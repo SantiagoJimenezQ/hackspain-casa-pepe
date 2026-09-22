@@ -2,7 +2,7 @@
 
 Owner: harness and backend track, in coordination with the agent and integrations track.
 
-Backend of **Casa Pepe**, the AI incident coordinator for HackSpain. It implements the `apps/server/` process described in the [root README](../../README.md) and the use case in [MASTER.md](../../MASTER.md): a missile takes down the `eu-west-1` region of a delivery company and the agent decides what to recover first with the backup capacity available, coordinates people, asks the operator for approval, executes the recovery and verifies it.
+Backend of **Casa Pepe**, the AI incident coordinator for HackSpain. It implements the `apps/server/` process described in the [root README](../../README.md) and the design in [Architecture.md](../../Architecture.md): a fictional missile takes down the Dubai (`me-central-1`) region of a delivery company and the agent decides what to recover first with the backup capacity available, coordinates people, asks the operator for approval, executes the recovery and verifies it.
 
 Built with NestJS and TypeScript, persisted in **Supabase (Postgres)** through TypeORM. The Next.js dashboard reads the authenticated API and proxied SSE activity stream; other consumers can subscribe through signed outbound webhooks.
 
@@ -31,7 +31,7 @@ Other commands: `pnpm build`, `pnpm start`, `pnpm test`, `pnpm lint`, `pnpm form
 
 The repository root is a pnpm workspace (`pnpm-workspace.yaml`), so `pnpm install` can also run from the root. If `pnpm exec` hangs, run the binaries directly (`./node_modules/.bin/nest start`, `./node_modules/.bin/jest`); see the note about `allowBuilds` in the workspace file.
 
-With the default configuration the engineer call and the recovery run in **simulated** mode. The LLM still requires provider credentials. Tests inject scripted model responses explicitly; see [LLM setup and runtime](docs/LLM-AGENT.md).
+Engineer calls are always **simulated**; live voice requests, result polling and provider callbacks are disabled even with legacy credentials. Recovery defaults to simulated mode. The LLM still requires provider credentials. Tests inject scripted model responses explicitly; see [LLM setup and runtime](docs/LLM-AGENT.md).
 
 ### Supabase
 
@@ -41,13 +41,13 @@ The service persists in Postgres. Point it at the team Supabase project in `.env
 SUPABASE_DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
 ```
 
-The connection string is in Supabase under *Project settings > Database > Connection string (URI)*. Use the session pooler on port 5432; the transaction pooler (6543) does not support the prepared statements TypeORM uses, and the direct connection is IPv6 only on the free plan. Schema creation/upgrade now requires the explicit one-time `BROWSER_SESSION_SCHEMA_UPGRADE=true` flag; ordinary startup performs no schema changes. TLS is enabled automatically for Supabase hosts (and for any URL with `sslmode=require`); any other Postgres, such as a local install, connects without TLS.
+Copy the Session pooler URI from the Supabase dashboard’s **Connect** dialog (port 5432). Use the exact host supplied for your project. See [Supabase setup](docs/SUPABASE.md) for initialization and connection choices. Schema creation/upgrade now requires the explicit one-time `BROWSER_SESSION_SCHEMA_UPGRADE=true` flag; ordinary startup performs no schema changes. TLS is enabled automatically for Supabase hosts (and for any URL with `sslmode=require`); any other Postgres, such as a local install, connects without TLS.
 
-Every environment variable is documented in [.env.example](.env.example). Set `DATABASE_QUERY_LOGGING=true` to print every SQL statement when diagnosing latency; against the Supabase pooler each round trip costs about 120 ms, so the service writes with single-statement inserts and updates and keeps webhook subscriptions cached.
+The recommended configuration is documented in [.env.example](.env.example). Set `DATABASE_QUERY_LOGGING=true` to print every SQL statement when diagnosing latency; network latency depends on the deployment region; use measurements from your own environment.
 
 ## Authentication
 
-Every route except `/api/health` and the inbound webhooks requires the header `Authorization: API <API_KEY>`, with the value of `API_KEY` from `.env.local`. The frontend and the demo controls share this single key.
+Operator routes require the header `Authorization: API <API_KEY>`, with the value of `API_KEY` from `.env.local`. The frontend and the demo controls share this single key. Incident routes also require a browser-session token; the dashboard manages it automatically. Health and run-scoped public status are public; webhooks use provider-specific authentication.
 
 ## Scenarios
 
@@ -55,27 +55,31 @@ The same scenario ships in two languages. `GET /scenarios` lists them; pass the 
 
 | Identifier | Language |
 |---|---|
-| `meteorite-eu-west-1` (default) | English |
-| `meteorite-eu-west-1-es` | Spanish |
+| `meteorite-me-south-1` (default) | English |
+| `meteorite-me-south-1-es` | Spanish |
 
 Everything the operator reads follows the scenario language: service names, impact descriptions, engineer questions and answers, plan summaries, priority reasons, step titles, decision explanations and cycle summaries. Technical event titles and log messages stay in English.
 
 ## Demo walkthrough
 
 ```bash
-BASE=http://localhost:3000/api; AUTH="Authorization: API casa-pepe-local-api-key"
-curl -X POST $BASE/demo/start  -H "$AUTH" -H "Content-Type: application/json" -d '{"scenarioIdentifier":"meteorite-eu-west-1-es"}'   # 1. everything healthy (Spanish scenario)
-curl -X POST $BASE/demo/impact -H "$AUTH"      # 2. missile: the agent creates plan v1 and calls the engineer
-curl -X POST $BASE/demo/twist  -H "$AUTH"      # 5. backup capacity is insufficient: plan v2, approvals invalidated
-curl $BASE/approvals?status=pending -H "$AUTH"
-curl -X POST $BASE/approvals/<identifier>/decision -H "$AUTH" -H "Content-Type: application/json" \
+# Supply the configured API_KEY in your environment. Keep one session token per client.
+: "${API_KEY:?Set the backend API_KEY}"
+BASE=http://localhost:3000/api
+AUTH="Authorization: API $API_KEY"
+SESSION="X-Casa-Pepe-Session: $(openssl rand -hex 32)"
+curl -X POST $BASE/demo/start  -H "$AUTH" -H "$SESSION" -H "Content-Type: application/json" -d '{"scenarioIdentifier":"meteorite-me-south-1-es"}'   # 1. everything healthy (Spanish scenario)
+curl -X POST $BASE/demo/impact -H "$AUTH" -H "$SESSION"      # 2. missile: the agent creates plan v1 and calls the engineer
+curl -X POST $BASE/demo/twist  -H "$AUTH" -H "$SESSION"      # 5. backup capacity is insufficient: plan v2, approvals invalidated
+curl $BASE/approvals?status=pending -H "$AUTH" -H "$SESSION"
+curl -X POST $BASE/approvals/<identifier>/decision -H "$AUTH" -H "$SESSION" -H "Content-Type: application/json" \
   -d '{"decision":"approve","operatorName":"Operator","comment":"Go ahead"}'   # 7. approval
-curl $BASE/overview -H "$AUTH"                 # 9. what recovered and what is still pending
-curl $BASE/learning/reports/current -H "$AUTH" # post-incident report: durations, plan versions, approvals, lessons
-curl -X POST $BASE/demo/reset  -H "$AUTH"      # new run; late results from the previous one are ignored
+curl $BASE/overview -H "$AUTH" -H "$SESSION"                 # 9. what recovered and what is still pending
+curl $BASE/learning/reports/current -H "$AUTH" -H "$SESSION" # post-incident report: durations, plan versions, approvals, lessons
+curl -X POST $BASE/demo/reset  -H "$AUTH" -H "$SESSION"      # new run; late results from the previous one are ignored
 ```
 
-With 12 reported units the initial plan recovers the four failing services. After the twist (7 confirmed units) the agent recovers the orders database and route assignment, postpones package tracking and the events stream, explains why, and assigns a task to customer support to communicate the delay. A randomized run can be started with `mode`, `seed`, `difficulty`, `automaticEvents` and `maxConcurrentDisruptions`; use `/demo/advance` for deterministic stepping or `/demo/resume` for a live clock.
+Oman initially reports four compute units. The capacity twist reduces the active backup resource to one; the model must reassess resource selection, priorities and pending work. Inspect the actual plan rather than assuming a fixed recovery order. A randomized run can be started with `mode`, `seed`, `difficulty`, `automaticEvents` and `maxConcurrentDisruptions`; use `/demo/advance` for deterministic stepping or `/demo/resume` for a live clock.
 
 ## Endpoints
 
@@ -103,7 +107,7 @@ With 12 reported units the initial plan recovers the four failing services. Afte
 
 The full reference of every endpoint, body, response and the event catalog is in [docs/API.md](docs/API.md). Interactive OpenAPI documentation is served at `/documentation`.
 
-For provider-independent checks of outbound email and engineer calls, use the standalone tool-test routes. `POST /tools/tests` defaults to simulated mode and accepts fixed synthetic content; live calls use `ENGINEER_CALL_PROVIDER` and remain `accepted` until an ElevenLabs conversation lookup or HappyRobot callback completes them. Poll the result endpoint to fetch ElevenLabs completion; no public callback is needed for ElevenLabs. The copyable requests and polling examples are in [docs/API-CURL-TEST-GUIDE.md](docs/API-CURL-TEST-GUIDE.md#optional-standalone-tool-checks).
+For provider-independent checks of outbound email and engineer calls, use the standalone tool-test routes. `POST /tools/tests` defaults to simulated mode and accepts fixed synthetic content; live calls use `ENGINEER_CALL_PROVIDER` and remain `accepted` until the configured provider completes them. HappyRobot uses its authenticated callback; poll the result endpoint to inspect the persisted outcome. The copyable requests and polling examples are in [docs/API-CURL-TEST-GUIDE.md](docs/API-CURL-TEST-GUIDE.md#optional-standalone-tool-checks).
 
 For repeatable API testing with an environment-provided API key, use the [curl test guide](docs/API-CURL-TEST-GUIDE.md). It includes an ordered incident walkthrough, asynchronous polling, approval checks, and optional endpoint exercises.
 
@@ -159,7 +163,7 @@ src/
   plans/           plan versions and diff between versions
   approvals/       approvals bound to a plan version
   tasks/           tasks with owner
-  engineers/       contact_engineer: simulated, ElevenLabs and HappyRobot adapters
+  engineers/       contact_engineer: simulated and live call adapters
   recovery/        execute_recovery and verify_recovery: simulated and HTTP adapters
   tools/           registry and execution of the eight tools
   agent/           decision cycle, plan builder, bilingual messages, overview for the UI
@@ -172,9 +176,9 @@ src/
 
 The runtime now also exposes the agreed MVP names, operator email (simulated or Resend), incoming phone reports with operator confirmation, and a public status page and JSON feed. Existing tool names remain compatible. See [MVP tools rehearsal](../../demo/MVP-TOOLS.md) for live integration setup, the local HTTP recovery target and the complete demo sequence.
 
-## ElevenLabs outbound calls
+## Outbound calls
 
-See [outbound voice setup](docs/ELEVENLABS.md) for the existing emergency agent, dynamic variables, post-call authorization evidence, and switching to HappyRobot.
+Calls use the existing simulator and are labelled as simulated. Voice subscriptions are inactive; environment variables cannot enable live calling. The retained [provider reference](docs/HAPPYROBOT.md) documents historical contracts only.
 
 ## Waiting on human work
 

@@ -67,7 +67,7 @@ Tools execute only after the stream terminates, the complete response is validat
 
 ## Outbound call contract
 
-See [call_engineer input and outcome](CALL-ENGINEER-CONTRACT.md) for exact plan inputs, provider payloads, pending/completed/failed results, and the permission decision table. The current ElevenLabs agent collects notification and failover permissions through one combined question, not arbitrary technical answers. The runtime system prompt carries the same guidance so the model receives it on each decision cycle.
+See [call_engineer input and outcome](CALL-ENGINEER-CONTRACT.md) for exact plan inputs, provider payloads, pending/completed/failed results, and the permission decision table. The hosted permission workflow collects notification and failover permissions. Its result must not be treated as confirmation of capacity, snapshot age or technical readiness. Match the call objective to the configured workflow capabilities.
 
 ## Check configured models
 

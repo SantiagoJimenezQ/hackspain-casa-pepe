@@ -1,5 +1,7 @@
 # HappyRobot inbound company-priority handoff
 
+> Current runtime: voice calls are simulated only. Live call tests, provider polling and inbound voice webhooks are disabled regardless of legacy environment settings. Live-provider details below document retained historical contracts.
+
 Prepared 19 September 2026. HappyRobot configuration only; the separate inbound backend task owns persistence, session binding, reassessment, approval and dashboard behavior.
 
 ## Configured draft
@@ -8,8 +10,7 @@ Prepared 19 September 2026. HappyRobot configuration only; the separate inbound 
 
 - Workflow: `CasaPepe - Prioridad de empresa por llamada` (`01a0bb82-ef58-702c-9056-ca8cc48fe1d5`).
 - Version: `01a0bb82-ef63-752f-8200-5551225c342a`.
-- Selected inbound number: **+1 740 847 2537**. Selection is saved in the draft; live routing has not been activated or tested.
-- Existing ElevenLabs inbound number **+1 541 787 2541** remains assigned to its director agent. No ElevenLabs configuration changed.
+- Selected inbound number: **<your inbound number>**. Selection is saved in the draft; live routing has not been activated or tested.
 - Voice: Daniel HR, Spanish (Spain), gpt-4.1. Recording and memory disabled; maximum duration 120 seconds.
 - Opening: “Coordinación de emergencias. ¿Qué empresa necesita priorizar?”
 
@@ -17,7 +18,7 @@ The caller supplies the company at runtime. The known contact Javi Palafox maps 
 
 ## Backend contract to implement
 
-This uses the version-1 payload from the company-priority backend plan, with **HappyRobot route aliases**. These routes are configured targets, not existing verified backend implementations. Keep the planned ElevenLabs routes for that provider. The HappyRobot route must record provider `happyrobot`.
+This uses the version-1 payload from the company-priority backend plan, with **HappyRobot route aliases**. These routes are configured targets, not existing verified backend implementations. The HappyRobot route must record provider `happyrobot`.
 
 Both endpoints use `x-casa-pepe-webhook-secret`. A new dedicated secret is configured in the two HTTP nodes, outside voice model parameters. Its private local copy is the ignored `apps/server/.env.happyrobot-inbound.local` file in the preparation checkout (mode 600, ignored by Git), variable `CASA_PEPE_INBOUND_WEBHOOK_SECRET`. It is not loaded automatically or deployed. The backend task can map this credential to its chosen environment variable; do not copy it into documentation or messages.
 

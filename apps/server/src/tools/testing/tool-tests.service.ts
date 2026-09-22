@@ -95,7 +95,9 @@ export class ToolTestsService {
 			{
 				description: "Call a synthetic on-call engineer",
 				liveAvailable: this.callLiveAvailable(),
-				modes: ["simulated", "live"],
+				modes: this.callLiveAvailable()
+					? ["simulated", "live"]
+					: ["simulated"],
 				provider: this.configuration.engineerCall.provider,
 				tool: "call_engineer",
 			},
@@ -153,6 +155,7 @@ export class ToolTestsService {
 		const entity = await this.getEntity(identifier)
 		let current = await this.expireIfNeeded(entity)
 		if (
+			this.configuration.engineerCall.mode === "live" &&
 			current.status === "accepted" &&
 			current.provider === "elevenlabs" &&
 			current.providerReference
@@ -529,7 +532,7 @@ export class ToolTestsService {
 				throw new DomainException(
 					HttpStatus.CONFLICT,
 					"Integration Unavailable",
-					"Live engineer-call tests require ENGINEER_CALL_MODE=live and complete configuration for the selected provider",
+					"Live engineer-call tests are unavailable; use simulated mode",
 				)
 			}
 		}

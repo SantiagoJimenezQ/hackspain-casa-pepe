@@ -23,6 +23,12 @@ sequenceDiagram
 
 The model selects investigation and recovery actions; server code enforces the execution constraints. New evidence can invalidate pending work and supersede approvals. Verification is a separate action from execution. Human task creation records ownership; it does not establish that the task was completed.
 
+## Model transport and plan constraints
+
+The LLM client limits completed JSON responses and reconstructed streamed answers to 1 MiB. Streaming has a separate 16 MiB transport budget because SSE repeats metadata for each token and may carry private reasoning that the parser discards. Each frame and accumulated public content/tool arguments remain bounded to 1 MiB; timeouts, token limits, completion validation and stream cleanup still apply. Transport failures are classified separately from confirmed size-limit failures, without exposing raw provider error text.
+
+Every commander turn receives `planConstraints`, derived from the same backup selection and effective-capacity functions used by plan repair. It identifies the current region, committed and available units, and the execution/verification dependency IDs and approval requirements for each service. This makes the existing single-region planning contract explicit: a model cannot pool backup regions or budget against a larger region while the runtime selects another. Rejected proposals request a complete six-field plan rather than a partial patch. Capacity, prerequisite verification and approval validation remain authoritative; these hints do not bypass them or guarantee that every model proposal will be valid.
+
 ## Simulated voice only
 
 Voice subscriptions are inactive. Runtime configuration forces both the engineer-call mode and the legacy voice mode to `simulated`, irrespective of old environment variables. The call adapter binding therefore selects the existing simulator. Standalone call tests advertise only simulation and reject new live requests. Reading historical pending live tests never polls a provider while calls are disabled.

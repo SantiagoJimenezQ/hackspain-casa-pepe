@@ -6,6 +6,10 @@ import {
 	LlmToolDefinition,
 } from "@agent/llm/llm.types"
 import { failureDetails } from "@agent/llm/llm-failure-details"
+import {
+	MAXIMUM_RESPONSE_BYTES,
+	MAXIMUM_STREAM_BYTES,
+} from "@agent/llm/llm-response-limits"
 import { readCompletionStream } from "@agent/llm/llm-stream"
 import { isAllowedLlmBaseURL } from "@common/configuration/configuration.factory"
 import { LOG_MESSAGES } from "@common/constants/log-messages.constant"
@@ -17,7 +21,6 @@ import { isAxiosError } from "axios"
 import { firstValueFrom } from "rxjs"
 
 const MAXIMUM_REQUEST_BYTES = 1024 * 1024
-const MAXIMUM_RESPONSE_BYTES = 1024 * 1024
 
 /** A rate limit or an overloaded provider clears on its own; anything else is the caller's. */
 const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([429, 500, 502, 503])
@@ -323,7 +326,9 @@ export class LlmClientService {
 						"X-Client-Request-Id": requestIdentifier,
 					},
 					maxBodyLength: MAXIMUM_REQUEST_BYTES,
-					maxContentLength: MAXIMUM_RESPONSE_BYTES,
+					maxContentLength: configuration.streamOutput
+						? MAXIMUM_STREAM_BYTES
+						: MAXIMUM_RESPONSE_BYTES,
 					maxRedirects: 0,
 					responseType: configuration.streamOutput
 						? "stream"
@@ -342,16 +347,16 @@ export class LlmClientService {
 							`LLM provider returned HTTP ${response.status}`,
 						)
 			}
-			if (configuration.streamOutput) {
-				return await readCompletionStream(
-					response.data,
-					configuration.timeoutMilliseconds,
-					onText,
-				)
-			}
+			const data = configuration.streamOutput
+				? await readCompletionStream(
+						response.data,
+						configuration.timeoutMilliseconds,
+						onText,
+					)
+				: response.data
 			let serializedResponse: string
 			try {
-				serializedResponse = JSON.stringify(response.data)
+				serializedResponse = JSON.stringify(data)
 			} catch {
 				throw malformedResponse()
 			}
@@ -364,7 +369,7 @@ export class LlmClientService {
 					"LLM provider response exceeds the configured byte budget",
 				)
 			}
-			return response.data
+			return data
 		} catch (error) {
 			const safeError =
 				error instanceof LlmClientError
@@ -648,7 +653,7 @@ function isJSONObject(value: string): boolean {
 function safeRequestError(error: unknown): LlmClientError {
 	if (isAxiosError(error)) {
 		const status = error.response?.status
-		if (typeof status === "number") {
+		if (typeof status === "number" && (status < 200 || status >= 300)) {
 			if (status >= 300 && status < 400) {
 				return new LlmClientError(
 					"LLM provider redirect is not allowed",
@@ -670,9 +675,7 @@ function safeRequestError(error: unknown): LlmClientError {
 			return new LlmClientError("LLM provider redirect is not allowed")
 		}
 		if (error.code === "ERR_BAD_RESPONSE") {
-			return new LlmClientError(
-				"LLM provider response exceeds the configured byte budget",
-			)
+			return badResponseError(error.message)
 		}
 	}
 	if (isRecord(error) && typeof error.code === "string") {
@@ -687,12 +690,25 @@ function safeRequestError(error: unknown): LlmClientError {
 			return new LlmClientError("LLM provider redirect is not allowed")
 		}
 		if (error.code === "ERR_BAD_RESPONSE") {
-			return new LlmClientError(
-				"LLM provider response exceeds the configured byte budget",
-			)
+			return badResponseError(error.message)
 		}
 	}
 	return new LlmClientError("LLM provider request failed")
+}
+
+function badResponseError(message: unknown): LlmClientError {
+	if (
+		typeof message === "string" &&
+		/^maxContentLength size of \d+ exceeded$/.test(message)
+	) {
+		return new LlmClientError(
+			"LLM provider response exceeds the configured byte budget",
+		)
+	}
+	if (message === "stream has been aborted") {
+		return new LlmClientError("LLM provider response was interrupted")
+	}
+	return malformedResponse()
 }
 
 function malformedResponse(): LlmClientError {

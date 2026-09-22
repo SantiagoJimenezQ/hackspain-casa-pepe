@@ -1,3 +1,4 @@
+import { demoPresentation, demoText } from "../../../../packages/demo-brands";
 import type { UnchangedOverview } from "../../../../packages/contracts/overview";
 import type { CapacityChangeRequest, DeliveryProbeResult, LearningInsight, LlmHistoryPage, Overview, RunReport } from "@/lib/casa-pepe-types";
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n";
@@ -27,10 +28,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init?.headers,
     },
   });
-  if (response.ok) return (await response.json()) as T;
+  if (response.ok) return demoPresentation((await response.json()) as T);
   const body = (await response.json().catch(() => null)) as { message?: string } | null;
   throw new CasaPepeClientError(
-    body?.message ?? "No se pudo completar la acción.",
+    demoText(body?.message ?? "No se pudo completar la acción."),
     response.status,
   );
 }

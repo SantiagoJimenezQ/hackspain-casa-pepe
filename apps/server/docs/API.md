@@ -378,7 +378,7 @@ Customers (the companies whose services run on the affected region) ranked by re
   "criteria": [{ "key": "business-impact", "description": "…" }, …],
   "customers": [
     {
-      "rank": 1, "identifier": "emirates-nbd", "name": "Emirates NBD", "shortName": "ENBD", "sector": "Fintech", "users": 6400,
+      "rank": 1, "identifier": "emirates-nbd", "name": "Meridian Bank", "shortName": "MB", "sector": "Fintech", "users": 6400,
       "status": "down", "score": 91, "highestImpact": "critical",
       "breakdown": { "businessImpact": 40, "blockedDependents": 24, "unhealthyServices": 6, "affectedUsers": 12, "timeDown": 9, "recoveryInProgress": 0 },
       "servicesDown": 1, "servicesDegraded": 0, "servicesRecovering": 0, "servicesHealthy": 0,
@@ -386,7 +386,7 @@ Customers (the companies whose services run on the affected region) ranked by re
       "minutesDown": 47, "recoveryInProgress": 0, "recoveryCompleted": 0, "recoveryFailed": 0,
       "capacityUnitsToRecover": 4,
       "nextAction": "Fail over the orders database to the backup region (4 units, approval required)",
-      "reason": "Emirates NBD: 1 service unavailable with critical impact for 6400 users, blocking route-assignment, …",
+      "reason": "Meridian Bank: 1 service unavailable with critical impact for 6400 users, blocking route-assignment, …",
       "services": [{ "identifier": "orders-database", "status": "down", "recoveryStatus": "not-started", "recoveryDetail": "", … }]
     }
   ]

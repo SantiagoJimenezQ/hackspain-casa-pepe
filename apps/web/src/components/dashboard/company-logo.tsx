@@ -9,8 +9,7 @@ type CompanyLogoProperties = {
 };
 
 /**
- * Brand marks arrive with their colours baked in — black glyphs, white-matted rasters — so they
- * are always shown on a light plate instead of the card background, which flips with the theme.
+ * Original vector marks keep their colours on a light plate in either theme.
  */
 export function CompanyLogo({ name, shortName, accent, logo, className }: CompanyLogoProperties) {
   if (logo) {

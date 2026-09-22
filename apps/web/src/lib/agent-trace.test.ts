@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { demoPresentation } from "../../../../packages/demo-brands";
 import {
   approvalRemainderTitle,
   buildTranscript,
@@ -828,4 +829,19 @@ describe("agent trace", () => {
     expect(merged[0].finishedAt).toBe("2026-09-19T10:00:06.000Z");
     expect(currentWork(overview, events).kind).not.toBe("tool");
   });
+});
+
+
+it("aliases customer names after joining split stream fragments", () => {
+  for (const fragments of [["Priorizar Emi", "rates NBD y HappyRobot"], ["Priorizar Emirates", " NBD y HappyRobot"]]) {
+    const events = fragments.map((text, index) => demoPresentation(activity({
+      identifier: `fragment_${index}`,
+      sequence: index + 1,
+      type: "agent.llm-output",
+      payload: { outputIdentifier: "stream_brands", provisional: true, text, turn: 0 },
+    })));
+    expect(buildTranscript(overviewWith([]), events)).toContainEqual(expect.objectContaining({
+      id: "stream_brands", text: "Priorizar Meridian Bank y HappyRobot",
+    }));
+  }
 });

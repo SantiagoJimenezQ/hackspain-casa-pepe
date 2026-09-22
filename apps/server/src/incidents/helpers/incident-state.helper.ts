@@ -13,6 +13,7 @@ import {
 	ServiceHealthStatus,
 } from "@scenarios/types/scenario.type"
 import { SimulationState } from "@scenarios/types/simulation.type"
+import { demoCustomer } from "../../../../../packages/demo-brands"
 
 /**
  * `requireOperatorApproval` false waives every scenario-mandated approval, so a deployment can
@@ -219,7 +220,7 @@ export function toIncidentSnapshot(entity: IncidentEntity): IncidentSnapshot {
 		callCode: entity.callCode,
 		company: entity.company,
 		createdAt: entity.createdAt,
-		customers: entity.customers,
+		customers: entity.customers.map(demoCustomer),
 		facts: entity.facts,
 		harnessEvents: entity.harnessEvents,
 		identifier: entity.identifier,

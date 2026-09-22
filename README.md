@@ -8,6 +8,10 @@ Pepe investigates the incident, weighs the impact on customers, coordinates reco
 
 **[Try the live demo →](https://casa-pepe-web.vercel.app/)**
 
+![Casa Pepe dashboard showing the world map, customer status, all six services recovered, and the agent's decision history.](docs/images/dashboard.png)
+
+*All six services recovered, with customer status and the agent’s decision history visible alongside.*
+
 [How to try it](#try-it-in-your-browser) · [How it works](#how-it-works) · [Run locally](#run-locally) · [Architecture](Architecture.md)
 
 ## The scenario

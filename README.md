@@ -1,14 +1,14 @@
-# Casa Pepe
+# Pepe Watcher (by Casa Pepe)
 
 **An AI coordinator that helps manage a service outage—and changes its plan when the situation changes.**
 
-Built over a weekend for **HackSpain 2026**, Casa Pepe explores a simple question: if several services go down and there isn't enough backup capacity to restore everything, what should recover first?
+Built over a weekend for **HackSpain 2026**, Pepe Watcher explores a simple question: if several services go down and there isn't enough backup capacity to restore everything, what should recover first?
 
 Pepe investigates the incident, weighs the impact on customers, coordinates recovery work and checks the result. You are the operator: you can follow its decisions, introduce new problems, and approve or reject actions that need your permission.
 
 **[Try the live demo →](https://casa-pepe-web.vercel.app/)**
 
-![Casa Pepe dashboard showing the world map, customer status, all six services recovered, and the agent's decision history.](docs/images/dashboard.png)
+![Pepe Watcher dashboard showing the world map, customer status, all six services recovered, and the agent's decision history.](docs/images/dashboard.png)
 
 *All six services recovered, with customer status and the agent’s decision history visible alongside.*
 
@@ -145,6 +145,6 @@ node --test demo/recovery-environment/server.test.mjs
 
 These checks cover the frontend, backend and test recovery application using controlled model responses and integrations. Testing against a live model or provider is a separate step.
 
-Casa Pepe is a **weekend hackathon project**, not a production incident-management service. It is designed around one continuously running backend; background scheduling and active execution locks are held by that process. Browser sessions separate visitors' runs, but there are no user accounts or model-usage quotas. A public deployment therefore needs its own access and spending controls.
+Pepe Watcher is a **weekend hackathon project**, not a production incident-management service. It is designed around one continuously running backend; background scheduling and active execution locks are held by that process. Browser sessions separate visitors' runs, but there are no user accounts or model-usage quotas. A public deployment therefore needs its own access and spending controls.
 
 The [original project plan](MASTER.md) and [HackSpain challenge brief](https://hackspain2026.happyrobot.ai/) provide the project context. Some integration guides describe retained live-provider contracts; the current demo's phone calls remain simulated.

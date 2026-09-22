@@ -239,6 +239,7 @@ export type RunReport = {
 };
 
 export type Overview = {
+  revision?: string;
   deliveryProbes?: readonly DeliveryProbeResult[];
   planComparison?: PlanComparison | null;
   incident: Incident;

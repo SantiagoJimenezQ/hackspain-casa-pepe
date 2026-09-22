@@ -24,7 +24,7 @@ Open `http://localhost:3001`. The dashboard opens in a ready state; start the Sp
 
 ## Live updates
 
-The interface fetches the canonical `/overview` snapshot, then proxies the authenticated SSE activity stream through its own `/api/casa-pepe/activity/stream` route. Events appear instantly and trigger a debounced snapshot reconciliation.
+The interface fetches the canonical `/overview` snapshot, then proxies the authenticated SSE activity stream through its own `/api/casa-pepe/activity/stream` route. Events appear instantly and trigger a debounced snapshot reconciliation. Visible tabs also reconcile every five seconds to detect changes made by another tab or API instance. Reconciliation sends the last overview `revision`; an unchanged response preserves the displayed snapshot and skips loading its large database payloads. Operator actions and initial loads request full snapshots.
 
 The agent panel reconstructs each public model turn from `agent.llm-output` fragments and the completed `LlmPublicTurn` payload on `agent.llm-decision`, `agent.llm-rejected`, `agent.llm-stale`, and `agent.llm-failed`. Full assistant text lives in `payload.text` (the activity `summary` is only a preview). Proposed tool calls, redaction, and disposition (`pending` → `accepted` / `rejected` / `stale` / `incomplete`) are shown on the turn; executed tools remain separate rows.
 

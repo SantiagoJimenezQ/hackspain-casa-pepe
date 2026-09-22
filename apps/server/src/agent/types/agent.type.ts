@@ -27,6 +27,7 @@ import type {
 	DeliveryProbeResult,
 	PlanComparison,
 } from "../../../../../packages/contracts/demo-controls"
+import type { OverviewVersion } from "../../../../../packages/contracts/overview"
 
 export type AgentTriggerKind = (typeof AGENT_TRIGGER_KINDS)[number]
 
@@ -118,7 +119,7 @@ export type OverviewPlan =
 	| { readonly kind: "none" }
 	| { readonly kind: "plan"; readonly plan: PlanRecord }
 
-export interface Overview {
+export interface Overview extends OverviewVersion {
 	readonly inboundCall?: { readonly phoneNumber: string }
 	readonly incident: IncidentSnapshot
 	readonly deliveryProbes: ReadonlyArray<DeliveryProbeResult>

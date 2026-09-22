@@ -334,23 +334,15 @@ export class IncidentsService {
 	@Interval(1000)
 	async advanceAutomaticSimulation(): Promise<void> {
 		// Sequential on purpose: this runs every second over every run people keep open.
-		for (const entity of await this.runsService.listLiveEntities()) {
+		for (const entity of await this.runsService.listAutomaticSimulationRuns()) {
 			await this.advanceAutomaticSimulationFor(entity)
 		}
 	}
 
 	private async advanceAutomaticSimulationFor(
-		entity: IncidentEntity,
+		entity: Pick<IncidentEntity, "runIdentifier">,
 	): Promise<void> {
-		if (
-			!entity.simulation ||
-			entity.simulation.mode !== "randomized" ||
-			entity.simulation.paused ||
-			entity.status === "normal" ||
-			entity.status === "recovered" ||
-			entity.status === "reset" ||
-			this.automaticTicks.has(entity.runIdentifier)
-		) {
+		if (this.automaticTicks.has(entity.runIdentifier)) {
 			return
 		}
 		this.automaticTicks.add(entity.runIdentifier)

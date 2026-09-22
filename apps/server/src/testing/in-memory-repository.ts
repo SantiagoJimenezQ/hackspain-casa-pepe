@@ -1,6 +1,7 @@
 import { FindOperator } from "typeorm"
 
 interface FindOptions<Entity> {
+	readonly select?: Partial<Record<keyof Entity, boolean>>
 	readonly where?: Partial<Record<keyof Entity, unknown>>
 	readonly order?: Partial<Record<keyof Entity, "ASC" | "DESC">>
 	readonly take?: number
@@ -17,6 +18,8 @@ function matches<Entity>(
 		if (expected instanceof FindOperator) {
 			const operand = expected.value
 			switch (expected.type) {
+				case "moreThanOrEqual":
+					return (actual as string) >= (operand as string)
 				case "moreThan":
 					return (actual as number) > (operand as number)
 				case "lessThanOrEqual":
@@ -91,9 +94,21 @@ export class InMemoryRepository<Entity extends { identifier: string }> {
 					: compare(right[key], left[key]),
 			)
 		}
-		return filtered
-			.slice(skip, skip + take)
-			.map((entity) => ({ ...entity }))
+		return filtered.slice(skip, skip + take).map((entity) =>
+			options.select
+				? (Object.fromEntries(
+						Object.keys(options.select)
+							.filter(
+								(key) => options.select?.[key as keyof Entity],
+							)
+							.map((key) => [key, entity[key as keyof Entity]]),
+					) as unknown as Entity)
+				: { ...entity },
+		)
+	}
+
+	async count(options: FindOptions<Entity> = {}): Promise<number> {
+		return (await this.find(options)).length
 	}
 
 	async findOne(options: FindOptions<Entity>): Promise<Entity | null> {

@@ -31,7 +31,7 @@ Other commands: `pnpm build`, `pnpm start`, `pnpm test`, `pnpm lint`, `pnpm form
 
 The repository root is a pnpm workspace (`pnpm-workspace.yaml`), so `pnpm install` can also run from the root. If `pnpm exec` hangs, run the binaries directly (`./node_modules/.bin/nest start`, `./node_modules/.bin/jest`); see the note about `allowBuilds` in the workspace file.
 
-Engineer calls are always **simulated**; live voice requests, result polling and provider callbacks are disabled even with legacy credentials. Recovery defaults to simulated mode. The LLM still requires provider credentials. Tests inject scripted model responses explicitly; see [LLM setup and runtime](docs/LLM-AGENT.md).
+Engineer calls are always **simulated**; live voice requests, result polling and provider callbacks are disabled even with legacy credentials. The example configuration enables `SIMULATED_CALL_ALWAYS_AUTHORIZED=true`, so the simulated on-call grants permission for customer notifications and traffic failover, with an explicit simulated rationale. Plan-specific operator approval remains required where configured. Recovery defaults to simulated mode. The LLM still requires provider credentials. Tests inject scripted model responses explicitly; see [LLM setup and runtime](docs/LLM-AGENT.md).
 
 ### Supabase
 
@@ -219,3 +219,7 @@ Set the flag back to false after the upgrade. Never enable it on PR previews usi
 Stop old servers before upgrading; do not mix old/new versions or roll back without
 a pre-migration database backup. See [Architecture.md](../../Architecture.md) for
 schema, scheduler limitations, integration boundaries and PostgreSQL test commands.
+
+### Avoiding repeated database transfers
+
+Background queries filter the 30-minute idle cutoff, run kind and eligible status in Postgres. Automatic simulation additionally filters randomized/unpaused state and selects only identifiers. `/overview` supports the additive `knownRevision` protocol documented in [API.md](docs/API.md): unchanged browser polls read small reference/count results, while full snapshots reuse loaded data for agent status. No database migration or environment change is needed. Scheduling remains process-local; use one continuously running coordinator as described in [Architecture.md](../../Architecture.md).

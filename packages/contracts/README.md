@@ -16,3 +16,5 @@ The former standalone HTTP server, old `/api/status` API, generated JSON OpenAPI
 - `outbound-calls.d.ts` describes provider-neutral call context, external references, and authorization evidence.
 
 - `demo-controls.d.ts` describes targeted capacity changes, HTTP delivery probes and persisted plan comparisons returned by `/overview`.
+
+- `overview.d.ts` describes the revision and unchanged response used for lightweight dashboard reconciliation.

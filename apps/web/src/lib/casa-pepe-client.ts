@@ -1,3 +1,4 @@
+import type { UnchangedOverview } from "../../../../packages/contracts/overview";
 import type { CapacityChangeRequest, DeliveryProbeResult, LearningInsight, LlmHistoryPage, Overview, RunReport } from "@/lib/casa-pepe-types";
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n";
 
@@ -49,6 +50,13 @@ async function startRun(path: string, body?: string): Promise<RunScoped> {
 }
 
 export const casaPepeClient = {
+  overviewIfChanged: async (revision?: string): Promise<Overview | null> => {
+    const suffix = revision ? `?knownRevision=${encodeURIComponent(revision)}` : "";
+    const result = await request<Overview | UnchangedOverview>(`/api/casa-pepe/overview${suffix}`);
+    if ("unchanged" in result) return null;
+    rememberRun(result.incident.runIdentifier);
+    return result;
+  },
   currentRunIdentifier: () => readStoredRun(),
   forgetRun: () => rememberRun(""),
   overview: async () => {

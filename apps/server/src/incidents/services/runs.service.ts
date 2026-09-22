@@ -16,7 +16,7 @@ import {
 import { IncidentSnapshot, RunSummary } from "@incidents/types/incident.type"
 import { Injectable } from "@nestjs/common"
 import { InjectRepository } from "@nestjs/typeorm"
-import { Repository } from "typeorm"
+import { In, MoreThanOrEqual, Raw, Repository } from "typeorm"
 
 @Injectable()
 export class RunsService {
@@ -32,27 +32,73 @@ export class RunsService {
 		})
 	}
 
-	/** Every run currently active. Several people can drive independent runs at the same time. */
-	async listActiveEntities(): Promise<IncidentEntity[]> {
+	/** Filter in Postgres: rejected rows must never cross the pooler connection. */
+	async listLiveEntities(): Promise<IncidentEntity[]> {
 		return this.repository.find({
 			order: { createdAt: "DESC" },
-			where: { active: true },
+			where: this.liveWhere(),
 		})
 	}
 
-	/**
-	 * Active runs that background work should still follow. An abandoned demo stops being
-	 * ticked so it cannot starve the connection pool of the runs people are actually using.
-	 */
-	async listLiveEntities(): Promise<IncidentEntity[]> {
-		const oldestAllowed = Date.now() - RUN_IDLE_TIMEOUT_MILLISECONDS
-		return (await this.listActiveEntities()).filter((entity) => {
-			const updatedAt = new Date(entity.updatedAt).getTime()
-			if (Number.isNaN(updatedAt)) {
-				return true
-			}
-			return updatedAt >= oldestAllowed
+	async listAutomaticSimulationRuns(): Promise<
+		Pick<IncidentEntity, "runIdentifier">[]
+	> {
+		return this.repository.find({
+			order: { createdAt: "DESC" },
+			select: { runIdentifier: true },
+			where: {
+				...this.liveWhere(),
+				simulation: Raw(
+					(column) =>
+						`${column} ->> 'mode' = :mode AND ${column} ->> 'paused' = :paused`,
+					{
+						mode: "randomized",
+						paused: "false",
+					},
+				),
+			},
 		})
+	}
+
+	private liveWhere() {
+		return {
+			active: true,
+			runKind: "live" as const,
+			status: In(["detected", "responding", "partially-recovered"]),
+			// All persisted timestamps are canonical UTC ISO strings from nowISO().
+			updatedAt: MoreThanOrEqual(
+				new Date(
+					Date.now() - RUN_IDLE_TIMEOUT_MILLISECONDS,
+				).toISOString(),
+			),
+		}
+	}
+
+	/** Resolve browser ownership without retrieving the incident's JSON state. */
+	async getReference(
+		requestedRunIdentifier?: string,
+	): Promise<Pick<IncidentEntity, "runIdentifier" | "updatedAt">> {
+		const entity = await this.repository.findOne({
+			order: { createdAt: "DESC" },
+			select: { runIdentifier: true, updatedAt: true },
+			where: requestedRunIdentifier
+				? {
+						runIdentifier: requestedRunIdentifier,
+						...(sessionContext.getStore()
+							? { browserSessionId: currentSessionId() }
+							: {}),
+					}
+				: { active: true, browserSessionId: currentSessionId() },
+		})
+		if (!entity) {
+			if (requestedRunIdentifier)
+				throw new EntityNotFoundException(
+					RUN_ENTITY_NAME,
+					requestedRunIdentifier,
+				)
+			throw new NoActiveRunException()
+		}
+		return entity
 	}
 
 	async getActiveEntity(): Promise<IncidentEntity> {
@@ -92,6 +138,7 @@ export class RunsService {
 
 	async isRunActive(runIdentifier: string): Promise<boolean> {
 		const entity = await this.repository.findOne({
+			select: { active: true },
 			where: {
 				runIdentifier,
 				...(sessionContext.getStore()
@@ -109,10 +156,10 @@ export class RunsService {
 		requestedRunIdentifier?: string,
 	): Promise<string> {
 		if (requestedRunIdentifier) {
-			return (await this.getEntityByRunIdentifier(requestedRunIdentifier))
+			return (await this.getReference(requestedRunIdentifier))
 				.runIdentifier
 		}
-		return (await this.getActiveEntity()).runIdentifier
+		return (await this.getReference()).runIdentifier
 	}
 
 	async listRuns(): Promise<ReadonlyArray<RunSummary>> {

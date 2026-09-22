@@ -31,7 +31,7 @@ Other commands: `pnpm build`, `pnpm start`, `pnpm test`, `pnpm lint`, `pnpm form
 
 The repository root is a pnpm workspace (`pnpm-workspace.yaml`), so `pnpm install` can also run from the root. If `pnpm exec` hangs, run the binaries directly (`./node_modules/.bin/nest start`, `./node_modules/.bin/jest`); see the note about `allowBuilds` in the workspace file.
 
-Engineer calls are always **simulated**; live voice requests, result polling and provider callbacks are disabled even with legacy credentials. Recovery defaults to simulated mode. The LLM still requires provider credentials. Tests inject scripted model responses explicitly; see [LLM setup and runtime](docs/LLM-AGENT.md).
+Engineer calls are always **simulated**; live voice requests, result polling and provider callbacks are disabled even with legacy credentials. The example configuration enables `SIMULATED_CALL_ALWAYS_AUTHORIZED=true`, so the simulated on-call grants permission for customer notifications and traffic failover, with an explicit simulated rationale. Plan-specific operator approval remains required where configured. Recovery defaults to simulated mode. The LLM still requires provider credentials. Tests inject scripted model responses explicitly; see [LLM setup and runtime](docs/LLM-AGENT.md).
 
 ### Supabase
 

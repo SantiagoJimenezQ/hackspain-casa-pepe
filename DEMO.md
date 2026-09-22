@@ -21,9 +21,9 @@
 ## 2. Luces arriba
 
 > - Ahora mismo **Santi** está a corazón abierto, las historias clínicas no están disponibles
-> - **Sergio** está en el aeropuerto de Dubái, depende de Emirates.
-> - **Sergio** es founder de una startup que gestiona pagos y depende de Emirates NBD. Y ahí también está parte de la ronda de HappyRobot.
-> - Y **Luis** depende de Deliveroo: ha pedido la cena.
+> - **Sergio** está en el aeropuerto de Dubái, depende de Mirage Air.
+> - **Sergio** es founder de una startup que gestiona pagos y depende de Meridian Bank. Y ahí también está parte de la ronda de HappyRobot.
+> - Y **Luis** depende de Dasharoo: ha pedido la cena.
 
 ---
 

@@ -11,6 +11,16 @@ describe("Casa Pepe browser client", () => {
     expect(fetchMock).toHaveBeenLastCalledWith("/api/casa-pepe/overview?knownRevision=abc", expect.anything());
   });
 
+  it("projects saved customer names and history while preserving request identities", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({
+      incident: { runIdentifier: "run_1", customers: [{ identifier: "emirates-nbd", name: "Emirates NBD", shortName: "ENBD", logo: "/logos/emirates-nbd.png" }] },
+      recentActivity: [{ summary: "Priorizar PureHealth y Deliveroo", payload: { customerIdentifier: "purehealth" } }],
+    }));
+    const overview = await casaPepeClient.overview();
+    expect(overview.incident.customers[0]).toEqual({ identifier: "emirates-nbd", name: "Meridian Bank", shortName: "MB", logo: "/logos/meridian-bank.svg" });
+    expect(overview.recentActivity[0]).toMatchObject({ summary: "Priorizar Clarity Health y Dasharoo", payload: { customerIdentifier: "purehealth" } });
+  });
+
   afterEach(() => {
     casaPepeClient.forgetRun();
     vi.restoreAllMocks();

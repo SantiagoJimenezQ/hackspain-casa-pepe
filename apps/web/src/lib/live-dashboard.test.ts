@@ -200,10 +200,10 @@ describe("live dashboard adapter", () => {
         impactedAt: "2026-09-19T10:00:00.000Z",
         status: "responding",
         customers: [
-          { identifier: "moeve", name: "Moeve", shortName: "M", sector: "Energía", users: 10, serviceIdentifiers: ["svc-a"], accent: "#fff" },
+          { identifier: "moeve", name: "Mova Energy", shortName: "M", sector: "Energía", users: 10, serviceIdentifiers: ["svc-a"], accent: "#fff" },
           { identifier: "happyrobot", name: "HappyRobot", shortName: "H", sector: "Logística", users: 10, serviceIdentifiers: ["svc-b"], accent: "#fff" },
-          { identifier: "emirates-nbd", name: "Emirates NBD", shortName: "E", sector: "Fintech", users: 10, serviceIdentifiers: ["svc-c"], accent: "#fff" },
-          { identifier: "purehealth", name: "PureHealth", shortName: "P", sector: "Salud", users: 10, serviceIdentifiers: ["svc-d"], accent: "#fff" },
+          { identifier: "emirates-nbd", name: "Meridian Bank", shortName: "E", sector: "Fintech", users: 10, serviceIdentifiers: ["svc-c"], accent: "#fff" },
+          { identifier: "purehealth", name: "Clarity Health", shortName: "P", sector: "Salud", users: 10, serviceIdentifiers: ["svc-d"], accent: "#fff" },
         ],
         services: [
           { identifier: "svc-a", name: "A", status: "down" },

@@ -12,6 +12,8 @@ The system investigates a changing incident, proposes recovery priorities, coord
 
 The fictional scenario takes Dubai (`me-central-1`) offline. A delivery platform loses its orders database, route assignment, package tracking and event stream. The nearest backup initially reports four compute units. A later report reduces that capacity to one.
 
+Customers use fictional identities and original logos: Mova Energy, Mirage Air, Meridian Bank, Dasharoo and Clarity Health. HappyRobot retains its name and logo. See [demo branding](packages/demo-brands/README.md) for saved-run compatibility.
+
 1. **Observe:** inspect affected services, dependencies, customer impact and available resources.
 2. **Plan:** review the model's priorities, assumptions, selected backup and proposed actions.
 3. **Challenge the plan:** use **Cut capacity** or the capacity controls to change the environment while work is pending.

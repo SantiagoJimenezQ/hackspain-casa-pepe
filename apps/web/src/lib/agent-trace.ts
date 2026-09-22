@@ -1,3 +1,4 @@
+import { demoText } from "../../../../packages/demo-brands";
 import type {
   ActivityRecord,
   Incident,
@@ -696,7 +697,7 @@ function reasoningTitle(draft: ReasoningDraft, body: string, locale: Locale) {
 }
 
 function toThinkingItem(draft: ReasoningDraft, locale: Locale): Extract<TranscriptItem, { kind: "thinking" }> {
-  const text = reasoningBody(draft);
+  const text = demoText(reasoningBody(draft));
   const streaming = draft.status === "streaming" || draft.disposition === "pending";
   const title = draft.status === "streaming" && draft.disposition === undefined
     ? translate(locale, "agent.thinking")

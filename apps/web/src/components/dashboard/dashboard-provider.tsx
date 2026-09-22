@@ -1,5 +1,7 @@
 "use client";
 
+import { demoPresentation } from "../../../../../packages/demo-brands";
+
 import {
   createContext,
   startTransition,
@@ -280,7 +282,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     );
     const receive = (message: MessageEvent<string>) => {
       try {
-        const event = JSON.parse(message.data) as ActivityRecord;
+        const event = demoPresentation(JSON.parse(message.data) as ActivityRecord);
         if (event.runIdentifier !== runIdentifier) return;
         latestSequence.current = Math.max(latestSequence.current, event.sequence);
         startTransition(() => setActivity((current) => mergeActivity(current, event)));

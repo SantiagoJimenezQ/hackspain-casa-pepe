@@ -47,6 +47,12 @@ Schema upgrades are explicitly gated by `BROWSER_SESSION_SCHEMA_UPGRADE`. When e
 
 The Next.js dashboard (`apps/web`) uses server-side proxy routes to call the authenticated NestJS API (`apps/server`). NestJS owns incident state, resource allocations, versioned plans, approvals, tool adapters and the activity history. TypeORM persists these records in PostgreSQL. SSE events prompt the dashboard to reconcile with `/overview`. The browser never receives provider credentials or the backend API key.
 
+### Fictional customer identities
+
+`packages/demo-brands` owns the five fictional customer names and original SVG paths; HappyRobot remains unchanged. Scenario creation and incident snapshots use those display identities, including when resuming an older run. The dashboard also projects historical response and SSE text, and aliases model output after joining its streamed fragments. Old logo URLs redirect to the replacement SVGs.
+
+Customer identifiers, dependencies, priority ordering and resource calculations remain stable. Stored historical audit text is not rewritten: this is presentation pseudonymisation, not database anonymisation. Keeping the compatibility identifiers avoids invalidating saved plans and call outcomes. Deploy the backend and frontend together for consistent names in new model observations and the UI; no migration or environment variable is needed.
+
 ## Demo controls and recovery evidence
 
 ### Targeted capacity changes

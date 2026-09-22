@@ -37,7 +37,7 @@ function action(
 }
 
 describe("prioritizeCustomers", () => {
-	it("always attends PureHealth, then Emirates NBD, then HappyRobot", () => {
+	it("always attends Clarity Health, then Meridian Bank, then HappyRobot", () => {
 		const report = prioritizeCustomers(createImpactedIncident(7), [], NOW)
 
 		expect(

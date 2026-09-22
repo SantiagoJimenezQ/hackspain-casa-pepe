@@ -265,6 +265,58 @@ function createOpeningPlan(incident: IncidentSnapshot): PlanRecord {
 }
 
 describe("LlmLoopService", () => {
+	it("supplies authoritative constraints and complete-plan guidance after a rejected patch", async () => {
+		const { validateLlmPlan: actualValidate } = jest.requireActual(
+			"@agent/llm/plan-validation",
+		) as { validateLlmPlan: typeof validateLlmPlan }
+		validateLlmPlanMock.mockImplementation(actualValidate)
+		try {
+			const { client, service, activity } = createHarness(2)
+			const state = createState(createInput(createImpactedIncident(4)))
+			client.complete
+				.mockResolvedValueOnce(
+					completion([
+						toolCall("propose_plan", {
+							capacity: {},
+							priorities: [],
+							steps: [],
+						}),
+					]),
+				)
+				.mockResolvedValueOnce(
+					completion([
+						toolCall("wait_for_input", {
+							reason: "Waiting for operator input",
+						}),
+					]),
+				)
+			await service.run(createActions(() => state))
+			const firstContext = JSON.parse(
+				client.complete.mock.calls[0][0].at(-1).content,
+			)
+			expect(firstContext.planConstraints.selectedResource).toMatchObject(
+				{
+					maximumNewRecoveryUnits: 4,
+					resourceIdentifier:
+						state.input.incident.resources[0].identifier,
+				},
+			)
+			const rejection = activityInputs(activity).find(
+				(event) => event.type === "agent.llm-rejected",
+			)
+			expect(rejection?.payload.result).toMatchObject({
+				correction: expect.stringContaining("all six fields"),
+			})
+			const nextTurn = JSON.stringify(client.complete.mock.calls[1][0])
+			expect(nextTurn).toContain("maximumNewRecoveryUnits")
+			expect(nextTurn).toContain("verification IDs, not execution IDs")
+			expect(nextTurn).not.toContain(
+				"Recovery needs no operator approval",
+			)
+		} finally {
+			validateLlmPlanMock.mockReset()
+		}
+	})
 	it("asks for the real plan before accepting a wait on the opening engineer call", async () => {
 		const { client, service } = createHarness(3)
 		const incident = createImpactedIncident(12)

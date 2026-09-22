@@ -97,6 +97,19 @@ providers retain `max_tokens`.
 
 ### Provider failure logs
 
+Completed responses retain a 1 MiB limit. SSE transport has a separate 16 MiB
+budget for per-token framing and discarded private reasoning; individual frames
+and accumulated answer/tool-argument bytes are limited to 1 MiB. The reconstructed
+JSON response must still fit 1 MiB. Output token and timeout limits are unchanged.
+An interrupted or malformed transport response is no longer reported as a byte
+budget failure merely because Axios uses `ERR_BAD_RESPONSE` for both cases.
+
+Each commander turn supplies `planConstraints` with the runtime-selected backup,
+available units after committed work, service costs, required approvals and
+verification dependency IDs. New recovery steps must all fit that selected region;
+the model cannot combine regions in one plan. Retries must submit all six PlanDraft
+fields, not a patch. Invalid plans remain rejected by the existing validators.
+
 The shared LLM client emits structured `LLM provider request failed` warnings for
 OpenAI and compatible providers such as Helmcode. Fields include provider host,
 model, reasoning effort, streaming flag, configured timeout, elapsed milliseconds,

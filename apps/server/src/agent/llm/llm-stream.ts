@@ -1,6 +1,10 @@
 import { Readable } from "node:stream"
 import { LlmToolCall } from "@agent/llm/llm.types"
 import { LlmClientError } from "@agent/llm/llm-client.service"
+import {
+	MAXIMUM_RESPONSE_BYTES,
+	MAXIMUM_STREAM_BYTES,
+} from "@agent/llm/llm-response-limits"
 
 /** Only public content leaves this parser; reasoning fields and partial tools stay private. */
 export async function readCompletionStream(
@@ -22,12 +26,23 @@ export async function readCompletionStream(
 		model = "",
 		finish: string | null = null
 	let bytes = 0,
+		outputBytes = 0,
 		published = 0,
 		done = false
 	let usage: unknown
 	const calls = new Map<number, LlmToolCall>()
 	const invalid = () =>
 		new LlmClientError("LLM provider returned a malformed stream")
+	const checkBudget = (bytes: number, limit: number) => {
+		if (bytes > limit)
+			throw new LlmClientError(
+				"LLM provider response exceeds the configured byte budget",
+			)
+	}
+	const retain = (fragment: string) => {
+		outputBytes += Buffer.byteLength(fragment, "utf8")
+		checkBudget(outputBytes, MAXIMUM_RESPONSE_BYTES)
+	}
 	const publish = async () => {
 		if (!pending) return
 		const text = pending
@@ -35,6 +50,7 @@ export async function readCompletionStream(
 		await onText?.(text)
 	}
 	const frame = async (raw: string) => {
+		checkBudget(Buffer.byteLength(raw, "utf8"), MAXIMUM_RESPONSE_BYTES)
 		const data = raw
 			.split(/\r?\n/)
 			.filter((line) => line.startsWith("data:"))
@@ -64,6 +80,7 @@ export async function readCompletionStream(
 			if (!isRecord(delta)) throw invalid()
 			if (delta.content != null) {
 				if (typeof delta.content !== "string") throw invalid()
+				retain(delta.content)
 				content += delta.content
 				const visible = delta.content
 				published += visible.length
@@ -103,6 +120,7 @@ export async function readCompletionStream(
 									: undefined
 						if (fragment != null) {
 							if (typeof fragment !== "string") throw invalid()
+							retain(fragment)
 							;(target as unknown as Record<string, string>)[
 								key
 							] += fragment
@@ -119,10 +137,7 @@ export async function readCompletionStream(
 				? chunk
 				: Buffer.from(chunk)
 			bytes += bytesChunk.length
-			if (bytes > 1024 * 1024)
-				throw new LlmClientError(
-					"LLM provider response exceeds the configured byte budget",
-				)
+			checkBudget(bytes, MAXIMUM_STREAM_BYTES)
 			buffer += decoder.decode(bytesChunk, { stream: true })
 			while (true) {
 				const boundary = /\r?\n\r?\n/.exec(buffer)
@@ -133,6 +148,10 @@ export async function readCompletionStream(
 				if (done) break
 			}
 			if (done) break
+			checkBudget(
+				Buffer.byteLength(buffer, "utf8"),
+				MAXIMUM_RESPONSE_BYTES,
+			)
 		}
 		if (!done || !finish || !model) throw invalid()
 		await publish()

@@ -350,7 +350,7 @@ function remainingOf(
 	return effectiveCapacity(resource, input) - resource.allocatedCapacity
 }
 
-function planningResource(input: PlanBuildInput) {
+export function planningResource(input: PlanBuildInput) {
 	return selectBackupResource(input.incident, (candidate) =>
 		remainingOf(candidate, input),
 	)
